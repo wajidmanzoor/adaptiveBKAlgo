@@ -1,4 +1,6 @@
 #include "../inc/graph.h"
+#include <numeric>
+#include <sstream>
 
 Graph::Graph() {
   // Default constructor implementation
@@ -19,7 +21,7 @@ Graph::Graph(std::string path) {
 
     offset.resize(n + 1, 0);
     neighbors.resize(2 * m);
-    degree.resize(n);
+    degree.resize(n, 0);
     int vertex, neigh;
     while (std::getline(inputFile, line)) {
       std::istringstream iss(line);

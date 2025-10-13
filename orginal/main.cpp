@@ -1,4 +1,6 @@
-#include "../inc/common.h"
+#include "inc/common.h"
+#include "inc/graph.h"
+#include "inc/helpers.h"
 
 int main(int argc, const char *argv[]) {
   if (argc != 2) {
@@ -7,6 +9,9 @@ int main(int argc, const char *argv[]) {
   }
 
   string filepath = argv[1];
+
+  Graph g(filepath);
+  BKstandard(g);
 
   return 0;
 }

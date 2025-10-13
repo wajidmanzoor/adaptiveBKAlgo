@@ -36,19 +36,10 @@ typedef unsigned char uchar;
 typedef unsigned char byte;
 typedef unsigned long long ull;
 
-const int INF = 1000000000;
+const int inf = 1e9;
 const double DINF = 1e9;
 
-byte N, count;
-ull pik[Nmax], clique[Nmax], mask;
-byte number(ull x) {
-  byte i;
-  ull single, ret;
-  single = 1;
-  ret = 0;
-  for (i = 0; i < Nmax; i++) {
-    ret = ret + ((x & single) >> i);
-    single = single << 1;
-  }
-  return ret;
-}
+extern byte N, count;
+extern ull pik[Nmax], clique[Nmax], mask;
+
+byte number(ull x);
