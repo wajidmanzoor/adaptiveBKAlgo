@@ -23,7 +23,9 @@
 #include <limits.h>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <set>
+#include <sstream>
 #include <sys/stat.h>
 #include <utility>
 using namespace std;
@@ -39,16 +41,6 @@ typedef unsigned long long ull;
 const int INF = 1000000000;
 const double DINF = 1e9;
 
-byte N, count;
-ull pik[Nmax], clique[Nmax], mask;
-byte number(ull x) {
-  byte i;
-  ull single, ret;
-  single = 1;
-  ret = 0;
-  for (i = 0; i < Nmax; i++) {
-    ret = ret + ((x & single) >> i);
-    single = single << 1;
-  }
-  return ret;
-}
+extern byte N, clique_count;
+extern ull pik[Nmax], clique[Nmax], mask;
+byte number(ull x);

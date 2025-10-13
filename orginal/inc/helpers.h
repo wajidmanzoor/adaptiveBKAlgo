@@ -4,3 +4,4 @@
 #include "graph.h"
 
 void BKstandard();
+void printCliques();
