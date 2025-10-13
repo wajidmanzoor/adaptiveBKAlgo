@@ -29,7 +29,7 @@ void BronKerbosch(ull R, ull P, ull X) {
     std::cout << "Clique " << (::count + 1) << ": ";
     for (byte i = 0; i < N; i++) {
       if (R & (1ULL << i)) {
-        std::cout << i << " ";
+        std::cout << (int)i << " ";
       }
     }
     std::cout << std::endl;
