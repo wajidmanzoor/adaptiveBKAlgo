@@ -1,4 +1,6 @@
 #include "../inc/graph.h"
+#include <sstream>
+#include <numeric>
 
 Graph::Graph() {
   // Default constructor implementation
@@ -19,7 +21,9 @@ Graph::Graph(std::string path) {
 
     offset.resize(n + 1, 0);
     neighbors.resize(2 * m);
-    degree.resize(n);
+    degree.resize(n, 0);
+    
+    // First pass: count degrees
     int vertex, neigh;
     while (std::getline(inputFile, line)) {
       std::istringstream iss(line);
@@ -27,11 +31,30 @@ Graph::Graph(std::string path) {
       while (iss >> neigh) {
         if (vertex == neigh)
           continue;
-        neighbors[offset[vertex] + offset[vertex + 1]] = neigh;
-        offset[vertex + 1]++;
+        degree[vertex]++;
       }
-      degree[vertex] = offset[vertex + 1];
-      offset[vertex + 1] += offset[vertex];
+    }
+    
+    // Calculate offsets
+    for (ui i = 0; i < n; i++) {
+      offset[i + 1] = offset[i] + degree[i];
+    }
+    
+    // Reset file to beginning and skip first line
+    inputFile.clear();
+    inputFile.seekg(0, std::ios::beg);
+    std::getline(inputFile, line); // Skip first line with n, m
+    
+    // Second pass: fill neighbors array
+    std::vector<ui> current_pos = offset; // Copy of offset for current positions
+    while (std::getline(inputFile, line)) {
+      std::istringstream iss(line);
+      iss >> vertex;
+      while (iss >> neigh) {
+        if (vertex == neigh)
+          continue;
+        neighbors[current_pos[vertex]++] = neigh;
+      }
     }
   }
 
@@ -78,13 +101,13 @@ void Graph::coreDecompose(std::vector<ui> &arr) {
   }
 
   // Perform core decomposition
-  for (int i = 0; i < n; i++) {
+  for (ui i = 0; i < n; i++) {
     ui v = sortedVertex[i];
     core[v] = degree[v]; // Assign core value
     arr[n - i - 1] = v;  // Assign peel sequence
 
     // Update degrees of neighbors
-    for (int j = offset[v]; j < offset[v + 1]; j++) {
+    for (ui j = offset[v]; j < offset[v + 1]; j++) {
       ui u = neighbors[j];
       if (degree[u] > degree[v]) {
         ui du = degree[u];
