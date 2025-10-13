@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <algorithm>
+#include <bitset>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
