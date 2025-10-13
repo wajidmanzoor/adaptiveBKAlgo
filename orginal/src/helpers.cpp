@@ -17,9 +17,15 @@ void intializeAdjacencyMatrix(Graph &g) {
       }
     }
   }
+
+  for (int i = 0; i < N; i++) {
+    cout << "pik[" << i << "]=" << std::bitset<Nmax>(pik[i]) << endl;
+  }
 }
 
 void BronKerbosch(ull R, ull P, ull X) {
+  cout << "R=" << std::bitset<Nmax>(R) << ", P=" << std::bitset<Nmax>(P)
+       << ", X=" << std::bitset<Nmax>(X) << endl;
   if ((P == 0) && (X == 0)) {
     clique[::count++] = R;
 

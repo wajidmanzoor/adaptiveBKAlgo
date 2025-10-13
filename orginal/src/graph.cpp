@@ -39,6 +39,22 @@ Graph::Graph(std::string path) {
 
   inputFile.close();
   std::cout << "n=" << n << ", m=" << m << std::endl;
+
+  cout << "ofsset ";
+  for (ui i = 0; i <= n; i++) {
+    cout << offset[i] << " ";
+  }
+  cout << endl;
+  cout << "degree ";
+  for (ui i = 0; i < n; i++) {
+    cout << degree[i] << " ";
+  }
+  cout << endl;
+  cout << "neighbors ";
+  for (ui i = 0; i < 2 * m; i++) {
+    cout << neighbors[i] << " ";
+  }
+  cout << endl;
 }
 void Graph::getListingOrder(std::vector<ui> &arr) {
   /* Rettrun an array with each index storing the listing order based on the
