@@ -20,4 +20,5 @@ public:
   Graph(std::string path);
   void getListingOrder(std::vector<ui> &arr);
   void coreDecompose(std::vector<ui> &arr);
+  void convertToBitmap(ull* pik, byte& N);
 };

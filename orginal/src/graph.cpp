@@ -5,33 +5,55 @@ Graph::Graph() {
 }
 
 Graph::Graph(std::string path) {
-  std::string buffer;
   std::ifstream inputFile(path, std::ios::in);
 
   if (!inputFile.is_open()) {
     std::cout << "Graph file Open Failed " << std::endl;
     exit(1);
-  } else {
-    std::string line;
-    std::getline(inputFile, line);
-    std::istringstream iss(line);
-    iss >> n >> m;
+  }
+  
+  std::string line;
+  std::getline(inputFile, line);
+  std::istringstream iss(line);
+  iss >> n >> m;
 
-    offset.resize(n + 1, 0);
-    neighbors.resize(2 * m);
-    degree.resize(n);
-    int vertex, neigh;
-    while (std::getline(inputFile, line)) {
-      std::istringstream iss(line);
-      iss >> vertex;
-      while (iss >> neigh) {
-        if (vertex == neigh)
-          continue;
-        neighbors[offset[vertex] + offset[vertex + 1]] = neigh;
-        offset[vertex + 1]++;
+  offset.resize(n + 1, 0);
+  neighbors.resize(2 * m);
+  degree.resize(n, 0);
+  
+  // First pass: count degrees
+  int vertex, neigh;
+  while (std::getline(inputFile, line)) {
+    std::istringstream iss(line);
+    iss >> vertex;
+    while (iss >> neigh) {
+      if (vertex != neigh) {
+        degree[vertex]++;
       }
-      degree[vertex] = offset[vertex + 1];
-      offset[vertex + 1] += offset[vertex];
+    }
+  }
+  
+  // Compute offsets
+  for (ui i = 1; i <= n; i++) {
+    offset[i] = offset[i-1] + degree[i-1];
+  }
+  
+  // Reset degrees for second pass
+  std::fill(degree.begin(), degree.end(), 0);
+  
+  // Second pass: fill neighbors
+  inputFile.clear();
+  inputFile.seekg(0);
+  std::getline(inputFile, line); // Skip first line
+  
+  while (std::getline(inputFile, line)) {
+    std::istringstream iss(line);
+    iss >> vertex;
+    while (iss >> neigh) {
+      if (vertex != neigh) {
+        neighbors[offset[vertex] + degree[vertex]] = neigh;
+        degree[vertex]++;
+      }
     }
   }
 
@@ -109,5 +131,23 @@ void Graph::coreDecompose(std::vector<ui> &arr) {
   for (ui val : core) {
     if (val > kmax)
       kmax = val;
+  }
+}
+
+void Graph::convertToBitmap(ull* pik, byte& N) {
+  N = n;
+  
+  // Initialize pik array
+  for (ui i = 0; i < n; i++) {
+    pik[i] = 0;
+  }
+  
+  // Convert adjacency list to bitmap representation
+  for (ui i = 0; i < n; i++) {
+    ull mask = 1ULL << (n - 1 - i);  // Bit for vertex i
+    for (ui j = offset[i]; j < offset[i + 1]; j++) {
+      ui neighbor = neighbors[j];
+      pik[i] |= (1ULL << (n - 1 - neighbor));  // Set bit for neighbor
+    }
   }
 }
