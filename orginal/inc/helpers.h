@@ -3,10 +3,6 @@
 #include "common.h"
 #include "graph.h"
 
-void BronKerbosch(ull R, ull P, ull X);
-void BKstandard(Graph &g);
-void initializeAdjacencyMatrix(Graph &g);
-
 // Adjacency Matrix based Bron-Kerbosch
 class AdjMatBK {
 private:
@@ -39,6 +35,33 @@ private:
 
 public:
   AdjListBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+};
+
+// Optimized Adjacency List based Bron-Kerbosch with Pivoting and Pruning
+class PivotBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize; // for neighborhood size pruning
+
+  void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
+  vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
+  bool isEmpty(const vector<ui> &set);
+
+  // Pivoting strategy
+  ui choosePivot(const vector<ui> &P, const vector<ui> &X);
+
+  // Pruning rules
+  bool isRedundantX(ui x, const vector<ui> &P);
+  bool isConnected(ui u, ui v);
+  void applyDegreePruning(vector<ui> &P, const vector<ui> &R);
+  void applyNeighborhoodPruning(vector<ui> &P, const vector<ui> &R);
+
+public:
+  PivotBK(Graph &g);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
 };
