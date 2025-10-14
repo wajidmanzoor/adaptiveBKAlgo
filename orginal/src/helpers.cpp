@@ -17,22 +17,31 @@ void intializeAdjacencyMatrix(Graph &g) {
       }
     }
   }
-
-  for (int i = 0; i < N; i++) {
-    cout << "pik[" << i << "]=" << bitset<Nmax>(pik[i]) << endl;
+  if (debug) {
+    for (int i = 0; i < N; i++) {
+      cout << "pik[" << i << "]=" << bitset<Nmax>(pik[i]) << endl;
+    }
   }
 }
 
 void BronKerbosch(ull R, ull P, ull X) {
-  cout << "R=" << bitset<Nmax>(R) << ", P=" << bitset<Nmax>(P)
-       << ", X=" << bitset<Nmax>(X) << endl;
+  if (debug) {
+    cout << "R=" << bitset<Nmax>(R) << ", P=" << bitset<Nmax>(P)
+         << ", X=" << bitset<Nmax>(X) << endl;
+  }
+
   if ((P == 0) && (X == 0)) {
     clique[::count++] = R;
 
-    cout << "Clique " << (::count) << ": ";
+    if (debug) {
+      cout << "Clique " << (int)(::count) << ": ";
+    }
+
     for (byte i = 0; i < N; i++) {
       if (R & (1ULL << i)) {
-        cout << (int)i << " ";
+        if (debug) {
+          cout << (int)i << " ";
+        }
       }
     }
     cout << endl;
@@ -62,5 +71,5 @@ void BKstandard(Graph &g) {
   ::mask = (1ULL << N) - 1;
 
   BronKerbosch(R, P, X);
-  cout << "Total cliques found: " << ::count << endl;
+  cout << "Total cliques found: " << (int)(::count) << endl;
 }

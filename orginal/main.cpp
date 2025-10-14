@@ -12,6 +12,11 @@ int main(int argc, const char *argv[]) {
 
   Graph g(filepath);
   BKstandard(g);
+  if (debug) {
+    for (int i = 0; i < g.n; i++) {
+      cout << "clique[" << i << "]=" << bitset<Nmax>(clique[i]) << endl;
+    }
+  }
 
   return 0;
 }

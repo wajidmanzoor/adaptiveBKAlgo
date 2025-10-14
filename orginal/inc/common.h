@@ -33,6 +33,7 @@ typedef unsigned int ui;
 typedef unsigned short ushort;
 typedef unsigned char uchar;
 #define Nmax 64 // Set the grid size limit
+#define debug 1
 
 typedef unsigned char byte;
 typedef unsigned long long ull;
