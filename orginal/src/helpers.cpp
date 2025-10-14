@@ -31,7 +31,7 @@ void BronKerbosch(ull R, ull P, ull X) {
   }
 
   if ((P == 0) && (X == 0)) {
-    clique[::count++] = R;
+    clique[::count] = R;
 
     if (debug) {
       cout << "Clique " << (int)(::count) << ": ";
