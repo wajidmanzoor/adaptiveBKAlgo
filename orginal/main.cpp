@@ -9,6 +9,7 @@ int main(int argc, const char *argv[]) {
     cout << "  0: Adjacency Matrix BK" << endl;
     cout << "  1: Adjacency List BK" << endl;
     cout << "  2: Pivot BK (Optimized)" << endl;
+    cout << "  3: Reorder BK (Tree Reordering)" << endl;
     exit(1);
   }
 
@@ -29,8 +30,12 @@ int main(int argc, const char *argv[]) {
     cout << "Running Pivot Bron-Kerbosch (Optimized)..." << endl;
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
+  } else if (mode == 3) {
+    cout << "Running Reorder Bron-Kerbosch (Tree Reordering)..." << endl;
+    ReorderBK reorderBk(g);
+    reorderBk.findAllMaximalCliques();
   } else {
-    cout << "Invalid mode! Use 0, 1, or 2." << endl;
+    cout << "Invalid mode! Use 0, 1, 2, or 3." << endl;
     exit(1);
   }
 

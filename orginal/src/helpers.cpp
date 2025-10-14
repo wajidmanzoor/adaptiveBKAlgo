@@ -377,3 +377,142 @@ void PivotBK::findAllMaximalCliques() {
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
 }
+
+// ReorderBK Implementation
+ReorderBK::ReorderBK(Graph &g) {
+  n = g.n;
+  adjList.resize(n);
+  cliqueCount = 0;
+  foundCliques.clear();
+
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
+      }
+    }
+    // Sort for efficient intersection operations
+    sort(adjList[i].begin(), adjList[i].end());
+  }
+}
+
+vector<ui> ReorderBK::intersect(const vector<ui> &set1, const vector<ui> &neighbors) {
+  vector<ui> result;
+  result.reserve(min(set1.size(), neighbors.size()));
+  ui i = 0, j = 0;
+  while (i < set1.size() && j < neighbors.size()) {
+    if (set1[i] == neighbors[j]) {
+      result.push_back(set1[i]);
+      i++;
+      j++;
+    } else if (set1[i] < neighbors[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return result;
+}
+
+bool ReorderBK::isEmpty(const vector<ui> &set) { 
+  return set.empty(); 
+}
+
+set<ui> ReorderBK::vectorToSet(const vector<ui> &vec) {
+  return set<ui>(vec.begin(), vec.end());
+}
+
+bool ReorderBK::isSubset(const set<ui> &subset, const set<ui> &superset) {
+  // Check if subset is a subset of superset
+  return includes(superset.begin(), superset.end(), subset.begin(), subset.end());
+}
+
+bool ReorderBK::isSubsetOfFoundClique(const vector<ui> &candidate) {
+  set<ui> candidateSet = vectorToSet(candidate);
+  
+  for (const auto& foundClique : foundCliques) {
+    if (isSubset(candidateSet, foundClique)) {
+      if (debug) {
+        cout << "Found subset: { ";
+        for (ui v : candidate) cout << v << " ";
+        cout << "} is subset of { ";
+        for (ui v : foundClique) cout << v << " ";
+        cout << "}" << endl;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+void ReorderBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X) {
+  // Note: We removed early subset checking to avoid being too aggressive
+  // Subset checking is now only done when we find a maximal clique
+
+  // Basic pruning: check if P and X are empty
+  if (isEmpty(P) && isEmpty(X)) {
+    // Check if this clique is a subset of any found clique
+    if (!foundCliques.empty() && isSubsetOfFoundClique(R)) {
+      if (debug) {
+        cout << "Skipping duplicate clique: { ";
+        for (ui v : R) cout << v << " ";
+        cout << "}" << endl;
+      }
+      return; // Skip this clique - it's a subset of a found one
+    }
+    
+    // Found a maximal clique
+    cliqueCount++;
+    
+    // Add to found cliques set
+    set<ui> newClique = vectorToSet(R);
+    foundCliques.insert(newClique);
+    
+    if (debug) {
+      cout << "Maximal Clique: { ";
+      for (ui v : R) {
+        cout << v << " ";
+      }
+      cout << "}" << endl;
+    }
+    return;
+  }
+
+  // Process each vertex in P
+  vector<ui> P_copy = P; // Copy to iterate over
+  for (ui v : P_copy) {
+    vector<ui> new_R = R;
+    new_R.push_back(v);
+
+    // Create P ∩ N(v) and X ∩ N(v)
+    vector<ui> new_P = intersect(P, adjList[v]);
+    vector<ui> new_X = intersect(X, adjList[v]);
+
+    // Recursive call
+    bronKerboschRecursive(new_R, new_P, new_X);
+
+    // Move v from P to X
+    P.erase(find(P.begin(), P.end(), v));
+    X.push_back(v);
+  }
+}
+
+void ReorderBK::findAllMaximalCliques() {
+  // Initialize sets
+  vector<ui> R; // Current clique (empty)
+  vector<ui> P; // All vertices as candidates
+  vector<ui> X; // Excluded set (empty)
+
+  // Fill P with all vertices
+  for (ui i = 0; i < n; i++) {
+    P.push_back(i);
+  }
+
+  cliqueCount = 0;
+  foundCliques.clear();
+  bronKerboschRecursive(R, P, X);
+
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+}

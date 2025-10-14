@@ -69,3 +69,26 @@ public:
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
 };
+
+// Bron-Kerbosch with Tree Reordering Strategy
+class ReorderBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  set<set<ui>> foundCliques; // Store found maximal cliques
+
+  void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
+  vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
+  bool isEmpty(const vector<ui> &set);
+  
+  // Subset checking functions
+  bool isSubset(const set<ui> &subset, const set<ui> &superset);
+  bool isSubsetOfFoundClique(const vector<ui> &candidate);
+  set<ui> vectorToSet(const vector<ui> &vec);
+
+public:
+  ReorderBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+};
