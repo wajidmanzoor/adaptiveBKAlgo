@@ -27,21 +27,15 @@
 #include <set>
 #include <sys/stat.h>
 #include <utility>
+#define debug 1
 using namespace std;
 
 typedef unsigned int ui;
 typedef unsigned short ushort;
 typedef unsigned char uchar;
-#define Nmax 64 // Set the grid size limit
-#define debug 1
 
 typedef unsigned char byte;
 typedef unsigned long long ull;
 
 const int inf = 1e9;
 const double DINF = 1e9;
-
-extern byte N, count;
-extern ull pik[Nmax], clique[Nmax], mask;
-
-byte number(ull x);

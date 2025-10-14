@@ -1,75 +1,195 @@
 #include "../inc/helpers.h"
 
-void intializeAdjacencyMatrix(Graph &g) {
-  N = g.n;
-  if (N > Nmax) {
-    cout << "Graph too large for bit representation (max " << Nmax << " nodes)"
-         << endl;
-    exit(1);
+AdjMatBK::AdjMatBK(Graph &g) {
+  n = g.n;
+  cliqueCount = 0;
+  adjMatrix.resize(n, vector<bool>(n, false));
+
+  // Initialize adjacency matrix from graph's adjacency list
+  for (ui u = 0; u < n; u++) {
+    for (ui idx = g.offset[u]; idx < g.offset[u + 1]; idx++) {
+      ui v = g.neighbors[idx];
+      adjMatrix[u][v] = true;
+      adjMatrix[v][u] = true; // Undirected graph
+    }
+  }
+}
+
+vector<bool> AdjMatBK::intersect(const vector<bool> &set1,
+                                 const vector<bool> &set2) {
+  vector<bool> result(n, false);
+  for (ui i = 0; i < n; i++) {
+    result[i] = set1[i] && set2[i];
+  }
+  return result;
+}
+
+vector<bool> AdjMatBK::setUnion(const vector<bool> &set1,
+                                const vector<bool> &set2) {
+  vector<bool> result(n, false);
+  for (ui i = 0; i < n; i++) {
+    result[i] = set1[i] || set2[i];
+  }
+  return result;
+}
+
+vector<bool> AdjMatBK::setDifference(const vector<bool> &set1,
+                                     const vector<bool> &set2) {
+  vector<bool> result(n, false);
+  for (ui i = 0; i < n; i++) {
+    result[i] = set1[i] && !set2[i];
+  }
+  return result;
+}
+
+bool AdjMatBK::isEmpty(const vector<bool> &set) {
+  for (bool val : set) {
+    if (val)
+      return false;
+  }
+  return true;
+}
+
+void AdjMatBK::printSet(const vector<bool> &set, const string &name) {
+  cout << name << ": { ";
+  for (ui i = 0; i < n; i++) {
+    if (set[i]) {
+      cout << i << " ";
+    }
+  }
+  cout << "}" << endl;
+}
+
+void AdjMatBK::bronKerboschRecursive(vector<bool> &R, vector<bool> &P,
+                                     vector<bool> &X) {
+  if (isEmpty(P) && isEmpty(X)) {
+    // Found a maximal clique
+    cliqueCount++;
+    if (debug) {
+      printSet(R, "Maximal Clique");
+    }
+    return;
   }
 
-  for (int i = 0; i < N; i++) {
-    pik[i] = 0;
+  vector<bool> P_copy = P; // Copy of P to iterate over
+
+  for (ui v = 0; v < n; v++) {
+    if (P_copy[v]) {
+      R[v] = true;
+
+      vector<bool> new_R = R;
+      new_R[v] = true;
+
+      // Create P ∩ N(v) and X ∩ N(v)
+      vector<bool> new_P = intersect(P, adjMatrix[v]);
+      vector<bool> new_X = intersect(X, adjMatrix[v]);
+
+      // Recursive call
+      bronKerboschRecursive(new_R, new_P, new_X);
+
+      // Move v from P to X
+      P[v] = false;
+      X[v] = true;
+    }
+  }
+}
+
+void AdjMatBK::findAllMaximalCliques() {
+  vector<bool> R(n, false); // Current clique
+  vector<bool> P(n, true);  // Potential candidates
+  vector<bool> X(n, false); // Already processed
+  cliqueCount = 0;
+  bronKerboschRecursive(R, P, X);
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+}
+
+// Adjacency List based Bron-Kerbosch
+AdjListBK::AdjListBK(Graph &g) {
+  n = g.n;
+  adjList.resize(n);
+
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
     for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
       ui neighbor = g.neighbors[j];
-      if (neighbor < N) {
-        pik[i] |= (1ULL << neighbor);
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
       }
     }
-  }
-  if (debug) {
-    for (int i = 0; i < N; i++) {
-      cout << "pik[" << i << "]=" << bitset<Nmax>(pik[i]) << endl;
-    }
+    // Sort for efficient intersection operations
+    sort(adjList[i].begin(), adjList[i].end());
   }
 }
 
-void BronKerbosch(ull R, ull P, ull X) {
-  if (debug) {
-    cout << "R=" << bitset<Nmax>(R) << ", P=" << bitset<Nmax>(P)
-         << ", X=" << bitset<Nmax>(X) << endl;
+vector<ui> AdjListBK::intersect(const vector<ui> &set1,
+                                const vector<ui> &neighbors) {
+  vector<ui> result;
+  result.reserve(min(set1.size(), neighbors.size()));
+  ui i = 0, j = 0;
+  while (i < set1.size() && j < neighbors.size()) {
+    if (set1[i] == neighbors[j]) {
+      result.push_back(set1[i]);
+      i++;
+      j++;
+    } else if (set1[i] < neighbors[j]) {
+      i++;
+    } else {
+      j++;
+    }
   }
 
-  if ((P == 0) && (X == 0)) {
-    clique[::count] = R;
+  return result;
+}
 
+bool AdjListBK::isEmpty(const vector<ui> &set) { return set.empty(); }
+
+void AdjListBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
+                                      vector<ui> &X) {
+  if (isEmpty(P) && isEmpty(X)) {
+    // Found a maximal clique
+    cliqueCount++;
     if (debug) {
-      cout << "Clique " << (int)(::count) << ": ";
+      cout << "Maximal Clique: { ";
+      for (ui v : R) {
+        cout << v << " ";
+      }
+      cout << "}" << endl;
     }
+    return;
+  }
 
-    for (byte i = 0; i < N; i++) {
-      if (R & (1ULL << i)) {
-        if (debug) {
-          cout << (int)i << " ";
-        }
-      }
-    }
-    cout << endl;
-    ::count++;
-  } else {
-    for (byte i = 0; i < N; i++) {
-      ull v = 1ULL << i;
-      if (P & v) {
-        BronKerbosch(R | v, P & pik[i], X & pik[i]);
-        P = P ^ v;
-        X = X | v;
-      }
-    }
+  vector<ui> P_copy = P; // Copy of P to iterate over
+
+  for (ui v : P_copy) {
+    vector<ui> new_R = R;
+    new_R.push_back(v);
+
+    // Create P ∩ N(v) and X ∩ N(v)
+    vector<ui> new_P = intersect(P, adjList[v]);
+    vector<ui> new_X = intersect(X, adjList[v]);
+
+    // Recursive call
+    bronKerboschRecursive(new_R, new_P, new_X);
+
+    // Move v from P to X
+    P.erase(find(P.begin(), P.end(), v));
+    X.push_back(v);
   }
 }
 
-void BKstandard(Graph &g) {
-  cout << "starting Standard Bron-Kerbosch algoritm" << endl;
-  cout << "Graph has " << g.n << " nodes and " << g.m << " edges" << endl;
+void AdjListBK::findAllMaximalCliques() {
+  // Initialize sets
+  vector<ui> R; // Current clique (empty)
+  vector<ui> P; // All vertices as candidates
+  vector<ui> X; // Excluded set (empty)
 
-  ::count = 0;
-  intializeAdjacencyMatrix(g);
+  // Fill P with all vertices
+  for (ui i = 0; i < n; i++) {
+    P.push_back(i);
+  }
 
-  ull R = 0;
-  ull P = (1ULL << N) - 1;
-  ull X = 0;
-  ::mask = (1ULL << N) - 1;
+  cliqueCount = 0;
+  bronKerboschRecursive(R, P, X);
 
-  BronKerbosch(R, P, X);
-  cout << "Total cliques found: " << (int)(::count) << endl;
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
 }

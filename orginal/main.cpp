@@ -3,19 +3,22 @@
 #include "inc/helpers.h"
 
 int main(int argc, const char *argv[]) {
-  if (argc != 2) {
+  if (argc != 3) {
     cout << "Server wrong input parameters!" << endl;
     exit(1);
   }
 
   string filepath = argv[1];
+  int mode = atoi(argv[2]);
 
   Graph g(filepath);
-  BKstandard(g);
-  if (debug) {
-    for (int i = 0; i < g.n; i++) {
-      cout << "clique[" << i << "]=" << bitset<Nmax>(clique[i]) << endl;
-    }
+
+  if (mode == 0) {
+    AdjMatBK adjMatBk(g);
+    adjMatBk.findAllMaximalCliques();
+  } else {
+    AdjListBK adjListBk(g);
+    adjListBk.findAllMaximalCliques();
   }
 
   return 0;
