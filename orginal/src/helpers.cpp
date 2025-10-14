@@ -66,13 +66,13 @@ void AdjMatBK::bronKerboschRecursive(vector<bool> &R, vector<bool> &P,
     // Found a maximal clique
     cliqueCount++;
     if (debug) {
-      cout << "Maximal Clique: {";
+      cout << "Maximal Clique: { ";
       for (ui i = 0; i < n; i++) {
         if (R[i]) {
           cout << i << " ";
         }
       }
-      cout << " }" << endl;
+      cout << "}" << endl;
     }
     return;
   }
