@@ -26,6 +26,7 @@
 #include <set>
 #include <sys/stat.h>
 #include <utility>
+#include <bitset>
 using namespace std;
 
 typedef unsigned int ui;
