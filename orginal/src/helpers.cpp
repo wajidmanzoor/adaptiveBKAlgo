@@ -286,6 +286,8 @@ void PivotBK::applyDegreePruning(vector<ui> &P, const vector<ui> &R) {
 
 void PivotBK::applyNeighborhoodPruning(vector<ui> &P, const vector<ui> &R) {
   // Remove vertices that can't form cliques larger than current max
+  if (maxCliqueSize == 0)
+    return;
   P.erase(remove_if(P.begin(), P.end(),
                     [this, &R, &P](ui v) {
                       ui potentialSize =
@@ -312,14 +314,8 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     return;
   }
 
-  // Basic pruning: remove redundant vertices from X
-  X.erase(remove_if(X.begin(), X.end(),
-                    [this, &P](ui x) { return isRedundantX(x, P); }),
-          X.end());
-
   // Apply pruning rules
   applyDegreePruning(P, R);
-  applyNeighborhoodPruning(P, R);
 
   // If P is empty after pruning, return
   if (isEmpty(P)) {
@@ -328,16 +324,13 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   // Choose pivot using Tomita et al. strategy
   ui pivot = choosePivot(P, X);
 
-  // Get vertices in P that are NOT neighbors of pivot
-  vector<ui> P_minus_N_pivot;
-  for (ui v : P) {
-    if (!isConnected(v, pivot)) {
-      P_minus_N_pivot.push_back(v);
-    }
-  }
+  vector<ui> P_copy = P; // Copy to iterate over
 
-  // Process each vertex in P_minus_N_pivot
-  for (ui v : P_minus_N_pivot) {
+  for (ui v : P_copy) {
+    // Skip if v is a neighbor of the pivot
+    if (isConnected(v, pivot)) {
+      continue;
+    }
     vector<ui> new_R = R;
     new_R.push_back(v);
 
