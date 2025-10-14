@@ -92,3 +92,41 @@ public:
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
 };
+
+// Bitset-based graph for efficient operations
+struct BitsetGraph {
+  ui n;
+  vector<uint64_t> nbr; // nbr[v] has bits of neighbors of v
+  
+  BitsetGraph(ui numVertices) : n(numVertices), nbr(numVertices, 0) {}
+  
+  bool connected(ui u, ui v) const { 
+    return (nbr[u] >> v) & 1ULL; 
+  }
+  
+  void addEdge(ui u, ui v) {
+    nbr[u] |= (1ULL << v);
+    nbr[v] |= (1ULL << u);
+  }
+};
+
+// Pure Reordering Bron-Kerbosch (Most Efficient)
+class PureReorderBK {
+private:
+  BitsetGraph G;
+  ui cliqueCount;
+  vector<ui> globalOrder; // Global vertex order for exploration
+  set<set<ui>> foundCliques; // Store found maximal cliques
+
+  void enumerate(vector<ui> &R, ui startIdx);
+  bool canAdd(const vector<ui> &R, ui v);
+  void reorderAfterClique(const vector<ui> &R);
+  void reportClique(const vector<ui> &R);
+  bool isSubsetOfFoundClique(const vector<ui> &candidate);
+  set<ui> vectorToSet(const vector<ui> &vec);
+
+public:
+  PureReorderBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+};

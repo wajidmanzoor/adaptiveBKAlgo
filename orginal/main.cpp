@@ -10,6 +10,7 @@ int main(int argc, const char *argv[]) {
     cout << "  1: Adjacency List BK" << endl;
     cout << "  2: Pivot BK (Optimized)" << endl;
     cout << "  3: Reorder BK (Tree Reordering)" << endl;
+    cout << "  4: Pure Reorder BK (Most Efficient)" << endl;
     exit(1);
   }
 
@@ -34,8 +35,12 @@ int main(int argc, const char *argv[]) {
     cout << "Running Reorder Bron-Kerbosch (Tree Reordering)..." << endl;
     ReorderBK reorderBk(g);
     reorderBk.findAllMaximalCliques();
+  } else if (mode == 4) {
+    cout << "Running Pure Reorder Bron-Kerbosch (Most Efficient)..." << endl;
+    PureReorderBK pureReorderBk(g);
+    pureReorderBk.findAllMaximalCliques();
   } else {
-    cout << "Invalid mode! Use 0, 1, 2, or 3." << endl;
+    cout << "Invalid mode! Use 0, 1, 2, 3, or 4." << endl;
     exit(1);
   }
 

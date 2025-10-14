@@ -516,3 +516,144 @@ void ReorderBK::findAllMaximalCliques() {
 
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
 }
+
+// PureReorderBK Implementation
+PureReorderBK::PureReorderBK(Graph &g) : G(g.n) {
+  // Convert adjacency list to bitset representation
+  for (ui i = 0; i < g.n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < g.n) {
+        G.addEdge(i, neighbor);
+      }
+    }
+  }
+  
+  // Initialize global order (all vertices)
+  globalOrder.clear();
+  for (ui i = 0; i < g.n; i++) {
+    globalOrder.push_back(i);
+  }
+  
+  cliqueCount = 0;
+  foundCliques.clear();
+}
+
+bool PureReorderBK::canAdd(const vector<ui> &R, ui v) {
+  // Check if v is connected to all vertices in R
+  for (ui u : R) {
+    if (!G.connected(u, v)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void PureReorderBK::reorderAfterClique(const vector<ui> &R) {
+  // Create a vector to mark which vertices are in the found clique
+  vector<bool> inR(G.n, false);
+  for (ui v : R) {
+    inR[v] = true;
+  }
+  
+  // Separate vertices into front (not in clique) and back (in clique)
+  vector<ui> front, back;
+  front.reserve(G.n);
+  back.reserve(G.n);
+  
+  for (ui v : globalOrder) {
+    if (inR[v]) {
+      back.push_back(v);
+    } else {
+      front.push_back(v);
+    }
+  }
+  
+  // Rebuild global order: front vertices first, then clique vertices
+  globalOrder.clear();
+  globalOrder.insert(globalOrder.end(), front.begin(), front.end());
+  globalOrder.insert(globalOrder.end(), back.begin(), back.end());
+  
+  if (debug) {
+    cout << "Reordered: [";
+    for (ui v : globalOrder) cout << v << " ";
+    cout << "]" << endl;
+  }
+}
+
+set<ui> PureReorderBK::vectorToSet(const vector<ui> &vec) {
+  return set<ui>(vec.begin(), vec.end());
+}
+
+bool PureReorderBK::isSubsetOfFoundClique(const vector<ui> &candidate) {
+  set<ui> candidateSet = vectorToSet(candidate);
+  
+  for (const auto& foundClique : foundCliques) {
+    if (includes(foundClique.begin(), foundClique.end(), candidateSet.begin(), candidateSet.end())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void PureReorderBK::reportClique(const vector<ui> &R) {
+  // Check if this clique is a subset of any found clique
+  if (!foundCliques.empty() && isSubsetOfFoundClique(R)) {
+    if (debug) {
+      cout << "Skipping duplicate clique: { ";
+      for (ui v : R) cout << v << " ";
+      cout << "}" << endl;
+    }
+    return; // Skip this clique - it's a subset of a found one
+  }
+  
+  cliqueCount++;
+  
+  // Add to found cliques set
+  set<ui> newClique = vectorToSet(R);
+  foundCliques.insert(newClique);
+  
+  if (debug) {
+    cout << "Maximal Clique: { ";
+    for (ui v : R) {
+      cout << v << " ";
+    }
+    cout << "}" << endl;
+  }
+}
+
+void PureReorderBK::enumerate(vector<ui> &R, ui startIdx) {
+  bool expanded = false;
+  
+  // Try to add any vertex from current order starting at startIdx
+  for (ui i = startIdx; i < globalOrder.size(); i++) {
+    ui v = globalOrder[i];
+    if (!canAdd(R, v)) continue;
+    
+    // Extend clique with vertex v
+    R.push_back(v);
+    enumerate(R, i + 1);  // Continue from i+1
+    R.pop_back();
+    expanded = true;
+  }
+  
+  // If we couldn't add anything, R is maximal (unless empty)
+  if (!expanded && !R.empty()) {
+    reportClique(R);
+    // Reorder after finding a clique
+    reorderAfterClique(R);
+  }
+}
+
+void PureReorderBK::findAllMaximalCliques() {
+  cliqueCount = 0;
+  
+  // Start with empty clique
+  vector<ui> R;
+  R.reserve(G.n);
+  
+  // Begin enumeration from index 0
+  enumerate(R, 0);
+  
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+}
