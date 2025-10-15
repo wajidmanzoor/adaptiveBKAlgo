@@ -66,7 +66,7 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
 };
 
-// Depth-First Reordering Algorithm for Maximal Clique Enumeration
+// Depth-First Reordering Algorithm with Backtracking for Maximal Clique Enumeration
 class DepthFirstReorderBK {
 private:
   ui n;
@@ -79,15 +79,22 @@ private:
   vector<ui> global_order;    // dynamic vertex processing order
   set<set<ui>> found_cliques; // store found maximal cliques
   
-  // Core algorithm methods
-  vector<ui> depthFirstExpand(ui start_vertex);
+  // Enhanced clique mapping: vertex -> set of cliques containing that vertex
+  map<ui, set<set<ui>>> vertex_to_cliques;
+  
+  // Core algorithm methods with backtracking
+  vector<ui> depthFirstExpandWithBacktrack(ui start_vertex);
+  bool exploreFromClique(vector<ui> &current_clique, ui start_pos);
   void reorderVertices();
+  void reorderAfterNoExtensions(ui vertex);
   ui getNextStartingVertex();
   
   // Utility methods
   bool isConnected(ui u, ui v) const;
   bool isClique(const vector<ui> &R) const;
   bool canExtend(const vector<ui> &R, ui vertex) const;
+  bool isCliqueAlreadyFound(const vector<ui> &clique) const;
+  void recordClique(const vector<ui> &clique);
   
 public:
   DepthFirstReorderBK(Graph &g);
