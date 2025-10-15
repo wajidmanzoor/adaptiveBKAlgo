@@ -25,6 +25,10 @@ int main(int argc, const char *argv[]) {
     cout << "Running Pivot Bron-Kerbosch with pruning..." << endl;
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
+  } else if (mode == 3) {
+    cout << "Running Simple Adaptive Enumeration..." << endl;
+    SimpleAdaptiveBK simpleBk(g);
+    simpleBk.findAllMaximalCliques();
   } else {
     cout << "Invalid mode! Use 0, 1, or 2." << endl;
     exit(1);

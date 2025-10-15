@@ -466,7 +466,7 @@ void SimpleAdaptiveBK::enumerate(vector<ui> &R, ui start_idx) {
     }
   }
 
-  // Leaf node → maximal clique found (cannot be extended further)
+  // Leaf node maximal clique found (cannot be extended further)
   if (!expanded && !R.empty()) {
     handleClique(R);
   }
