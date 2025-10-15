@@ -392,9 +392,6 @@ DepthFirstReorderBK::DepthFirstReorderBK(Graph &g) {
   global_order.resize(n);
   iota(global_order.begin(), global_order.end(), 0);
 }
-bool DepthFirstReorderBK::isConnected(ui u, ui v) const {
-  return binary_search(adjList[u].begin(), adjList[u].end(), v);
-}
 bool DepthFirstReorderBK::isClique(const vector<ui> &R) const {
   for (size_t i = 0; i < R.size(); i++) {
     for (size_t j = i + 1; j < R.size(); j++) {
@@ -405,57 +402,116 @@ bool DepthFirstReorderBK::isClique(const vector<ui> &R) const {
   }
   return true;
 }
-bool DepthFirstReorderBK::canExtend(const vector<ui> &R, ui vertex) const {
-  // Check if adding vertex to R maintains clique property
-  for (ui v : R) {
-    if (!isConnected(vertex, v)) {
-      return false;
+bool DepthFirstReorderBK::isCliqueAlreadyFound(const vector<ui> &clique) const {
+  set<ui> clique_set(clique.begin(), clique.end());
+  return found_cliques.find(clique_set) != found_cliques.end();
+}
+void DepthFirstReorderBK::recordClique(const vector<ui> &clique) {
+  set<ui> clique_set(clique.begin(), clique.end());
+  found_cliques.insert(clique_set);
+
+  // Update vertex-to-cliques mapping
+  for (ui v : clique) {
+    vertex_to_cliques[v].insert(clique_set);
+  }
+
+  cliqueCount++;
+  maxCliqueSize = max(maxCliqueSize, (ui)clique.size());
+
+  cout << "NEW maximal clique found: { ";
+  for (ui v : clique)
+    cout << v << " ";
+  cout << "}" << endl;
+}
+bool DepthFirstReorderBK::exploreFromClique(vector<ui> &current_clique,
+                                            ui start_pos) {
+  if (debug) {
+    cout << "Exploring from clique: { ";
+    for (ui x : current_clique)
+      cout << x << " ";
+    cout << "} starting from position " << start_pos << endl;
+  }
+
+  // Try to extend current clique with vertices starting from start_pos
+  for (ui pos = start_pos; pos < global_order.size(); pos++) {
+    ui v = global_order[pos];
+
+    // Skip if vertex is already in current clique
+    if (find(current_clique.begin(), current_clique.end(), v) !=
+        current_clique.end()) {
+      continue;
+    }
+
+    // Check if adding v maintains clique property
+    if (canExtend(current_clique, v)) {
+      vector<ui> extended_clique = current_clique;
+      extended_clique.push_back(v);
+
+      if (debug) {
+        cout << "Trying extension: { ";
+        for (ui x : extended_clique)
+          cout << x << " ";
+        cout << "}" << endl;
+      }
+
+      // Check if this clique is already found
+      if (isCliqueAlreadyFound(extended_clique)) {
+        if (debug) {
+          cout << "Duplicate found, continuing search..." << endl;
+        }
+        continue; // Try next extension instead of backtracking
+      }
+      // Try to extend further from this new clique
+      if (exploreFromClique(extended_clique, pos + 1)) {
+        return true; // Found a new maximal clique
+      }
+
+      // If no further extension possible, this might be maximal
+      // Check if it's truly maximal (cannot be extended by any vertex)
+      bool is_maximal = true;
+      for (ui test_v : global_order) {
+        if (find(extended_clique.begin(), extended_clique.end(), test_v) ==
+                extended_clique.end() &&
+            canExtend(extended_clique, test_v)) {
+          is_maximal = false;
+          break;
+        }
+      }
+
+      if (is_maximal && !isCliqueAlreadyFound(extended_clique)) {
+        recordClique(extended_clique);
+        return true;
+      }
     }
   }
-  return true;
-}
 
-vector<ui> DepthFirstReorderBK::depthFirstExpand(ui start_vertex) {
+  return false; // No extension found
+}
+vector<ui> DepthFirstReorderBK::depthFirstExpandWithBacktrack(ui start_vertex) {
   vector<ui> current_clique = {start_vertex};
 
   if (debug) {
-    cout << "Starting depth-first expansion from vertex " << start_vertex
-         << endl;
+    cout << "Starting depth-first expansion with backtracking from vertex "
+         << start_vertex << endl;
   }
 
-  bool expanded = true;
-  while (expanded) {
-    expanded = false;
+  // Use backtracking exploration
+  if (exploreFromClique(current_clique, 0)) {
+    // Found at least one new maximal clique
+    return current_clique; // Return the starting clique
+  }
 
-    // Try to extend current clique with ANY vertex in global order
-    // This is the original logic - try all possible extensions
-    for (ui v : global_order) {
-      // Skip if vertex is already in current clique
-      if (find(current_clique.begin(), current_clique.end(), v) !=
-          current_clique.end()) {
-        continue;
-      }
-
-      // Check if adding v maintains clique property
-      if (canExtend(current_clique, v)) {
-        current_clique.push_back(v);
-        expanded = true;
-
-        if (debug) {
-          cout << "Extended clique to: { ";
-          for (ui x : current_clique)
-            cout << x << " ";
-          cout << "}" << endl;
-        }
-        break; // Continue with depth-first expansion
-      }
+  // If no extensions found, check if starting vertex alone is maximal
+  bool is_maximal = true;
+  for (ui v : global_order) {
+    if (v != start_vertex && canExtend(current_clique, v)) {
+      is_maximal = false;
+      break;
     }
   }
-  if (debug) {
-    cout << "Found maximal clique: { ";
-    for (ui v : current_clique)
-      cout << v << " ";
-    cout << "}" << endl;
+
+  if (is_maximal && !isCliqueAlreadyFound(current_clique)) {
+    recordClique(current_clique);
   }
 
   return current_clique;
@@ -469,22 +525,14 @@ ui DepthFirstReorderBK::getNextStartingVertex() {
   }
   return n; // All vertices visited
 }
-
 void DepthFirstReorderBK::reorderVertices() {
   vector<ui> tier1, tier2, tier3, tier4;
 
   // Classify vertices into 4 tiers
   for (ui v = 0; v < n; v++) {
     bool is_visited = visited[v];
-    bool in_clique = false;
+    bool in_clique = (vertex_to_cliques[v].size() > 0);
 
-    // Check if vertex is in any found clique
-    for (const auto &clique : found_cliques) {
-      if (clique.find(v) != clique.end()) {
-        in_clique = true;
-        break;
-      }
-    }
     // Assign to appropriate tier
     if (!is_visited && !in_clique) {
       tier1.push_back(v); // Highest priority
@@ -496,8 +544,6 @@ void DepthFirstReorderBK::reorderVertices() {
       tier4.push_back(v); // Lowest priority
     }
   }
-
-  // Rebuild global order with new priorities
   global_order.clear();
   global_order.insert(global_order.end(), tier1.begin(), tier1.end());
   global_order.insert(global_order.end(), tier2.begin(), tier2.end());
@@ -524,11 +570,38 @@ void DepthFirstReorderBK::reorderVertices() {
     cout << "]" << endl;
   }
 }
+void DepthFirstReorderBK::reorderAfterNoExtensions(ui vertex) {
+  // Move vertex to end of global order and keep rest same
+  vector<ui> new_order;
+
+  // Add all vertices except the one that had no extensions
+  for (ui v : global_order) {
+    if (v != vertex) {
+      new_order.push_back(v);
+    }
+  }
+
+  // Add the problematic vertex at the end
+  new_order.push_back(vertex);
+
+  global_order = new_order;
+
+  if (debug) {
+    cout << "Moved vertex " << vertex << " to end. New order: [";
+    for (ui v : global_order)
+      cout << v << " ";
+    cout << "]" << endl;
+  }
+}
 void DepthFirstReorderBK::findAllMaximalCliques() {
   cliqueCount = 0;
   maxCliqueSize = 0;
 
-  cout << "Starting Depth-First Reordering Algorithm..." << endl;
+  cout << "Starting Enhanced Depth-First Reordering Algorithm with "
+          "Backtracking..."
+       << endl;
+
+  ui phase = 1;
 
   // Main algorithm loop
   while (true) {
@@ -540,42 +613,48 @@ void DepthFirstReorderBK::findAllMaximalCliques() {
     }
 
     if (debug) {
-      cout << "\n=== Phase " << (cliqueCount + 1) << ": Starting with vertex "
+      cout << "\n=== Phase " << phase << ": Starting with vertex "
            << start_vertex << " ===" << endl;
     }
 
     // Mark vertex as visited
     visited[start_vertex] = true;
 
-    // Perform depth-first expansion
-    vector<ui> maximal_clique = depthFirstExpand(start_vertex);
+    ui cliques_before = cliqueCount;
 
-    // Store the found maximal clique (only if it's new)
-    set<ui> clique_set(maximal_clique.begin(), maximal_clique.end());
-
-    // Check if this clique is already found
-    if (found_cliques.find(clique_set) == found_cliques.end()) {
-      found_cliques.insert(clique_set);
-      cliqueCount++;
-      maxCliqueSize = max(maxCliqueSize, (ui)maximal_clique.size());
-
-      cout << "NEW maximal clique found: { ";
-      for (ui v : maximal_clique)
-        cout << v << " ";
-      cout << "}" << endl;
-    } else {
+    // Perform depth-first expansion with backtracking
+    depthFirstExpandWithBacktrack(start_vertex);
+    // Check if any new cliques were found
+    if (cliqueCount == cliques_before) {
       if (debug) {
-        cout << "Duplicate clique skipped: { ";
-        for (ui v : maximal_clique)
-          cout << v << " ";
-        cout << "}" << endl;
+        cout << "No new cliques found from vertex " << start_vertex << endl;
       }
+      // Move this vertex to end since it didn't produce new cliques
+      reorderAfterNoExtensions(start_vertex);
+    } else {
+      // Reorder vertices based on new clique information
+      reorderVertices();
     }
 
-    // Reorder vertices based on new information
-    reorderVertices();
+    phase++;
   }
 
+  cout << "\n=== Algorithm Complete ===" << endl;
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+
+  // Display vertex-to-cliques mapping
+  cout << "\nVertex-to-Cliques Mapping:" << endl;
+  for (ui v = 0; v < n; v++) {
+    cout << "Vertex " << v << ": ";
+    if (vertex_to_cliques.find(v) != vertex_to_cliques.end()) {
+      for (const auto &clique : vertex_to_cliques[v]) {
+        cout << "{ ";
+        for (ui u : clique)
+          cout << u << " ";
+        cout << "} ";
+      }
+    }
+    cout << endl;
+  }
 }

@@ -30,7 +30,7 @@ int main(int argc, const char *argv[]) {
     DepthFirstReorderBK depthFirstBk(g);
     depthFirstBk.findAllMaximalCliques();
   } else {
-    cout << "Invalid mode! Use 0, 1, or 2." << endl;
+    cout << "Invalid mode! Use 0, 1, 2 or 3. " << endl;
     exit(1);
   }
 
