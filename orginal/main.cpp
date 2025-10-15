@@ -26,9 +26,9 @@ int main(int argc, const char *argv[]) {
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
   } else if (mode == 3) {
-    cout << "Running Simple Adaptive Enumeration..." << endl;
-    SimpleAdaptiveBK simpleBk(g);
-    simpleBk.findAllMaximalCliques();
+    cout << "Running Depth-First Reordering Algorithm..." << endl;
+    DepthFirstReorderBK depthFirstBk(g);
+    depthFirstBk.findAllMaximalCliques();
   } else {
     cout << "Invalid mode! Use 0, 1, or 2." << endl;
     exit(1);

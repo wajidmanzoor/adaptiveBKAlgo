@@ -66,27 +66,30 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
 };
 
-class SimpleAdaptiveBK {
+class DepthFirstReorderBK {
 private:
   ui n;
   vector<vector<ui>> adjList; // adjacency lists
   ui cliqueCount;
   ui maxCliqueSize;
 
-  // Skip-mask and reordering components
-  vector<bool> skip_mask;  // marks vertices already covered by maximal cliques
-  vector<ui> global_order; // dynamic vertex processing order
+  // Core algorithm state
+  vector<bool> visited;       // tracks which vertices have been starting points
+  vector<ui> global_order;    // dynamic vertex processing order
+  set<set<ui>> found_cliques; // store found maximal cliques
 
-  // Core enumeration method
-  void enumerate(vector<ui> &R, ui start_idx);
+  // Core algorithm methods
+  vector<ui> depthFirstExpand(ui start_vertex);
+  void reorderVertices();
+  ui getNextStartingVertex();
 
   // Utility methods
   bool isConnected(ui u, ui v) const;
   bool isClique(const vector<ui> &R) const;
-  void handleClique(const vector<ui> &R);
+  bool canExtend(const vector<ui> &R, ui vertex) const;
 
 public:
-  SimpleAdaptiveBK(Graph &g);
+  DepthFirstReorderBK(Graph &g);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
