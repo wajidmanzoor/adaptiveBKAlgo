@@ -365,256 +365,15 @@ void PivotBK::findAllMaximalCliques() {
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
 }
 
-// AdaptiveSkipPivotBK Implementation
-AdaptiveSkipPivotBK::AdaptiveSkipPivotBK(Graph &g) {
+// DepthFirstReorderBK Implementation
+DepthFirstReorderBK::DepthFirstReorderBK(Graph &g) {
   n = g.n;
   adjList.resize(n);
   cliqueCount = 0;
   maxCliqueSize = 0;
   
-  // Initialize skip mask
-  skip_mask.resize(n, false);
-  
-  // Fill adjacency lists from graph
-  for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui neighbor = g.neighbors[j];
-      if (neighbor < n) {
-        adjList[i].push_back(neighbor);
-      }
-    }
-    // Sort for efficient intersection operations
-    sort(adjList[i].begin(), adjList[i].end());
-  }
-  
-  // Initialize global order - start with degree-based ordering
-  global_order.resize(n);
-  iota(global_order.begin(), global_order.end(), 0);
-  
-  // Sort by degree (descending) for better initial ordering
-  sort(global_order.begin(), global_order.end(), 
-       [this](ui a, ui b) { return adjList[a].size() > adjList[b].size(); });
-}
-
-vector<ui> AdaptiveSkipPivotBK::intersect(const vector<ui> &set1, const vector<ui> &neighbors) {
-  vector<ui> result;
-  result.reserve(min(set1.size(), neighbors.size()));
-  ui i = 0, j = 0;
-  while (i < set1.size() && j < neighbors.size()) {
-    if (set1[i] == neighbors[j]) {
-      result.push_back(set1[i]);
-      i++;
-      j++;
-    } else if (set1[i] < neighbors[j]) {
-      i++;
-    } else {
-      j++;
-    }
-  }
-  return result;
-}
-
-bool AdaptiveSkipPivotBK::isEmpty(const vector<ui> &set) { 
-  return set.empty(); 
-}
-
-bool AdaptiveSkipPivotBK::isConnected(ui u, ui v) {
-  return binary_search(adjList[u].begin(), adjList[u].end(), v);
-}
-
-ui AdaptiveSkipPivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
-  ui bestPivot = P.empty() ? (X.empty() ? 0 : X[0]) : P[0];
-  ui maxElimination = 0;
-
-  // Check vertices in P
-  for (ui u : P) {
-    ui elimination = intersect(P, adjList[u]).size();
-    if (elimination > maxElimination) {
-      maxElimination = elimination;
-      bestPivot = u;
-    }
-  }
-
-  // Check vertices in X
-  for (ui u : X) {
-    ui elimination = intersect(P, adjList[u]).size();
-    if (elimination > maxElimination) {
-      maxElimination = elimination;
-      bestPivot = u;
-    }
-  }
-
-  return bestPivot;
-}
-
-void AdaptiveSkipPivotBK::applyDegreePruning(vector<ui> &P, const vector<ui> &R) {
-  // Remove vertices with degree less than current clique size
-  P.erase(remove_if(P.begin(), P.end(),
-                    [this, &R](ui v) { return adjList[v].size() < R.size(); }),
-          P.end());
-}
-
-bool AdaptiveSkipPivotBK::isClique(const vector<ui> &R) const {
-  for (size_t i = 0; i < R.size(); i++) {
-    for (size_t j = i + 1; j < R.size(); j++) {
-      if (!binary_search(adjList[R[i]].begin(), adjList[R[i]].end(), R[j])) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-void AdaptiveSkipPivotBK::reorderAfterClique(const vector<ui> &clique) {
-  // For now, let's focus on reordering without aggressive skipping
-  // Mark clique vertices as processed (but don't skip them completely)
-  for (ui v : clique) {
-    skip_mask[v] = true;
-  }
-  
-  // Reorder: unprocessed vertices first, processed vertices last
-  vector<ui> unprocessed, processed;
-  for (ui v : global_order) {
-    if (skip_mask[v]) {
-      processed.push_back(v);
-    } else {
-      unprocessed.push_back(v);
-    }
-  }
-  
-  // Update global order to prioritize unprocessed vertices
-  global_order.clear();
-  global_order.insert(global_order.end(), unprocessed.begin(), unprocessed.end());
-  global_order.insert(global_order.end(), processed.begin(), processed.end());
-  
-  if (debug) {
-    cout << "Reordered vertices: unprocessed=[";
-    for (ui v : unprocessed) cout << v << " ";
-    cout << "], processed=[";
-    for (ui v : processed) cout << v << " ";
-    cout << "]" << endl;
-  }
-}
-
-vector<ui> AdaptiveSkipPivotBK::getOrderedCandidates(const vector<ui> &P, ui start_idx) const {
-  vector<ui> ordered_candidates;
-  
-  // Follow global order starting from start_idx, skip covered vertices
-  for (ui idx = start_idx; idx < global_order.size(); idx++) {
-    ui v = global_order[idx];
-    if (skip_mask[v]) continue;  // Skip covered vertices
-    
-    // Check if vertex is in P
-    if (find(P.begin(), P.end(), v) != P.end()) {
-      ordered_candidates.push_back(v);
-    }
-  }
-  
-  return ordered_candidates;
-}
-
-void AdaptiveSkipPivotBK::adaptiveBronKerbosch(vector<ui> &R, vector<ui> &P, vector<ui> &X, ui start_idx) {
-  // Base case: maximal clique found
-  if (isEmpty(P) && isEmpty(X)) {
-    cliqueCount++;
-    maxCliqueSize = max(maxCliqueSize, (ui)R.size());
-    
-    if (debug) {
-      cout << "Maximal Clique: { ";
-      for (ui v : R) cout << v << " ";
-      cout << "}" << endl;
-    }
-    
-    // Apply skip-mask reordering strategy
-    reorderAfterClique(R);
-    return;
-  }
-  
-  // Get candidates in global order - don't skip covered vertices in P construction
-  // The skip happens during iteration to allow for proper P/X management
-  vector<ui> ordered_candidates;
-  for (ui idx = start_idx; idx < global_order.size(); idx++) {
-    ui v = global_order[idx];
-    if (find(P.begin(), P.end(), v) != P.end()) {
-      ordered_candidates.push_back(v);
-    }
-  }
-  
-  // Apply degree pruning
-  applyDegreePruning(ordered_candidates, R);
-  if (ordered_candidates.empty()) return;
-  
-  // Choose pivot from ordered candidates + X
-  ui pivot = choosePivot(ordered_candidates, X);
-  
-  // Process candidates in global order
-  vector<ui> candidates_copy = ordered_candidates;
-  for (ui v : candidates_copy) {
-    // Skip if v is a neighbor of the pivot (standard pivoting)
-    if (isConnected(v, pivot)) continue;
-    
-    // Skip if vertex is already covered by a maximal clique (skip-mask optimization)
-    if (skip_mask[v]) continue;
-    
-    vector<ui> new_R = R;
-    new_R.push_back(v);
-    
-    // Verify that new_R forms a valid clique (debug)
-    if (!isClique(new_R)) {
-      if (debug) {
-        cout << "Skipping invalid clique: { ";
-        for (ui x : new_R) cout << x << " ";
-        cout << "}" << endl;
-      }
-      continue;
-    }
-    
-    // Create P ∩ N(v) and X ∩ N(v)
-    vector<ui> new_P = intersect(P, adjList[v]);
-    vector<ui> new_X = intersect(X, adjList[v]);
-    
-    // Find next start index in global order
-    ui next_start = find(global_order.begin(), global_order.end(), v) - global_order.begin() + 1;
-    
-    // Recursive call
-    adaptiveBronKerbosch(new_R, new_P, new_X, next_start);
-    
-    // Move v from P to X
-    P.erase(find(P.begin(), P.end(), v));
-    X.push_back(v);
-  }
-}
-
-void AdaptiveSkipPivotBK::findAllMaximalCliques() {
-  // Initialize sets
-  vector<ui> R; // Current clique (empty)
-  vector<ui> P; // All vertices as candidates
-  vector<ui> X; // Excluded set (empty)
-  
-  // Fill P with all vertices
-  for (ui i = 0; i < n; i++) {
-    P.push_back(i);
-  }
-  
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-  
-  cout << "Starting Adaptive Skip-Mask Bron-Kerbosch..." << endl;
-  adaptiveBronKerbosch(R, P, X, 0);  // Start from index 0
-  
-  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
-  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
-}
-
-// SimpleAdaptiveBK Implementation - Pure enumeration with skip-mask reordering
-SimpleAdaptiveBK::SimpleAdaptiveBK(Graph &g) {
-  n = g.n;
-  adjList.resize(n);
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-  
-  // Initialize skip mask
-  skip_mask.resize(n, false);
+  // Initialize algorithm state
+  visited.resize(n, false);
   
   // Fill adjacency lists from graph
   for (ui i = 0; i < n; i++) {
@@ -628,16 +387,16 @@ SimpleAdaptiveBK::SimpleAdaptiveBK(Graph &g) {
     sort(adjList[i].begin(), adjList[i].end());
   }
   
-  // Initialize global order - simple sequential order
+  // Initialize global order - simple sequential order initially
   global_order.resize(n);
   iota(global_order.begin(), global_order.end(), 0);
 }
 
-bool SimpleAdaptiveBK::isConnected(ui u, ui v) const {
+bool DepthFirstReorderBK::isConnected(ui u, ui v) const {
   return binary_search(adjList[u].begin(), adjList[u].end(), v);
 }
 
-bool SimpleAdaptiveBK::isClique(const vector<ui> &R) const {
+bool DepthFirstReorderBK::isClique(const vector<ui> &R) const {
   for (size_t i = 0; i < R.size(); i++) {
     for (size_t j = i + 1; j < R.size(); j++) {
       if (!isConnected(R[i], R[j])) {
@@ -648,78 +407,177 @@ bool SimpleAdaptiveBK::isClique(const vector<ui> &R) const {
   return true;
 }
 
-void SimpleAdaptiveBK::handleClique(const vector<ui> &R) {
-  cliqueCount++;
-  maxCliqueSize = max(maxCliqueSize, (ui)R.size());
+bool DepthFirstReorderBK::canExtend(const vector<ui> &R, ui vertex) const {
+  // Check if adding vertex to R maintains clique property
+  for (ui v : R) {
+    if (!isConnected(vertex, v)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+vector<ui> DepthFirstReorderBK::depthFirstExpand(ui start_vertex) {
+  vector<ui> current_clique = {start_vertex};
   
   if (debug) {
-    cout << "Found maximal clique: { ";
-    for (ui v : R) cout << v << " ";
-    cout << "}" << endl;
+    cout << "Starting depth-first expansion from vertex " << start_vertex << endl;
   }
   
-  // Mark covered vertices - but be more conservative
-  // Only mark vertices that are definitely covered by this maximal clique
-  for (ui v : R) {
-    skip_mask[v] = true;
-  }
-  
-  // Reorder: uncovered first, covered last
-  vector<ui> uncovered, covered;
-  for (ui v : global_order) {
-    if (skip_mask[v]) {
-      covered.push_back(v);
-    } else {
-      uncovered.push_back(v);
+  bool expanded = true;
+  while (expanded) {
+    expanded = false;
+    
+    // Try to extend current clique with vertices that come AFTER start_vertex in global order
+    // This ensures we explore different combinations
+    bool found_start = false;
+    for (ui v : global_order) {
+      // Only consider vertices that come after the start vertex in the order
+      if (v == start_vertex) {
+        found_start = true;
+        continue;
+      }
+      if (!found_start) continue;
+      
+      // Skip if vertex is already in current clique
+      if (find(current_clique.begin(), current_clique.end(), v) != current_clique.end()) {
+        continue;
+      }
+      
+      // Check if adding v maintains clique property
+      if (canExtend(current_clique, v)) {
+        current_clique.push_back(v);
+        expanded = true;
+        
+        if (debug) {
+          cout << "Extended clique to: { ";
+          for (ui x : current_clique) cout << x << " ";
+          cout << "}" << endl;
+        }
+        break; // Continue with depth-first expansion
+      }
     }
   }
   
+  if (debug) {
+    cout << "Found maximal clique: { ";
+    for (ui v : current_clique) cout << v << " ";
+    cout << "}" << endl;
+  }
+  
+  return current_clique;
+}
+
+ui DepthFirstReorderBK::getNextStartingVertex() {
+  // Find first unvisited vertex in global order
+  for (ui v : global_order) {
+    if (!visited[v]) {
+      return v;
+    }
+  }
+  return n; // All vertices visited
+}
+
+void DepthFirstReorderBK::reorderVertices() {
+  vector<ui> tier1, tier2, tier3, tier4;
+  
+  // Classify vertices into 4 tiers
+  for (ui v = 0; v < n; v++) {
+    bool is_visited = visited[v];
+    bool in_clique = false;
+    
+    // Check if vertex is in any found clique
+    for (const auto& clique : found_cliques) {
+      if (clique.find(v) != clique.end()) {
+        in_clique = true;
+        break;
+      }
+    }
+    
+    // Assign to appropriate tier
+    if (!is_visited && !in_clique) {
+      tier1.push_back(v); // Highest priority
+    } else if (!is_visited && in_clique) {
+      tier2.push_back(v);
+    } else if (is_visited && !in_clique) {
+      tier3.push_back(v);
+    } else { // is_visited && in_clique
+      tier4.push_back(v); // Lowest priority
+    }
+  }
+  
+  // Rebuild global order with new priorities
   global_order.clear();
-  global_order.insert(global_order.end(), uncovered.begin(), uncovered.end());
-  global_order.insert(global_order.end(), covered.begin(), covered.end());
+  global_order.insert(global_order.end(), tier1.begin(), tier1.end());
+  global_order.insert(global_order.end(), tier2.begin(), tier2.end());
+  global_order.insert(global_order.end(), tier3.begin(), tier3.end());
+  global_order.insert(global_order.end(), tier4.begin(), tier4.end());
   
   if (debug) {
-    cout << "Reordered: uncovered=[";
-    for (ui v : uncovered) cout << v << " ";
-    cout << "], covered=[";
-    for (ui v : covered) cout << v << " ";
+    cout << "Reordered vertices:" << endl;
+    cout << "  Tier 1 (not_visited, not_in_clique): [";
+    for (ui v : tier1) cout << v << " ";
+    cout << "]" << endl;
+    cout << "  Tier 2 (not_visited, in_clique): [";
+    for (ui v : tier2) cout << v << " ";
+    cout << "]" << endl;
+    cout << "  Tier 3 (visited, not_in_clique): [";
+    for (ui v : tier3) cout << v << " ";
+    cout << "]" << endl;
+    cout << "  Tier 4 (visited, in_clique): [";
+    for (ui v : tier4) cout << v << " ";
     cout << "]" << endl;
   }
 }
 
-void SimpleAdaptiveBK::enumerate(vector<ui> &R, ui start_idx) {
-  bool expanded = false;
-  
-  for (ui idx = start_idx; idx < global_order.size(); idx++) {
-    ui v = global_order[idx];
-    
-    // Skip redundant vertices (already covered by maximal cliques)
-    if (skip_mask[v]) continue;
-    
-    vector<ui> R_next = R;
-    R_next.push_back(v);
-    
-    // Check if R_next forms a clique
-    if (isClique(R_next)) {
-      expanded = true;
-      enumerate(R_next, idx + 1);
-    }
-  }
-  
-  // Leaf node → maximal clique found (cannot be extended further)
-  if (!expanded && !R.empty()) {
-    handleClique(R);
-  }
-}
-
-void SimpleAdaptiveBK::findAllMaximalCliques() {
-  vector<ui> R; // Start with empty clique
-  
+void DepthFirstReorderBK::findAllMaximalCliques() {
   cliqueCount = 0;
   maxCliqueSize = 0;
   
-  cout << "Starting Simple Adaptive Enumeration..." << endl;
-  enumerate(R, 0);  // Start from index 0
+  cout << "Starting Depth-First Reordering Algorithm..." << endl;
+  
+  // Main algorithm loop
+  while (true) {
+    ui start_vertex = getNextStartingVertex();
+    
+    // Termination condition: all vertices visited
+    if (start_vertex == n) {
+      break;
+    }
+    
+    if (debug) {
+      cout << "\n=== Phase " << (cliqueCount + 1) << ": Starting with vertex " << start_vertex << " ===" << endl;
+    }
+    
+    // Mark vertex as visited
+    visited[start_vertex] = true;
+    
+    // Perform depth-first expansion
+    vector<ui> maximal_clique = depthFirstExpand(start_vertex);
+    
+    // Store the found maximal clique (only if it's new)
+    set<ui> clique_set(maximal_clique.begin(), maximal_clique.end());
+    
+    // Check if this clique is already found
+    if (found_cliques.find(clique_set) == found_cliques.end()) {
+      found_cliques.insert(clique_set);
+      cliqueCount++;
+      maxCliqueSize = max(maxCliqueSize, (ui)maximal_clique.size());
+      
+      cout << "NEW maximal clique found: { ";
+      for (ui v : maximal_clique) cout << v << " ";
+      cout << "}" << endl;
+    } else {
+      if (debug) {
+        cout << "Duplicate clique skipped: { ";
+        for (ui v : maximal_clique) cout << v << " ";
+        cout << "}" << endl;
+      }
+    }
+    
+    // Reorder vertices based on new information
+    reorderVertices();
+  }
   
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
