@@ -66,6 +66,7 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
 };
 
+// Depth-First Reordering Bron-Kerbosch
 class DepthFirstReorderBK {
 private:
   ui n;

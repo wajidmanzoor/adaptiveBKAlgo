@@ -392,6 +392,10 @@ DepthFirstReorderBK::DepthFirstReorderBK(Graph &g) {
   global_order.resize(n);
   iota(global_order.begin(), global_order.end(), 0);
 }
+
+bool DepthFirstReorderBK::isConnected(ui u, ui v) const {
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
 bool DepthFirstReorderBK::isClique(const vector<ui> &R) const {
   for (size_t i = 0; i < R.size(); i++) {
     for (size_t j = i + 1; j < R.size(); j++) {
@@ -402,6 +406,17 @@ bool DepthFirstReorderBK::isClique(const vector<ui> &R) const {
   }
   return true;
 }
+
+bool DepthFirstReorderBK::canExtend(const vector<ui> &R, ui vertex) const {
+  // Check if adding vertex to R maintains clique property
+  for (ui v : R) {
+    if (!isConnected(vertex, v)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool DepthFirstReorderBK::isCliqueAlreadyFound(const vector<ui> &clique) const {
   set<ui> clique_set(clique.begin(), clique.end());
   return found_cliques.find(clique_set) != found_cliques.end();
@@ -423,6 +438,7 @@ void DepthFirstReorderBK::recordClique(const vector<ui> &clique) {
     cout << v << " ";
   cout << "}" << endl;
 }
+
 bool DepthFirstReorderBK::exploreFromClique(vector<ui> &current_clique,
                                             ui start_pos) {
   if (debug) {
@@ -441,7 +457,6 @@ bool DepthFirstReorderBK::exploreFromClique(vector<ui> &current_clique,
         current_clique.end()) {
       continue;
     }
-
     // Check if adding v maintains clique property
     if (canExtend(current_clique, v)) {
       vector<ui> extended_clique = current_clique;
@@ -461,6 +476,7 @@ bool DepthFirstReorderBK::exploreFromClique(vector<ui> &current_clique,
         }
         continue; // Try next extension instead of backtracking
       }
+
       // Try to extend further from this new clique
       if (exploreFromClique(extended_clique, pos + 1)) {
         return true; // Found a new maximal clique
@@ -477,7 +493,6 @@ bool DepthFirstReorderBK::exploreFromClique(vector<ui> &current_clique,
           break;
         }
       }
-
       if (is_maximal && !isCliqueAlreadyFound(extended_clique)) {
         recordClique(extended_clique);
         return true;
@@ -525,6 +540,7 @@ ui DepthFirstReorderBK::getNextStartingVertex() {
   }
   return n; // All vertices visited
 }
+
 void DepthFirstReorderBK::reorderVertices() {
   vector<ui> tier1, tier2, tier3, tier4;
 
@@ -544,6 +560,7 @@ void DepthFirstReorderBK::reorderVertices() {
       tier4.push_back(v); // Lowest priority
     }
   }
+  // Rebuild global order with new priorities
   global_order.clear();
   global_order.insert(global_order.end(), tier1.begin(), tier1.end());
   global_order.insert(global_order.end(), tier2.begin(), tier2.end());
@@ -593,6 +610,7 @@ void DepthFirstReorderBK::reorderAfterNoExtensions(ui vertex) {
     cout << "]" << endl;
   }
 }
+
 void DepthFirstReorderBK::findAllMaximalCliques() {
   cliqueCount = 0;
   maxCliqueSize = 0;
@@ -624,6 +642,7 @@ void DepthFirstReorderBK::findAllMaximalCliques() {
 
     // Perform depth-first expansion with backtracking
     depthFirstExpandWithBacktrack(start_vertex);
+
     // Check if any new cliques were found
     if (cliqueCount == cliques_before) {
       if (debug) {
