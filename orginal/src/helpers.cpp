@@ -364,3 +364,243 @@ void PivotBK::findAllMaximalCliques() {
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
 }
+
+// AdaptiveSkipPivotBK Implementation
+AdaptiveSkipPivotBK::AdaptiveSkipPivotBK(Graph &g) {
+  n = g.n;
+  adjList.resize(n);
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  
+  // Initialize skip mask
+  skip_mask.resize(n, false);
+  
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
+      }
+    }
+    // Sort for efficient intersection operations
+    sort(adjList[i].begin(), adjList[i].end());
+  }
+  
+  // Initialize global order - start with degree-based ordering
+  global_order.resize(n);
+  iota(global_order.begin(), global_order.end(), 0);
+  
+  // Sort by degree (descending) for better initial ordering
+  sort(global_order.begin(), global_order.end(), 
+       [this](ui a, ui b) { return adjList[a].size() > adjList[b].size(); });
+}
+
+vector<ui> AdaptiveSkipPivotBK::intersect(const vector<ui> &set1, const vector<ui> &neighbors) {
+  vector<ui> result;
+  result.reserve(min(set1.size(), neighbors.size()));
+  ui i = 0, j = 0;
+  while (i < set1.size() && j < neighbors.size()) {
+    if (set1[i] == neighbors[j]) {
+      result.push_back(set1[i]);
+      i++;
+      j++;
+    } else if (set1[i] < neighbors[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return result;
+}
+
+bool AdaptiveSkipPivotBK::isEmpty(const vector<ui> &set) { 
+  return set.empty(); 
+}
+
+bool AdaptiveSkipPivotBK::isConnected(ui u, ui v) {
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
+
+ui AdaptiveSkipPivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
+  ui bestPivot = P.empty() ? (X.empty() ? 0 : X[0]) : P[0];
+  ui maxElimination = 0;
+
+  // Check vertices in P
+  for (ui u : P) {
+    ui elimination = intersect(P, adjList[u]).size();
+    if (elimination > maxElimination) {
+      maxElimination = elimination;
+      bestPivot = u;
+    }
+  }
+
+  // Check vertices in X
+  for (ui u : X) {
+    ui elimination = intersect(P, adjList[u]).size();
+    if (elimination > maxElimination) {
+      maxElimination = elimination;
+      bestPivot = u;
+    }
+  }
+
+  return bestPivot;
+}
+
+void AdaptiveSkipPivotBK::applyDegreePruning(vector<ui> &P, const vector<ui> &R) {
+  // Remove vertices with degree less than current clique size
+  P.erase(remove_if(P.begin(), P.end(),
+                    [this, &R](ui v) { return adjList[v].size() < R.size(); }),
+          P.end());
+}
+
+bool AdaptiveSkipPivotBK::isClique(const vector<ui> &R) const {
+  for (size_t i = 0; i < R.size(); i++) {
+    for (size_t j = i + 1; j < R.size(); j++) {
+      if (!binary_search(adjList[R[i]].begin(), adjList[R[i]].end(), R[j])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+void AdaptiveSkipPivotBK::reorderAfterClique(const vector<ui> &clique) {
+  // Mark clique vertices as covered
+  for (ui v : clique) {
+    skip_mask[v] = true;
+  }
+  
+  // Reorder: uncovered vertices first, covered vertices last
+  vector<ui> uncovered, covered;
+  for (ui v : global_order) {
+    if (skip_mask[v]) {
+      covered.push_back(v);
+    } else {
+      uncovered.push_back(v);
+    }
+  }
+  
+  // Update global order
+  global_order.clear();
+  global_order.insert(global_order.end(), uncovered.begin(), uncovered.end());
+  global_order.insert(global_order.end(), covered.begin(), covered.end());
+  
+  if (debug) {
+    cout << "Reordered vertices: uncovered=[";
+    for (ui v : uncovered) cout << v << " ";
+    cout << "], covered=[";
+    for (ui v : covered) cout << v << " ";
+    cout << "]" << endl;
+  }
+}
+
+vector<ui> AdaptiveSkipPivotBK::getOrderedCandidates(const vector<ui> &P, ui start_idx) const {
+  vector<ui> ordered_candidates;
+  
+  // Follow global order starting from start_idx, skip covered vertices
+  for (ui idx = start_idx; idx < global_order.size(); idx++) {
+    ui v = global_order[idx];
+    if (skip_mask[v]) continue;  // Skip covered vertices
+    
+    // Check if vertex is in P
+    if (find(P.begin(), P.end(), v) != P.end()) {
+      ordered_candidates.push_back(v);
+    }
+  }
+  
+  return ordered_candidates;
+}
+
+void AdaptiveSkipPivotBK::adaptiveBronKerbosch(vector<ui> &R, vector<ui> &P, vector<ui> &X, ui start_idx) {
+  // Base case: maximal clique found
+  if (isEmpty(P) && isEmpty(X)) {
+    cliqueCount++;
+    maxCliqueSize = max(maxCliqueSize, (ui)R.size());
+    
+    if (debug) {
+      cout << "Maximal Clique: { ";
+      for (ui v : R) cout << v << " ";
+      cout << "}" << endl;
+    }
+    
+    // Apply skip-mask reordering strategy
+    reorderAfterClique(R);
+    return;
+  }
+  
+  // Get candidates in global order - don't skip covered vertices in P construction
+  // The skip happens during iteration to allow for proper P/X management
+  vector<ui> ordered_candidates;
+  for (ui idx = start_idx; idx < global_order.size(); idx++) {
+    ui v = global_order[idx];
+    if (find(P.begin(), P.end(), v) != P.end()) {
+      ordered_candidates.push_back(v);
+    }
+  }
+  
+  // Apply degree pruning
+  applyDegreePruning(ordered_candidates, R);
+  if (ordered_candidates.empty()) return;
+  
+  // Choose pivot from ordered candidates + X
+  ui pivot = choosePivot(ordered_candidates, X);
+  
+  // Process candidates in global order
+  vector<ui> candidates_copy = ordered_candidates;
+  for (ui v : candidates_copy) {
+    // Skip if v is a neighbor of the pivot (standard pivoting)
+    if (isConnected(v, pivot)) continue;
+    
+    // Skip if vertex is already covered by a maximal clique (skip-mask optimization)
+    if (skip_mask[v]) continue;
+    
+    vector<ui> new_R = R;
+    new_R.push_back(v);
+    
+    // Verify that new_R forms a valid clique (debug)
+    if (!isClique(new_R)) {
+      if (debug) {
+        cout << "Skipping invalid clique: { ";
+        for (ui x : new_R) cout << x << " ";
+        cout << "}" << endl;
+      }
+      continue;
+    }
+    
+    // Create P ∩ N(v) and X ∩ N(v)
+    vector<ui> new_P = intersect(P, adjList[v]);
+    vector<ui> new_X = intersect(X, adjList[v]);
+    
+    // Find next start index in global order
+    ui next_start = find(global_order.begin(), global_order.end(), v) - global_order.begin() + 1;
+    
+    // Recursive call
+    adaptiveBronKerbosch(new_R, new_P, new_X, next_start);
+    
+    // Move v from P to X
+    P.erase(find(P.begin(), P.end(), v));
+    X.push_back(v);
+  }
+}
+
+void AdaptiveSkipPivotBK::findAllMaximalCliques() {
+  // Initialize sets
+  vector<ui> R; // Current clique (empty)
+  vector<ui> P; // All vertices as candidates
+  vector<ui> X; // Excluded set (empty)
+  
+  // Fill P with all vertices
+  for (ui i = 0; i < n; i++) {
+    P.push_back(i);
+  }
+  
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  
+  cout << "Starting Adaptive Skip-Mask Bron-Kerbosch..." << endl;
+  adaptiveBronKerbosch(R, P, X, 0);  // Start from index 0
+  
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+}

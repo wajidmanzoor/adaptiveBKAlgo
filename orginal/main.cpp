@@ -4,7 +4,12 @@
 
 int main(int argc, const char *argv[]) {
   if (argc != 3) {
-    cout << "Server wrong input parameters!" << endl;
+    cout << "Usage: " << argv[0] << " <graph_file> <mode>" << endl;
+    cout << "Modes:" << endl;
+    cout << "  0 - Adjacency Matrix Bron-Kerbosch" << endl;
+    cout << "  1 - Adjacency List Bron-Kerbosch" << endl;
+    cout << "  2 - Pivot Bron-Kerbosch with pruning" << endl;
+    cout << "  3 - Adaptive Skip-Mask Bron-Kerbosch" << endl;
     exit(1);
   }
 
@@ -25,8 +30,12 @@ int main(int argc, const char *argv[]) {
     cout << "Running Pivot Bron-Kerbosch with pruning..." << endl;
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
+  } else if (mode == 3) {
+    cout << "Running Adaptive Skip-Mask Bron-Kerbosch..." << endl;
+    AdaptiveSkipPivotBK adaptiveBk(g);
+    adaptiveBk.findAllMaximalCliques();
   } else {
-    cout << "Invalid mode! Use 0, 1, or 2." << endl;
+    cout << "Invalid mode! Use 0, 1, 2, or 3." << endl;
     exit(1);
   }
 
