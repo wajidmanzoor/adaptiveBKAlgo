@@ -99,3 +99,30 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
+
+// Simple Adaptive Enumeration with Skip-Mask Tree Reordering (No PXR/Pivot/Pruning)
+class SimpleAdaptiveBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize;
+  
+  // Skip-mask and reordering components
+  vector<bool> skip_mask;     // marks vertices already covered by maximal cliques
+  vector<ui> global_order;    // dynamic vertex processing order
+  
+  // Core enumeration method
+  void enumerate(vector<ui> &R, ui start_idx);
+  
+  // Utility methods
+  bool isConnected(ui u, ui v) const;
+  bool isClique(const vector<ui> &R) const;
+  void handleClique(const vector<ui> &R);
+  
+public:
+  SimpleAdaptiveBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};

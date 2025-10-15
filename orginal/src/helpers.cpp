@@ -466,31 +466,32 @@ bool AdaptiveSkipPivotBK::isClique(const vector<ui> &R) const {
 }
 
 void AdaptiveSkipPivotBK::reorderAfterClique(const vector<ui> &clique) {
-  // Mark clique vertices as covered
+  // For now, let's focus on reordering without aggressive skipping
+  // Mark clique vertices as processed (but don't skip them completely)
   for (ui v : clique) {
     skip_mask[v] = true;
   }
   
-  // Reorder: uncovered vertices first, covered vertices last
-  vector<ui> uncovered, covered;
+  // Reorder: unprocessed vertices first, processed vertices last
+  vector<ui> unprocessed, processed;
   for (ui v : global_order) {
     if (skip_mask[v]) {
-      covered.push_back(v);
+      processed.push_back(v);
     } else {
-      uncovered.push_back(v);
+      unprocessed.push_back(v);
     }
   }
   
-  // Update global order
+  // Update global order to prioritize unprocessed vertices
   global_order.clear();
-  global_order.insert(global_order.end(), uncovered.begin(), uncovered.end());
-  global_order.insert(global_order.end(), covered.begin(), covered.end());
+  global_order.insert(global_order.end(), unprocessed.begin(), unprocessed.end());
+  global_order.insert(global_order.end(), processed.begin(), processed.end());
   
   if (debug) {
-    cout << "Reordered vertices: uncovered=[";
-    for (ui v : uncovered) cout << v << " ";
-    cout << "], covered=[";
-    for (ui v : covered) cout << v << " ";
+    cout << "Reordered vertices: unprocessed=[";
+    for (ui v : unprocessed) cout << v << " ";
+    cout << "], processed=[";
+    for (ui v : processed) cout << v << " ";
     cout << "]" << endl;
   }
 }
@@ -600,6 +601,125 @@ void AdaptiveSkipPivotBK::findAllMaximalCliques() {
   
   cout << "Starting Adaptive Skip-Mask Bron-Kerbosch..." << endl;
   adaptiveBronKerbosch(R, P, X, 0);  // Start from index 0
+  
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+}
+
+// SimpleAdaptiveBK Implementation - Pure enumeration with skip-mask reordering
+SimpleAdaptiveBK::SimpleAdaptiveBK(Graph &g) {
+  n = g.n;
+  adjList.resize(n);
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  
+  // Initialize skip mask
+  skip_mask.resize(n, false);
+  
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
+      }
+    }
+    // Sort for efficient connectivity checks
+    sort(adjList[i].begin(), adjList[i].end());
+  }
+  
+  // Initialize global order - simple sequential order
+  global_order.resize(n);
+  iota(global_order.begin(), global_order.end(), 0);
+}
+
+bool SimpleAdaptiveBK::isConnected(ui u, ui v) const {
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
+
+bool SimpleAdaptiveBK::isClique(const vector<ui> &R) const {
+  for (size_t i = 0; i < R.size(); i++) {
+    for (size_t j = i + 1; j < R.size(); j++) {
+      if (!isConnected(R[i], R[j])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+void SimpleAdaptiveBK::handleClique(const vector<ui> &R) {
+  cliqueCount++;
+  maxCliqueSize = max(maxCliqueSize, (ui)R.size());
+  
+  if (debug) {
+    cout << "Found maximal clique: { ";
+    for (ui v : R) cout << v << " ";
+    cout << "}" << endl;
+  }
+  
+  // Mark covered vertices - but be more conservative
+  // Only mark vertices that are definitely covered by this maximal clique
+  for (ui v : R) {
+    skip_mask[v] = true;
+  }
+  
+  // Reorder: uncovered first, covered last
+  vector<ui> uncovered, covered;
+  for (ui v : global_order) {
+    if (skip_mask[v]) {
+      covered.push_back(v);
+    } else {
+      uncovered.push_back(v);
+    }
+  }
+  
+  global_order.clear();
+  global_order.insert(global_order.end(), uncovered.begin(), uncovered.end());
+  global_order.insert(global_order.end(), covered.begin(), covered.end());
+  
+  if (debug) {
+    cout << "Reordered: uncovered=[";
+    for (ui v : uncovered) cout << v << " ";
+    cout << "], covered=[";
+    for (ui v : covered) cout << v << " ";
+    cout << "]" << endl;
+  }
+}
+
+void SimpleAdaptiveBK::enumerate(vector<ui> &R, ui start_idx) {
+  bool expanded = false;
+  
+  for (ui idx = start_idx; idx < global_order.size(); idx++) {
+    ui v = global_order[idx];
+    
+    // Skip redundant vertices (already covered by maximal cliques)
+    if (skip_mask[v]) continue;
+    
+    vector<ui> R_next = R;
+    R_next.push_back(v);
+    
+    // Check if R_next forms a clique
+    if (isClique(R_next)) {
+      expanded = true;
+      enumerate(R_next, idx + 1);
+    }
+  }
+  
+  // Leaf node → maximal clique found (cannot be extended further)
+  if (!expanded && !R.empty()) {
+    handleClique(R);
+  }
+}
+
+void SimpleAdaptiveBK::findAllMaximalCliques() {
+  vector<ui> R; // Start with empty clique
+  
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  
+  cout << "Starting Simple Adaptive Enumeration..." << endl;
+  enumerate(R, 0);  // Start from index 0
   
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
