@@ -428,17 +428,9 @@ vector<ui> DepthFirstReorderBK::depthFirstExpand(ui start_vertex) {
   while (expanded) {
     expanded = false;
     
-    // Try to extend current clique with vertices that come AFTER start_vertex in global order
-    // This ensures we explore different combinations
-    bool found_start = false;
+    // Try to extend current clique with ANY vertex in global order
+    // This is the original logic - try all possible extensions
     for (ui v : global_order) {
-      // Only consider vertices that come after the start vertex in the order
-      if (v == start_vertex) {
-        found_start = true;
-        continue;
-      }
-      if (!found_start) continue;
-      
       // Skip if vertex is already in current clique
       if (find(current_clique.begin(), current_clique.end(), v) != current_clique.end()) {
         continue;
