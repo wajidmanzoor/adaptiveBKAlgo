@@ -24,6 +24,7 @@
 #include <limits.h>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <set>
 #include <sys/stat.h>
 #include <utility>

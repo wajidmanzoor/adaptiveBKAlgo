@@ -65,3 +65,64 @@ public:
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
 };
+
+// Adaptive Bron-Kerbosch with Skip-Mask Tree Reordering
+class AdaptiveSkipPivotBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize;
+  
+  // Skip-mask and reordering components
+  vector<bool> skip_mask;     // marks vertices already covered by maximal cliques
+  vector<ui> global_order;    // dynamic vertex processing order
+  
+  // Core algorithm methods
+  void adaptiveBronKerbosch(vector<ui> &R, vector<ui> &P, vector<ui> &X, ui start_idx);
+  
+  // Utility methods from PivotBK
+  vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
+  bool isEmpty(const vector<ui> &set);
+  bool isConnected(ui u, ui v);
+  ui choosePivot(const vector<ui> &P, const vector<ui> &X);
+  void applyDegreePruning(vector<ui> &P, const vector<ui> &R);
+  
+  // Skip-mask specific methods
+  bool isClique(const vector<ui> &R) const;
+  void reorderAfterClique(const vector<ui> &clique);
+  vector<ui> getOrderedCandidates(const vector<ui> &P, ui start_idx) const;
+  
+public:
+  AdaptiveSkipPivotBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};
+
+// Simple Adaptive Enumeration with Skip-Mask Tree Reordering (No PXR/Pivot/Pruning)
+class SimpleAdaptiveBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize;
+  
+  // Skip-mask and reordering components
+  vector<bool> skip_mask;     // marks vertices already covered by maximal cliques
+  vector<ui> global_order;    // dynamic vertex processing order
+  
+  // Core enumeration method
+  void enumerate(vector<ui> &R, ui start_idx);
+  
+  // Utility methods
+  bool isConnected(ui u, ui v) const;
+  bool isClique(const vector<ui> &R) const;
+  void handleClique(const vector<ui> &R);
+  
+public:
+  SimpleAdaptiveBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};
