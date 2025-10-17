@@ -258,7 +258,7 @@ ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
   ui bestPivot = P.empty() ? (X.empty() ? 0 : X[0]) : P[0];
   ui maxElimination = 0;
 
-  // Check vertices in P
+  // Check vertices in P to find the one that maximizes |P ∩ N(u)|
   for (ui u : P) {
     ui elimination = intersect(P, adjList[u]).size();
     if (elimination > maxElimination) {
@@ -267,7 +267,7 @@ ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
     }
   }
 
-  // Check vertices in X
+  // Check vertices in X to find the one that maximizes |P ∩ N(u)|
   for (ui u : X) {
     ui elimination = intersect(P, adjList[u]).size();
     if (elimination > maxElimination) {
@@ -276,6 +276,7 @@ ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
     }
   }
 
+  // maximize |P ∩ N(u)|
   return bestPivot;
 }
 void PivotBK::applyDegreePruning(vector<ui> &P, const vector<ui> &R) {
@@ -316,6 +317,8 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   }
 
   // Apply pruning rules
+  // any vertx in P with degree less than current clique size (size of R) is
+  // removed
   applyDegreePruning(P, R);
 
   // If P is empty after pruning, return
@@ -329,6 +332,7 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
 
   for (ui v : P_copy) {
     // Skip if v is a neighbor of the pivot
+    // iter only to P \ N(pivot)
     if (isConnected(v, pivot)) {
       continue;
     }
@@ -367,6 +371,7 @@ void PivotBK::findAllMaximalCliques() {
 }
 
 // Redorder based Bron-Kerbosch
+
 DepthFirstReorderBK::DepthFirstReorderBK(Graph &g) {
   n = g.n;
   adjList.resize(n);
