@@ -29,6 +29,11 @@ int main(int argc, const char *argv[]) {
     cout << "Running Depth-First Reordering Algorithm..." << endl;
     DepthFirstReorderBK depthFirstBk(g);
     depthFirstBk.findAllMaximalCliques();
+  } else if (mode == 4) {
+    cout << "Running New Reordering Bron-Kerbosch Algorithm..." << endl;
+    ReorderBK reorderBk(g);
+    reorderBk.findAllMaximalCliques();
+
   } else {
     cout << "Invalid mode! Use 0, 1, 2 or 3. " << endl;
     exit(1);
