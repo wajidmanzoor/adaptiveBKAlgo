@@ -26,10 +26,6 @@ int main(int argc, const char *argv[]) {
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
   } else if (mode == 3) {
-    cout << "Running Depth-First Reordering Algorithm..." << endl;
-    DepthFirstReorderBK depthFirstBk(g);
-    depthFirstBk.findAllMaximalCliques();
-  } else if (mode == 4) {
     cout << "Running New Reordering Bron-Kerbosch Algorithm..." << endl;
     ReorderBK reorderBk(g);
     reorderBk.findAllMaximalCliques();
