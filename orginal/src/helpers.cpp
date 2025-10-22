@@ -777,6 +777,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
       newExpandMid.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
       rCall(ExpandFrom, newExpandMid, ExpandTo);
+      return;
     }
   }
 
@@ -822,6 +823,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
     cout << "Expand after reorder" << endl;
     visited[vertex] = true;
     rCall(newExpandFrom, newExpandMid, newExpandTo);
+    return;
   } else {
     if (!ExpandMid.empty()) {
       cout << "no clique found and Mid not empty expand" << endl;
@@ -829,12 +831,14 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
       newExpandMid.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
       rCall(ExpandFrom, newExpandMid, ExpandTo);
+      return;
     } else {
       cout << "No clique found and mid empty" << endl;
       vector<ui> newExpandFrom;
       newExpandFrom.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
       rCall(newExpandFrom, ExpandMid, ExpandTo);
+      return;
     }
   }
 }
