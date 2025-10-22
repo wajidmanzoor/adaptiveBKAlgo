@@ -682,3 +682,163 @@ void DepthFirstReorderBK::findAllMaximalCliques() {
     cout << endl;
   }
 }
+
+ReorderBK::ReorderBK(Graph &g) {
+  n = g.n;
+  adjList.resize(n);
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  visited.resize(n, false);
+
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
+      }
+    }
+    // Sort for efficient connectivity checks
+    sort(adjList[i].begin(), adjList[i].end());
+  }
+}
+bool ReorderBK::isConnected(ui u, ui v) const {
+  // Binary search v in sorted adjacency list of u. I.e if edg (u, v) exists
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
+bool ReorderBK::canExtend(const vector<ui> &R, ui vertex) const {
+  // Check if adding vertex to R maintains clique property
+  for (ui v : R) {
+    if (!isConnected(vertex, v)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void ReorderBK::findAllMaximalCliques() {
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+
+  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
+
+  vector<ui> ExpandFrom, ExpandMid, ExpandTo;
+
+  ExpandFrom.push_back(0); // Start from vertex 0
+  for (ui v = 1; v < n; v++) {
+    ExpandTo.push_back(v);
+    ExpandFrom.push_back(v);
+  }
+
+  rCall(ExpandFrom, ExpandMid, ExpandTo);
+
+  cout << "\n=== Algorithm Complete ===" << endl;
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+}
+
+void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
+                      vector<ui> &ExpandTo) {
+  if (debug) {
+    cout << "\nRCall State:" << endl;
+    cout << "  ExpandFrom: { ";
+    for (ui v : ExpandFrom)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  ExpandMid: { ";
+    for (ui v : ExpandMid)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  ExpandTo: { ";
+    for (ui v : ExpandTo)
+      cout << v << " ";
+    cout << "}" << endl;
+  }
+  if (ExpandFrom.empty() || ExpandTo.empty()) {
+
+    cout << " Empty From and To" << endl;
+    return;
+  }
+  ui vertex = ExpandFrom[0];
+  vector<ui> clique;
+  clique.push_back(vertex);
+
+  if (!ExpandMid.empty()) {
+    cout << "Mid not empty" << endl;
+    if (canExtend(clique, ExpandMid[0])) {
+      clique.push_back(ExpandMid[0]);
+      cout << "added " << ExpandMid[0] << " to p clique" << endl;
+    } else {
+
+      cout << "Expand using new Mid" << endl;
+      vector<ui> newExpandMid;
+      newExpandMid.push_back(ExpandTo[0]);
+      ExpandTo.erase(ExpandTo.begin());
+      rCall(ExpandFrom, newExpandMid, ExpandTo);
+      return;
+    }
+  }
+
+  for (ui v : ExpandTo) {
+    if (canExtend(clique, v)) {
+      clique.push_back(v);
+      cout << "Added to clique " << v << endl;
+    }
+  }
+  if (clique.size() > 2) {
+    // Does that Mean what is left is a clique?
+    cliqueCount++;
+    maxCliqueSize = max(maxCliqueSize, (ui)clique.size());
+    if (debug) {
+      cout << "Maximal Clique Found: { ";
+      for (ui x : clique)
+        cout << x << " ";
+      cout << "}" << endl;
+    }
+    vector<ui> newExpandFrom, newExpandMid, newExpandTo;
+    ExpandFrom.erase(ExpandFrom.begin());
+
+    for (ui v : ExpandFrom) {
+      if (!binary_search(clique.begin(), clique.end(), v) && !visited[v]) {
+        newExpandFrom.push_back(v);
+      }
+    }
+    ui ind = 0;
+    while (ind < clique.size()) {
+      if (visited[clique[ind]]) {
+        ind++;
+        continue;
+      }
+      newExpandMid.push_back(clique[ind]);
+      ind++;
+      break;
+    }
+    for (ui v = ind; v < clique.size(); v++) {
+      if (!visited[clique[ind]])
+        newExpandTo.push_back(clique[v]);
+    }
+
+    cout << "Expand after reorder" << endl;
+    visited[vertex] = true;
+    rCall(newExpandFrom, newExpandMid, newExpandTo);
+    return;
+  } else {
+    if (!ExpandMid.empty()) {
+      cout << "no clique found and Mid not empty expand" << endl;
+      vector<ui> newExpandMid;
+      newExpandMid.push_back(ExpandTo[0]);
+      ExpandTo.erase(ExpandTo.begin());
+      rCall(ExpandFrom, newExpandMid, ExpandTo);
+      return;
+    } else {
+      cout << "No clique found and mid empty" << endl;
+      vector<ui> newExpandFrom;
+      newExpandFrom.push_back(ExpandTo[0]);
+      ExpandTo.erase(ExpandTo.begin());
+      rCall(newExpandFrom, ExpandMid, ExpandTo);
+      return;
+    }
+  }
+}

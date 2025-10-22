@@ -102,3 +102,22 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
+
+class ReorderBK {
+private:
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize;
+  vector<bool> visited; // tracks which vertices have been starting points
+  bool canExtend(const vector<ui> &R, ui vertex) const;
+  bool isConnected(ui u, ui v) const;
+  void rCall(vector<ui> &expandFrom, vector<ui> &expandMid,
+             vector<ui> &expandTo);
+
+public:
+  ReorderBK(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};
