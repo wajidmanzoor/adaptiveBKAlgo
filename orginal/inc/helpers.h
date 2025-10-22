@@ -66,43 +66,6 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
 };
 
-// Depth-First Reordering Bron-Kerbosch
-class DepthFirstReorderBK {
-private:
-  ui n;
-  vector<vector<ui>> adjList; // adjacency lists
-  ui cliqueCount;
-  ui maxCliqueSize;
-
-  // Core algorithm state
-  vector<bool> visited;       // tracks which vertices have been starting points
-  vector<ui> global_order;    // dynamic vertex processing order
-  set<set<ui>> found_cliques; // store found maximal cliques
-
-  // Enhanced clique mapping: vertex -> set of cliques containing that vertex
-  map<ui, set<set<ui>>> vertex_to_cliques;
-
-  // Core algorithm methods with backtracking
-  vector<ui> depthFirstExpandWithBacktrack(ui start_vertex);
-  bool exploreFromClique(vector<ui> &current_clique, ui start_pos);
-  void reorderVertices();
-  void reorderAfterNoExtensions(ui vertex);
-  ui getNextStartingVertex();
-
-  // Utility methods
-  bool isConnected(ui u, ui v) const;
-  bool isClique(const vector<ui> &R) const;
-  bool canExtend(const vector<ui> &R, ui vertex) const;
-  bool isCliqueAlreadyFound(const vector<ui> &clique) const;
-  void recordClique(const vector<ui> &clique);
-
-public:
-  DepthFirstReorderBK(Graph &g);
-  void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
-  ui getMaxCliqueSize() const { return maxCliqueSize; }
-};
-
 class ReorderBK {
 private:
   ui n;
