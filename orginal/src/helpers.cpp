@@ -306,6 +306,15 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     cliqueCount++;
     maxCliqueSize = max(maxCliqueSize, (ui)R.size());
 
+    if (R.size() > 2) {
+      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      if (outfile.is_open()) {
+        outfile << "Maximal Clique Found: { ";
+        for (ui x : R)
+          outfile << x << " ";
+        outfile << "}\n";
+      }
+    }
     if (debug) {
       cout << "Maximal Clique: { ";
       for (ui v : R) {
@@ -481,8 +490,17 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
       cout << "Added to clique " << v << endl;
     }
   }
-  if (clique.size() > 2) {
+  if (clique.size() > 0) {
     // Does that Mean what is left is a clique?
+    if (clique.size() == 2) {
+      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      if (outfile.is_open()) {
+        outfile << "Maximal Clique Found: { ";
+        for (ui x : clique)
+          outfile << x << " ";
+        outfile << "}\n";
+      }
+    }
     cliqueCount++;
     maxCliqueSize = max(maxCliqueSize, (ui)clique.size());
     if (debug) {

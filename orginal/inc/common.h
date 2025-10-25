@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <fstream>
 #include <iostream>
 #include <limits.h>
 #include <map>
