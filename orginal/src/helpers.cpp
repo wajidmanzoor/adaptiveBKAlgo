@@ -154,6 +154,15 @@ void AdjListBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   if (isEmpty(P) && isEmpty(X)) {
     // Found a maximal clique
     cliqueCount++;
+    if (R.size() > 2) {
+      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      if (outfile.is_open()) {
+        outfile << "Maximal Clique Found: { ";
+        for (ui x : R)
+          outfile << x << " ";
+        outfile << "}\n";
+      }
+    }
     if (debug) {
       cout << "Maximal Clique: { ";
       for (ui v : R) {
