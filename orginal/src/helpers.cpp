@@ -155,7 +155,7 @@ void AdjListBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     // Found a maximal clique
     cliqueCount++;
     if (R.size() > 2) {
-      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      ofstream outfile("bk_adj_maximal_cliques.txt", std::ios::app);
       if (outfile.is_open()) {
         outfile << "Maximal Clique Found: { ";
         for (ui x : R)
@@ -316,7 +316,7 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     maxCliqueSize = max(maxCliqueSize, (ui)R.size());
 
     if (R.size() > 2) {
-      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      ofstream outfile("bk_pivot_maximal_cliques.txt", std::ios::app);
       if (outfile.is_open()) {
         outfile << "Maximal Clique Found: { ";
         for (ui x : R)
@@ -470,7 +470,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
   }
   if (ExpandFrom.empty() || ExpandTo.empty()) {
 
-    cout << " Empty From and To" << endl;
+    // cout << " Empty From and To" << endl;
     return;
   }
   ui vertex = ExpandFrom[0];
@@ -478,13 +478,13 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
   clique.push_back(vertex);
 
   if (!ExpandMid.empty()) {
-    cout << "Mid not empty" << endl;
+    // cout << "Mid not empty" << endl;
     if (canExtend(clique, ExpandMid[0])) {
       clique.push_back(ExpandMid[0]);
-      cout << "added " << ExpandMid[0] << " to p clique" << endl;
+      // cout << "added " << ExpandMid[0] << " to p clique" << endl;
     } else {
 
-      cout << "Expand using new Mid" << endl;
+      // cout << "Expand using new Mid" << endl;
       vector<ui> newExpandMid;
       newExpandMid.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
@@ -496,13 +496,13 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
   for (ui v : ExpandTo) {
     if (canExtend(clique, v)) {
       clique.push_back(v);
-      cout << "Added to clique " << v << endl;
+      // cout << "Added to clique " << v << endl;
     }
   }
   if (clique.size() > 0) {
     // Does that Mean what is left is a clique?
     if (clique.size() == 2) {
-      ofstream outfile("maximal_cliques.txt", std::ios::app);
+      ofstream outfile("bk_ro_maximal_cliques.txt", std::ios::app);
       if (outfile.is_open()) {
         outfile << "Maximal Clique Found: { ";
         for (ui x : clique)
@@ -536,7 +536,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
       ind++;
       break;
     }
-    cout << "index after mid selection " << ind << endl;
+    // cout << "index after mid selection " << ind << endl;
     for (ui v = ind; v < clique.size(); v++) {
       if (!visited[clique[v]])
         newExpandTo.push_back(clique[v]);
@@ -547,20 +547,20 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
                          newExpandFrom.end());
     }
 
-    cout << "Expand after reorder" << endl;
+    // cout << "Expand after reorder" << endl;
     visited[vertex] = true;
     rCall(newExpandFrom, newExpandMid, newExpandTo);
     return;
   } else {
     if (!ExpandMid.empty()) {
-      cout << "no clique found and Mid not empty expand" << endl;
+      // cout << "no clique found and Mid not empty expand" << endl;
       vector<ui> newExpandMid;
       newExpandMid.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
       rCall(ExpandFrom, newExpandMid, ExpandTo);
       return;
     } else {
-      cout << "No clique found and mid empty" << endl;
+      // cout << "No clique found and mid empty" << endl;
       vector<ui> newExpandFrom;
       newExpandFrom.push_back(ExpandTo[0]);
       ExpandTo.erase(ExpandTo.begin());
