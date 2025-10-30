@@ -390,6 +390,7 @@ void PivotBK::findAllMaximalCliques() {
 
 // Reordering Bron-Kerbosch Implementation
 ReorderBK::ReorderBK(Graph &g) {
+  graph = g;
   n = g.n;
   adjList.resize(n);
   cliqueCount = 0;
@@ -479,7 +480,8 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
 
   if (!ExpandMid.empty()) {
     // cout << "Mid not empty" << endl;
-    if (canExtend(clique, ExpandMid[0])) {
+    if ((graph.degree[ExpandMid[0]] < clique.size()) &&
+        canExtend(clique, ExpandMid[0])) {
       clique.push_back(ExpandMid[0]);
       // cout << "added " << ExpandMid[0] << " to p clique" << endl;
     } else {
@@ -494,6 +496,8 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
   }
 
   for (ui v : ExpandTo) {
+    if (graph.degree[v] < clique.size())
+      continue;
     if (canExtend(clique, v)) {
       clique.push_back(v);
       // cout << "Added to clique " << v << endl;
@@ -501,7 +505,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
   }
   if (clique.size() > 0) {
     // Does that Mean what is left is a clique?
-    if (clique.size() == 2) {
+    if (clique.size() > 2) {
       ofstream outfile("bk_ro_maximal_cliques.txt", std::ios::app);
       if (outfile.is_open()) {
         outfile << "Maximal Clique Found: { ";

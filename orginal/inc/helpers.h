@@ -68,6 +68,7 @@ public:
 
 class ReorderBK {
 private:
+  Graph graph;
   ui n;
   vector<vector<ui>> adjList; // adjacency lists
   ui cliqueCount;
