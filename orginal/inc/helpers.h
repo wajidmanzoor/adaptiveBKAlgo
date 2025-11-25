@@ -66,6 +66,27 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
 };
 
+class ReorderBK2 {
+private:
+  Graph graph;
+  ui n;
+  vector<vector<ui>> adjList; // adjacency lists
+  ui cliqueCount;
+  ui maxCliqueSize;
+  vector<bool> visited; // tracks which vertices have been starting points
+  vector<bool> status;  // tracks status of vertices
+  bool canExtend(const vector<ui> &R, ui vertex) const;
+  bool isConnected(ui u, ui v) const;
+  void rCall(vector<ui> &expandFrom, vector<ui> &expandTo);
+  vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2);
+
+public:
+  ReorderBK2(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};
+
 class ReorderBK {
 private:
   Graph graph;

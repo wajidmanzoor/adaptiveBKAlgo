@@ -389,6 +389,163 @@ void PivotBK::findAllMaximalCliques() {
 }
 
 // Reordering Bron-Kerbosch Implementation
+ReorderBK2::ReorderBK2(Graph &g) {
+  graph = g;
+  n = g.n;
+  adjList.resize(n);
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  visited.resize(n, false);
+  status.resize(n, false);
+
+  // Fill adjacency lists from graph
+  for (ui i = 0; i < n; i++) {
+    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
+      ui neighbor = g.neighbors[j];
+      if (neighbor < n) {
+        adjList[i].push_back(neighbor);
+      }
+    }
+    // Sort for efficient connectivity checks
+    sort(adjList[i].begin(), adjList[i].end());
+  }
+}
+bool ReorderBK2::isConnected(ui u, ui v) const {
+  // Binary search v in sorted adjacency list of u. I.e if edg (u, v) exists
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
+bool ReorderBK2::canExtend(const vector<ui> &R, ui vertex) const {
+  // Check if adding vertex to R maintains clique property
+  for (ui v : R) {
+    if (!isConnected(vertex, v)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void ReorderBK2::findAllMaximalCliques() {
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+
+  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
+
+  vector<ui> ExpandFrom, ExpandMid, ExpandTo;
+
+  ExpandFrom.push_back(0); // Start from vertex 0
+  for (ui v = 1; v < n; v++) {
+    ExpandTo.push_back(v);
+    ExpandFrom.push_back(v);
+  }
+
+  rCall(ExpandFrom, ExpandTo);
+
+  cout << "\n=== Algorithm Complete ===" << endl;
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+}
+
+vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2) {
+  vector<char> seen(n, 0);
+
+  for (ui x : vector1)
+    seen[x] = 1;
+
+  std::vector<ui> C;
+  for (ui y : vector2)
+    if (seen[y])
+      C.push_back(y);
+}
+
+void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
+  if (debug) {
+    cout << "\nRCall State:" << endl;
+    cout << "  ExpandFrom: { ";
+    for (ui v : ExpandFrom)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  status: { ";
+    for (ui v : status)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  ExpandTo: { ";
+    for (ui v : ExpandTo)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  Visited: ";
+    for (bool val : visited) {
+      cout << val << " ";
+    }
+    cout << endl;
+  }
+  if (ExpandFrom.empty() || ExpandTo.empty()) {
+    return;
+  }
+  ui vertex = ExpandFrom[0];
+  vector<ui> clique;
+  clique.push_back(vertex);
+  vector<ui> temp = intersect(adjList[vertex], ExpandTo);
+
+  for (ui i = 0; i < temp.size(); i++) {
+
+    if (clique.size() > 2) {
+      for (ui v : clique) {
+        status[v] = true;
+      }
+      ExpandFrom.erase(ExpandFrom.begin());
+      visited[vertex] = true;
+      vector<ui> newExpandFrom;
+      for (ui v : ExpandFrom) {
+        if (!binary_search(clique.begin(), clique.end(), v) & !visited[v]) {
+          newExpandFrom.push_back(v);
+        }
+      }
+      vector<ui> newExpandTo;
+      for (ui v : ExpandTo) {
+        if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
+          newExpandTo.push_back(v);
+        }
+      }
+
+      for (ui v : ExpandTo) {
+        if (status[v]) {
+          newExpandTo.push_back(v);
+        }
+      }
+
+      break;
+    } else if (clique.size() == 2) {
+      clique.pop_back();
+    }
+    ui vertex2 = temp[0];
+    vector<ui> temp2 = intersect(adjList[vertex2], temp);
+    for (ui v : temp2) {
+      if (canExtend(clique, v)) {
+        clique.push_back(v);
+        // cout << "Added to clique " << v << endl;
+      }
+    }
+  }
+
+  if (clique.size() == 2) {
+    ExpandFrom.erase(ExpandFrom.begin());
+    visited[vertex] = true;
+    vector<ui> newExpandTo;
+    for (ui v : ExpandTo) {
+      if (v != ExpandFrom[0] & !visited[v]) {
+        newExpandTo.push_back(v);
+      }
+    }
+    rCall(ExpandFrom, newExpandTo);
+    return;
+  }
+}
+
+/// new implementation of ReorderBK2 class
+// Reordering Bron-Kerbosch Implementation
 ReorderBK::ReorderBK(Graph &g) {
   graph = g;
   n = g.n;
