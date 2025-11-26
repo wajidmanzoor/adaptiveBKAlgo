@@ -30,7 +30,13 @@ int main(int argc, const char *argv[]) {
     ReorderBK reorderBk(g);
     reorderBk.findAllMaximalCliques();
 
-  } else {
+  } else if (mode == 4) {
+    cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
+    ReorderBK2 reorderBk2(g);
+    reorderBk2.findAllMaximalCliques();
+  }
+
+  else {
     cout << "Invalid mode! Use 0, 1, 2 or 3. " << endl;
     exit(1);
   }

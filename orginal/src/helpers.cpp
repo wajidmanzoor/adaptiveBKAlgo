@@ -455,6 +455,7 @@ vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2) {
   for (ui y : vector2)
     if (seen[y])
       C.push_back(y);
+  return C;
 }
 
 void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
@@ -523,6 +524,10 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
     ui vertex2 = temp[0];
     vector<ui> temp2 = intersect(adjList[vertex2], temp);
     for (ui v : temp2) {
+
+      // pruning rules
+      if (graph.degree[v] < clique.size())
+        continue;
       if (canExtend(clique, v)) {
         clique.push_back(v);
         // cout << "Added to clique " << v << endl;
@@ -536,6 +541,7 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
     vector<ui> newExpandTo;
     for (ui v : ExpandTo) {
       if (v != ExpandFrom[0] & !visited[v]) {
+
         newExpandTo.push_back(v);
       }
     }
@@ -637,7 +643,7 @@ void ReorderBK::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandMid,
 
   if (!ExpandMid.empty()) {
     // cout << "Mid not empty" << endl;
-    if ((graph.degree[ExpandMid[0]] < clique.size()) &&
+    if ((graph.degree[ExpandMid[0]] > clique.size()) &&
         canExtend(clique, ExpandMid[0])) {
       clique.push_back(ExpandMid[0]);
       // cout << "added " << ExpandMid[0] << " to p clique" << endl;

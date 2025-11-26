@@ -78,7 +78,7 @@ private:
   bool canExtend(const vector<ui> &R, ui vertex) const;
   bool isConnected(ui u, ui v) const;
   void rCall(vector<ui> &expandFrom, vector<ui> &expandTo);
-  vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2);
+  vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
 
 public:
   ReorderBK2(Graph &g);
