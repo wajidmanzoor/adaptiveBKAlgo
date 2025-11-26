@@ -72,7 +72,7 @@ private:
   ui n;
   vector<vector<ui>> adjList; // adjacency lists
   ui cliqueCount;
-  ui maxCliqueSize;
+  size_t maxCliqueSize;
   vector<bool> visited; // tracks which vertices have been starting points
   vector<bool> status;  // tracks status of vertices
   bool canExtend(const vector<ui> &R, ui vertex) const;

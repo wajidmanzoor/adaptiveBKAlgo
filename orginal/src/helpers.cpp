@@ -482,6 +482,8 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
     }
     cout << endl;
   }
+  cout << "expand From size " << ExpandFrom.size() << endl;
+  cout << "expand To Size " << ExpandTo.size() << endl;
   if (ExpandFrom.empty() || ExpandTo.empty()) {
     return;
   }
@@ -490,47 +492,125 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
   clique.push_back(vertex);
   vector<ui> temp = intersect(adjList[vertex], ExpandTo);
 
+  cout << " first n size " << temp.size() << endl;
+
   for (ui i = 0; i < temp.size(); i++) {
 
     if (clique.size() > 2) {
-      for (ui v : clique) {
-        status[v] = true;
-      }
-      ExpandFrom.erase(ExpandFrom.begin());
-      visited[vertex] = true;
-      vector<ui> newExpandFrom;
-      for (ui v : ExpandFrom) {
-        if (!binary_search(clique.begin(), clique.end(), v) & !visited[v]) {
-          newExpandFrom.push_back(v);
-        }
-      }
-      vector<ui> newExpandTo;
-      for (ui v : ExpandTo) {
-        if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
-          newExpandTo.push_back(v);
-        }
-      }
-
-      for (ui v : ExpandTo) {
-        if (status[v]) {
-          newExpandTo.push_back(v);
-        }
-      }
-
       break;
     } else if (clique.size() == 2) {
       clique.pop_back();
     }
-    ui vertex2 = temp[0];
+    ui vertex2 = temp[i];
+    clique.push_back(vertex2);
     vector<ui> temp2 = intersect(adjList[vertex2], temp);
+    cout << "second neighbor size " << temp2.size() << endl;
     for (ui v : temp2) {
-
-      // pruning rules
       if (graph.degree[v] < clique.size())
         continue;
       if (canExtend(clique, v)) {
         clique.push_back(v);
-        // cout << "Added to clique " << v << endl;
+        cout << "Added to clique " << v << endl;
+      }
+    }
+  }
+
+  if (clique.size() < 3) {
+    ExpandFrom.erase(ExpandFrom.begin());
+    visited[vertex] = true;
+    vector<ui> newExpandTo;
+    for (ui v : ExpandTo) {
+      if (v != ExpandFrom[0]) {
+        newExpandTo.push_back(v);
+      }
+    }
+    rCall(ExpandFrom, newExpandTo);
+  } else if (clique.size() > 2) {
+    cliqueCount++;
+    maxCliqueSize = max(maxCliqueSize, clique.size());
+    cout << "clique " << cliqueCount << "{  ";
+    for (ui v : clique) {
+      status[v] = true;
+      cout << v << " ";
+    }
+    cout << " }" << endl;
+    ExpandFrom.erase(ExpandFrom.begin());
+    visited[vertex] = true;
+    vector<ui> newExpandFrom;
+    for (ui v : ExpandFrom) {
+      if (!binary_search(clique.begin(), clique.end(), v) & !visited[v]) {
+        newExpandFrom.push_back(v);
+      }
+    }
+    vector<ui> newExpandTo;
+    newExpandTo.push_back(clique[0]);
+    for (ui v : ExpandTo) {
+      if (status[v]) {
+        newExpandTo.push_back(v);
+      }
+    }
+
+    for (ui v : ExpandTo) {
+      if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
+        newExpandTo.push_back(v);
+      }
+    }
+
+    rCall(newExpandFrom, newExpandTo);
+  }
+}
+
+void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
+  if (debug) {
+    cout << "\nRCall State:" << endl;
+    cout << "  ExpandFrom: { ";
+    for (ui v : ExpandFrom)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  status: { ";
+    for (ui v : status)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  ExpandTo: { ";
+    for (ui v : ExpandTo)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "  Visited: ";
+    for (bool val : visited) {
+      cout << val << " ";
+    }
+    cout << endl;
+  }
+  if (ExpandFrom.empty() || ExpandTo.empty()) {
+    return;
+  }
+  ui vertex = ExpandFrom[0];
+  vector<ui> clique;
+  clique.push_back(vertex);
+  vector<ui> temp = intersect(adjList[vertex], ExpandTo);
+
+  cout << " first n size " << temp.size() << endl;
+
+  for (ui i = 0; i < temp.size(); i++) {
+
+    if (clique.size() > 2) {
+      break;
+    } else if (clique.size() == 2) {
+      clique.pop_back();
+    }
+    ui vertex2 = temp[i];
+    clique.push_back(vertex2);
+    vector<ui> temp2 = intersect(adjList[vertex2], temp);
+    cout << "second neighbor size " << temp2.size() << endl;
+    for (ui v : temp2) {
+      if (graph.degree[v] < clique.size())
+        continue;
+      if (canExtend(clique, v)) {
+        clique.push_back(v);
+        cout << "Added to clique " << v << endl;
       }
     }
   }
@@ -541,12 +621,41 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
     vector<ui> newExpandTo;
     for (ui v : ExpandTo) {
       if (v != ExpandFrom[0] & !visited[v]) {
-
         newExpandTo.push_back(v);
       }
     }
     rCall(ExpandFrom, newExpandTo);
-    return;
+  } else if (clique.size() > 2) {
+    cliqueCount++;
+    cout << "clique " << cliqueCount << "{  ";
+    for (ui v : clique) {
+      status[v] = true;
+      cout << v << " ";
+    }
+    cout << " }" << endl;
+    ExpandFrom.erase(ExpandFrom.begin());
+    visited[vertex] = true;
+    vector<ui> newExpandFrom;
+    for (ui v : ExpandFrom) {
+      if (!binary_search(clique.begin(), clique.end(), v) & !visited[v]) {
+        newExpandFrom.push_back(v);
+      }
+    }
+    vector<ui> newExpandTo;
+    newExpandTo.push_back(clique[0]);
+    for (ui v : ExpandTo) {
+      if (status[v]) {
+        newExpandTo.push_back(v);
+      }
+    }
+
+    for (ui v : ExpandTo) {
+      if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
+        newExpandTo.push_back(v);
+      }
+    }
+
+    rCall(newExpandFrom, newExpandTo);
   }
 }
 

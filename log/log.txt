@@ -1,0 +1,89 @@
+Running Original Reordering Bron-Kerbosch Algorithm...
+Starting Reordering Bron-Kerbosch Algorithm...
+
+RCall State:
+  ExpandFrom: { 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  status: { 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 }
+  ExpandTo: { 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+expand From size 15
+expand To Size 14
+ first n size 3
+second neighbor size 2
+Added to clique 2
+Added to clique 3
+clique 1{  0 1 2 3  }
+
+RCall State:
+  ExpandFrom: { 4 5 6 7 8 9 10 11 12 13 14 }
+  status: { 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 }
+  ExpandTo: { 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+expand From size 11
+expand To Size 15
+ first n size 2
+second neighbor size 1
+Added to clique 5
+clique 2{  4 3 5  }
+
+RCall State:
+  ExpandFrom: { 6 7 8 9 10 11 12 13 14 }
+  status: { 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 }
+  ExpandTo: { 4 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 1 0 0 0 0 0 0 0 0 0 0 
+expand From size 9
+expand To Size 16
+ first n size 3
+second neighbor size 2
+Added to clique 7
+Added to clique 8
+clique 3{  6 5 7 8  }
+
+RCall State:
+  ExpandFrom: { 9 10 11 12 13 14 }
+  status: { 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 }
+  ExpandTo: { 6 4 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 1 0 1 0 0 0 0 0 0 0 0 
+expand From size 6
+expand To Size 17
+ first n size 2
+second neighbor size 1
+Added to clique 10
+clique 4{  9 8 10  }
+
+RCall State:
+  ExpandFrom: { 11 12 13 14 }
+  status: { 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 }
+  ExpandTo: { 9 6 4 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 1 0 1 0 0 1 0 0 0 0 0 
+expand From size 4
+expand To Size 18
+ first n size 3
+second neighbor size 2
+Added to clique 12
+Added to clique 13
+clique 5{  11 10 12 13  }
+
+RCall State:
+  ExpandFrom: { 14 }
+  status: { 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 }
+  ExpandTo: { 11 9 6 4 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 1 0 1 0 0 1 0 1 0 0 0 
+expand From size 1
+expand To Size 19
+ first n size 2
+second neighbor size 1
+Added to clique 13
+clique 6{  14 12 13  }
+
+RCall State:
+  ExpandFrom: { }
+  status: { 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 }
+  ExpandTo: { 14 11 9 6 4 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 }
+  Visited: 1 0 0 0 1 0 1 0 0 1 0 1 0 0 1 
+expand From size 0
+expand To Size 20
+
+=== Algorithm Complete ===
+Total Maximal Cliques Found: 6
+Maximum Clique Size: 4
