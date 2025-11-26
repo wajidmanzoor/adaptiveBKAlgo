@@ -642,7 +642,8 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
       }
     }
     vector<ui> newExpandTo;
-    newExpandTo.push_back(clique[0]);
+    if (vertex == 0)
+      newExpandTo.push_back(clique[0]);
     for (ui v : ExpandTo) {
       if (status[v]) {
         newExpandTo.push_back(v);
@@ -650,7 +651,7 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
     }
 
     for (ui v : ExpandTo) {
-      if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
+      if ((!visited[v]) & (v != ExpandFrom[0]) & (!status[v])) {
         newExpandTo.push_back(v);
       }
     }
