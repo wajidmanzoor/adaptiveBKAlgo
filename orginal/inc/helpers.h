@@ -89,20 +89,38 @@ public:
 
 class ReorderBK {
 private:
+  // ----- Graph and adjacency -----
   Graph graph;
   ui n;
-  vector<vector<ui>> adjList; // adjacency lists
+  vector<vector<ui>> adjList;
+
+  // ----- Global Clique Stats -----
   ui cliqueCount;
   ui maxCliqueSize;
-  vector<bool> visited; // tracks which vertices have been starting points
-  bool canExtend(const vector<ui> &R, ui vertex) const;
-  bool isConnected(ui u, ui v) const;
-  void rCall(vector<ui> &expandFrom, vector<ui> &expandMid,
-             vector<ui> &expandTo);
+
+  // ----- Core of Recursive Re-Ordering Strategy -----
+
+  // Global vertex ordering (critical)
+  vector<ui> order; // order[i] = the vertex at position i
+  vector<ui> pos;   // pos[v] = index in order[]
+
+  // Boundary between "frontier" and "tail"
+  int tail_start; // vertices in positions >= tail_start are in the tail block
+
+  // ----- Internal Methods -----
+  bool isConnected(ui u, ui v) const; // adjacency check
+  bool canExtend(const vector<ui> &R, ui v) const;
+
+  // Move vertex v to tail region once its branch is done
+  void shiftToTail(ui v);
+
+  // Exact recursive enumeration
+  void search(vector<ui> &R, int startIdx);
 
 public:
   ReorderBK(Graph &g);
-  void findAllMaximalCliques();
+  void run();
+
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
