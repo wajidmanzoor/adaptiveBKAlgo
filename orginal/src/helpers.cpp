@@ -703,6 +703,15 @@ void ReorderBK::rCall(vector<ui> heads, vector<ui> expandTo) {
   if (!visited[vertex]) {
     cout << "vertex " << vertex << " not visited no clique " << endl;
     // TODO : LOGIC for no clique found till full enemuration of a single vertex
+    heads.erase(heads.begin());
+    visited[vertex] = true;
+    vector<ui> newExpandTo;
+    for (ui v : expandTo) {
+      if (v != heads[0]) {
+        newExpandTo.push_back(v);
+      }
+    }
+    rCall(heads, newExpandTo);
   }
 }
 
