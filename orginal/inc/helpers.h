@@ -98,28 +98,18 @@ private:
   ui cliqueCount;
   ui maxCliqueSize;
 
-  // ----- Core of Recursive Re-Ordering Strategy -----
-
-  // Global vertex ordering (critical)
-  vector<ui> order; // order[i] = the vertex at position i
-  vector<ui> pos;   // pos[v] = index in order[]
-
-  // Boundary between "frontier" and "tail"
-  int tail_start; // vertices in positions >= tail_start are in the tail block
+  vector<bool> visited;
+  vector<ui> status;
 
   // ----- Internal Methods -----
-  bool isConnected(ui u, ui v) const; // adjacency check
-  bool canExtend(const vector<ui> &R, ui v) const;
-
-  // Move vertex v to tail region once its branch is done
-  void shiftToTail(ui v);
-
-  // Exact recursive enumeration
-  void search(vector<ui> &R, int startIdx);
+  void rCall(vector<ui> heads, vector<ui> expandTo);
+  void enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
+                 vector<ui> &expandTo);
+  vector<ui> ReorderBK::intersect(vector<ui> vector1, vector<ui> vector2);
 
 public:
   ReorderBK(Graph &g);
-  void run();
+  void findAllMaximalCliques();
 
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }

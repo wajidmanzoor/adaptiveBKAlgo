@@ -28,7 +28,7 @@ int main(int argc, const char *argv[]) {
   } else if (mode == 3) {
     cout << "Running New Reordering Bron-Kerbosch Algorithm..." << endl;
     ReorderBK reorderBk(g);
-    reorderBk.findAllMaximalCliques();
+    reorderBk.run();
 
   } else if (mode == 4) {
     cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;

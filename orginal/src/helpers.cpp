@@ -563,6 +563,7 @@ void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
 
 /// new implementation of ReorderBK2 class
 // Reordering Bron-Kerbosch Implementation
+
 ReorderBK::ReorderBK(Graph &g) {
   graph = g;
   n = g.n;
@@ -570,6 +571,7 @@ ReorderBK::ReorderBK(Graph &g) {
   cliqueCount = 0;
   maxCliqueSize = 0;
   visited.resize(n, false);
+  status.resize(n, false);
 
   // Fill adjacency lists from graph
   for (ui i = 0; i < n; i++) {
@@ -583,173 +585,138 @@ ReorderBK::ReorderBK(Graph &g) {
     sort(adjList[i].begin(), adjList[i].end());
   }
 }
-bool ReorderBK::isConnected(ui u, ui v) const {
-  // Binary search v in sorted adjacency list of u. I.e if edg (u, v) exists
-  return binary_search(adjList[u].begin(), adjList[u].end(), v);
-}
-bool ReorderBK::canExtend(const vector<ui> &R, ui vertex) const {
-  // Check if adding vertex to R maintains clique property
-  for (ui v : R) {
-    if (!isConnected(vertex, v)) {
-      return false;
-    }
-  }
-  return true;
-}
 
-// ============================================================================
-// Exact Recursive Re-Ordering Maximal Clique Enumeration
-// Based on NSF Proposal: Redundancy-Free Set Enumeration
-// ============================================================================
+vector<ui> ReorderBK::intersect(vector<ui> vector1, vector<ui> vector2) {
+  vector<char> seen(n, 0);
 
-void ReorderBK::shiftToTail(ui v) {
-  // ------------------------------------------------------------------------
-  // Vertex v has finished all of its subtree exploration.
-  // According to the proposal:
-  //    "Vertices in a qualified subset will be reordered to the end."
-  //
-  // Here we implement that by:
-  //    - Taking v from its current position
-  //    - Shifting it to position tail_start
-  //    - Incrementing tail_start
-  //
-  // This keeps all fully-processed vertices grouped in the tail block.
-  // ------------------------------------------------------------------------
+  for (ui x : vector1)
+    seen[x] = 1;
 
-  int vPos = pos[v]; // Find current position
-
-  if (vPos >= tail_start)
-    return; // It's already in the tail, nothing to do
-
-  // Store the vertex currently at tail_start
-  ui tailVertex = order[tail_start];
-
-  // Swap v with the first vertex in the tail block
-  swap(order[vPos], order[tail_start]);
-
-  // Update reverse index
-  pos[v] = tail_start;
-  pos[tailVertex] = vPos;
-
-  // Expand tail block boundary
-  tail_start++;
+  std::vector<ui> C;
+  for (ui y : vector2)
+    if (seen[y])
+      C.push_back(y);
+  return C;
 }
 
-void ReorderBK::search(vector<ui> &R, int startIdx) {
-  // ------------------------------------------------------------------------
-  // R = current partial clique
-  // startIdx = the index in global order[] from where extension candidates
-  // begin
-  //
-  // Global state used:
-  //   order[]      = current permutation of all vertices
-  //   pos[v]       = position of vertex v in order[]
-  //   tail_start   = index where the "tail block" of completed clique vertices
-  //   begins
-  // ------------------------------------------------------------------------
-
-  // Create extension set P = neighbors of all vertices in R
-  vector<ui> P;
-
-  // ------------------------------------------------------------------------
-  // STEP 1: Build P by scanning order[] from startIdx to tail_start - 1
-  // Only vertices BEFORE tail_start are allowed to be considered as new
-  // children.
-  // ------------------------------------------------------------------------
-  for (int i = startIdx; i < tail_start; i++) {
-    ui v = order[i];
-
-    // Check if v connects to all vertices in current clique R
-    bool ok = true;
-    for (ui u : R) {
-      if (!isConnected(u, v)) { // O(log deg) binary search
-        ok = false;
-        break;
-      }
-    }
-
-    if (ok)
-      P.push_back(v); // v can extend R
-  }
-
-  // ------------------------------------------------------------------------
-  // STEP 2: If P is empty → R is maximal → output R
-  // ------------------------------------------------------------------------
-  if (P.empty()) {
-    cliqueCount++;
-    maxCliqueSize = max(maxCliqueSize, (ui)R.size());
-
-    cout << "Maximal Clique Found #" << cliqueCount << ": { ";
-    for (ui v : R)
-      cout << v << " ";
-    cout << "}" << endl;
-
+void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
+                          vector<ui> &expandTo) {
+  if (visited[R[0]]) {
+    // redendant call
     return;
   }
+  if (Q.empty()) {
 
-  // ------------------------------------------------------------------------
-  // STEP 3: Explore each candidate v in the extension set P
-  //
-  // For each v:
-  //   - Recurse with R ∪ {v}
-  //   - After finishing exploring those children, if the clique is found at R ∪
-  //   {v},
-  //     we reorder: shift v (and all vertices in R∪{v}) to the tail.
-  // ------------------------------------------------------------------------
-  for (ui v : P) {
+    if (R.size() > 2) {
+      cliqueCount++;
+      maxCliqueSize = max(maxCliqueSize, (ui)R.size());
 
-    int vPos = pos[v]; // Current position of vertex v in order[]
+      // TODO LOGIC FOR REORDER
+      vector<ui> newHeads;
+      // vector<ui> newExpandTo;
+      heads.erase(heads.begin());
 
-    // --------------------------------------------------------------------
-    // STEP 3A: Form new clique R' = R ∪ {v}
-    // --------------------------------------------------------------------
+      for (ui v : R) {
+        status[v] = cliqueCount;
+      }
+
+      for (ui v : heads) {
+        if (status[v] == cliqueCount) {
+          visited[v] = true;
+        } else {
+          newHeads.push_back(v);
+        }
+      }
+      rCall(newHeads, expandTo);
+      if (debug) {
+        cout << "Maximal Clique: { ";
+        for (ui v : R) {
+          cout << v << " ";
+        }
+        cout << "}" << endl;
+      }
+      // clique found
+      return;
+    } else {
+      return; // clique too small
+    }
+  }
+  for (ui v : Q) {
     R.push_back(v);
-
-    // --------------------------------------------------------------------
-    // STEP 3B: Recurse deeper
-    // next start idx = vPos + 1
-    //
-    // Because all children must come after v in the global ordering.
-    // This preserves uniqueness and correctness.
-    // --------------------------------------------------------------------
-    search(R, vPos + 1);
-
-    // --------------------------------------------------------------------
-    // STEP 3C: We finished exploring subtree rooted at R ∪ {v}.
-    // According to the proposal:
-    //   "Once a maximal subset is identified, vertices in the qualified subset
-    //    will be reordered to the end while unchecked vertices move forward."
-    //
-    // This means:
-    //   - Move v to the tail of order[]
-    //   - Update tail_start accordingly
-    // --------------------------------------------------------------------
-    shiftToTail(v);
-
-    // --------------------------------------------------------------------
-    // STEP 3D: Backtrack R
-    // --------------------------------------------------------------------
+    vector<ui> Q_;
+    cout << "   Checking node: R " << endl;
+    for (ui x : R) {
+      cout << x << " ";
+    }
+    cout << endl << "   Current Q: ";
+    for (ui x : Q) {
+      cout << x << " ";
+    }
+    cout << endl;
+    Q_ = intersect(Q, adjList[v]);
+    enemurate(R, Q_, heads, expandTo);
     R.pop_back();
   }
 }
 
-void ReorderBK::run() {
+void ReorderBK::rCall(vector<ui> heads, vector<ui> expandTo) {
+  if (debug) {
+    cout << "\nRCall State:" << endl;
+    cout << "ExpandFrom: { ";
+    for (ui v : heads)
+      cout << v << " ";
+    cout << "}" << endl;
 
-  // Build global ordering initially as [0, 1, 2, ..., n-1]
-  order.resize(n);
-  pos.resize(n);
+    cout << "Status: { ";
+    for (ui v : status)
+      cout << v << " ";
+    cout << "}" << endl;
 
-  for (ui i = 0; i < n; i++) {
-    order[i] = i;
-    pos[i] = i;
+    cout << "ExpandTo: { ";
+    for (ui v : expandTo)
+      cout << v << " ";
+    cout << "}" << endl;
+
+    cout << "Visited: ";
+    for (bool val : visited) {
+      cout << val << " ";
+    }
+    cout << endl;
+  }
+  if (heads.empty()) {
+    return;
+  }
+  ui vertex = heads[0];
+  vector<ui> R;
+  R.push_back(vertex);
+  vector<ui> Q;
+  Q = intersect(adjList[vertex], expandTo);
+  enemurate(R, Q, heads, expandTo);
+
+  if (!visited[vertex]) {
+    cout << "vertex " << vertex << " not visited no clique " << endl;
+    // TODO : LOGIC for no clique found till full enemuration of a single vertex
+  }
+}
+
+void ReorderBK::findAllMaximalCliques() {
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+
+  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
+
+  vector<ui> heads;
+  vector<ui> expandTo;
+
+  heads.push_back(0); // Start from vertex 0
+  for (ui v = 1; v < n; v++) {
+    expandTo.push_back(v);
+    heads.push_back(v);
   }
 
-  tail_start = n; // Initially no vertices are in the tail
+  rCall(heads, expandTo);
 
-  vector<ui> R; // Empty initial clique
-
-  // Start recursion from index 0
-  search(R, 0);
-
-  cout << "Total Maximal Cliques = " << cliqueCount << endl;
+  cout << "\n=== Algorithm Complete ===" << endl;
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
 }
