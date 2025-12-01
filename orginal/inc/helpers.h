@@ -105,7 +105,7 @@ private:
   void rCall(vector<ui> heads, vector<ui> expandTo);
   void enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
                  vector<ui> &expandTo);
-  vector<ui> ReorderBK::intersect(vector<ui> vector1, vector<ui> vector2);
+  vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
 
 public:
   ReorderBK(Graph &g);
