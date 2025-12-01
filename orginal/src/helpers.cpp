@@ -629,11 +629,13 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
       }
       rCall(newHeads, expandTo);
       if (debug) {
+        cout << endl << "************************" << endl;
         cout << "Maximal Clique: { ";
         for (ui v : R) {
           cout << v << " ";
         }
-        cout << "}" << endl;
+        cout << "}";
+        cout << endl << "************************" << endl;
       }
       // clique found
       return;
@@ -644,7 +646,9 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
   for (ui v : Q) {
     R.push_back(v);
     vector<ui> Q_;
-    cout << "   Checking node: R " << endl;
+    cout << "   Checking node: " << endl;
+    cout << "   Current R: ";
+
     for (ui x : R) {
       cout << x << " ";
     }
