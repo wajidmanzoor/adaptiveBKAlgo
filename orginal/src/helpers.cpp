@@ -668,7 +668,7 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
 void ReorderBK::rCall(vector<ui> heads, vector<ui> expandTo) {
   if (debug) {
     cout << "\nRCall State:" << endl;
-    cout << "ExpandFrom: { ";
+    cout << "head : { ";
     for (ui v : heads)
       cout << v << " ";
     cout << "}" << endl;
@@ -714,8 +714,7 @@ void ReorderBK::findAllMaximalCliques() {
   vector<ui> heads;
   vector<ui> expandTo;
 
-  heads.push_back(0); // Start from vertex 0
-  for (ui v = 1; v < n; v++) {
+  for (ui v = 0; v < n; v++) {
     expandTo.push_back(v);
     heads.push_back(v);
   }
