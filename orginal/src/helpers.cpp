@@ -631,11 +631,12 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
       for (ui v : R) {
         status[v] = cliqueCount;
       }
+      for (ui v : R) {
+        visited[v] = true;
+      }
 
       for (ui v : heads) {
-        if (status[v] == cliqueCount) {
-          visited[v] = true;
-        } else {
+        if (status[v] != cliqueCount) {
           newHeads.push_back(v);
         }
       }
