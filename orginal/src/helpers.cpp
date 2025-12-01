@@ -605,6 +605,18 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
     // redendant call
     return;
   }
+  cout << "   Checking node: " << endl;
+  cout << "   Current R: ";
+
+  for (ui x : R) {
+    cout << x << " ";
+  }
+  cout << endl << "   Current Q: ";
+  for (ui x : Q) {
+    cout << x << " ";
+  }
+  cout << endl;
+
   if (Q.empty()) {
 
     if (R.size() > 2) {
@@ -627,7 +639,6 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
           newHeads.push_back(v);
         }
       }
-      rCall(newHeads, expandTo);
       if (debug) {
         cout << endl << "************************" << endl;
         cout << "Maximal Clique: { ";
@@ -637,6 +648,8 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
         cout << "}";
         cout << endl << "************************" << endl;
       }
+      rCall(newHeads, expandTo);
+
       // clique found
       return;
     } else {
@@ -646,17 +659,6 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
   for (ui v : Q) {
     R.push_back(v);
     vector<ui> Q_;
-    cout << "   Checking node: " << endl;
-    cout << "   Current R: ";
-
-    for (ui x : R) {
-      cout << x << " ";
-    }
-    cout << endl << "   Current Q: ";
-    for (ui x : Q) {
-      cout << x << " ";
-    }
-    cout << endl;
     Q_ = intersect(Q, adjList[v]);
     enemurate(R, Q_, heads, expandTo);
     R.pop_back();
