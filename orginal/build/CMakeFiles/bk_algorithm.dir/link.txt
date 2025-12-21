@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -O0 -Wall -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/bk_algorithm.dir/main.cpp.o CMakeFiles/bk_algorithm.dir/src/common.cpp.o CMakeFiles/bk_algorithm.dir/src/graph.cpp.o CMakeFiles/bk_algorithm.dir/src/helpers.cpp.o -o bk_algorithm

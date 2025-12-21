@@ -1,33 +1,35 @@
-CXX = g++
-CXXFLAGS = -std=c++11 -Wall -O2
+CXX = clang++
+CXXFLAGS = -std=c++17 -Wall -g -O0
 SRCDIR = src
 INCDIR = inc
 OBJDIR = obj
 
-# Source files
-SOURCES = main.cpp $(SRCDIR)/graph.cpp $(SRCDIR)/common.cpp $(SRCDIR)/helpers.cpp
-OBJECTS = $(SOURCES:.cpp=.o)
+SOURCES = main.cpp \
+          $(SRCDIR)/graph.cpp \
+          $(SRCDIR)/common.cpp \
+          $(SRCDIR)/helpers.cpp
+
+OBJECTS = $(patsubst %.cpp,$(OBJDIR)/%.o,$(SOURCES))
 
 TARGET = bk_algorithm
 
 # Default target
 all: $(TARGET)
 
-# Create object directory
+# Create obj directories
 $(OBJDIR):
-	mkdir -p $(OBJDIR)
+	mkdir -p $(OBJDIR)/$(SRCDIR)
 
-# Build target
-$(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+# Link
+$(TARGET): $(OBJDIR) $(OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJECTS)
 
-# Compile source files
-%.o: %.cpp
+# Compile
+$(OBJDIR)/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -I$(INCDIR) -c $< -o $@
 
-# Clean build files
+# Clean
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -rf $(OBJDIR) $(TARGET)
 
-# Phony targets
 .PHONY: all clean

@@ -77,8 +77,13 @@ private:
   vector<bool> status;  // tracks status of vertices
   bool canExtend(const vector<ui> &R, ui vertex) const;
   bool isConnected(ui u, ui v) const;
-  void rCall(vector<ui> &expandFrom, vector<ui> &expandTo);
+  void rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo, ui level,
+             ui enlevel);
   vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
+  void enemurate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
+                 vector<vector<ui>> &expandTo, bool &moveToNext, bool &flag,
+                 ui index, ui level, ui enlevel);
+  vector<ui> setDifference(vector<ui> A, vector<ui> B);
 
 public:
   ReorderBK2(Graph &g);

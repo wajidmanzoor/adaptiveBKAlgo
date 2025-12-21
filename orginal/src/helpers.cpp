@@ -414,38 +414,9 @@ bool ReorderBK2::isConnected(ui u, ui v) const {
   // Binary search v in sorted adjacency list of u. I.e if edg (u, v) exists
   return binary_search(adjList[u].begin(), adjList[u].end(), v);
 }
-bool ReorderBK2::canExtend(const vector<ui> &R, ui vertex) const {
-  // Check if adding vertex to R maintains clique property
-  for (ui v : R) {
-    if (!isConnected(vertex, v)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-void ReorderBK2::findAllMaximalCliques() {
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-
-  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
-
-  vector<ui> ExpandFrom, ExpandMid, ExpandTo;
-
-  ExpandFrom.push_back(0); // Start from vertex 0
-  for (ui v = 1; v < n; v++) {
-    ExpandTo.push_back(v);
-    ExpandFrom.push_back(v);
-  }
-
-  rCall(ExpandFrom, ExpandTo);
-
-  cout << "\n=== Algorithm Complete ===" << endl;
-  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
-  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
-}
-
 vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2) {
+
+  // Intersection between vector1 and vector2
   vector<char> seen(n, 0);
 
   for (ui x : vector1)
@@ -457,107 +428,236 @@ vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2) {
       C.push_back(y);
   return C;
 }
+vector<ui> ReorderBK2::setDifference(vector<ui> A, vector<ui> B) {
 
-void ReorderBK2::rCall(vector<ui> &ExpandFrom, vector<ui> &ExpandTo) {
-  if (debug) {
-    cout << "\nRCall State:" << endl;
-    cout << "  ExpandFrom: { ";
-    for (ui v : ExpandFrom)
-      cout << v << " ";
-    cout << "}" << endl;
+  // Compute A - B
+  vector<char> seen(n, 0);
 
-    cout << "  status: { ";
-    for (ui v : status)
-      cout << v << " ";
-    cout << "}" << endl;
+  // Mark elements of B
+  for (ui x : B)
+    seen[x] = 1;
 
-    cout << "  ExpandTo: { ";
-    for (ui v : ExpandTo)
-      cout << v << " ";
-    cout << "}" << endl;
+  vector<ui> C;
+  for (ui y : A)
+    if (!seen[y])
+      C.push_back(y);
 
-    cout << "  Visited: ";
-    for (bool val : visited) {
-      cout << val << " ";
-    }
-    cout << endl;
+  return C;
+}
+
+void ReorderBK2::findAllMaximalCliques() {
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+
+  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
+
+  // Initialize heads and expandTo.
+  vector<vector<ui>> mustin;
+  vector<vector<ui>> expandTo;
+
+  // Fill heads and expandTo with all vertices
+  for (ui v = 0; v < n; v++) {
+    vector<ui> temp;
+    temp.push_back(v);
+    mustin.push_back(temp);
+    auto it = std::upper_bound(adjList[v].begin(), adjList[v].end(), v);
+    expandTo.emplace_back(it, adjList[v].end());
   }
-  cout << "expand From size " << ExpandFrom.size() << endl;
-  cout << "expand To Size " << ExpandTo.size() << endl;
-  if (ExpandFrom.empty() || ExpandTo.empty()) {
+
+  // Start the recursive search.
+
+  rCall(mustin, expandTo, 0, 0);
+
+  cout << "\n=== Algorithm Complete ===" << endl;
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+}
+
+void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
+                       ui level, ui enlevel) {
+
+  cout << "RCall Level: " << level << endl;
+  cout << "\nRCall State:" << endl;
+  cout << "   Mustin Trees: " << endl;
+  for (vector<ui> tree : mustin) {
+    cout << "     { ";
+    for (ui v : tree) {
+      cout << v << " ";
+    }
+    cout << "}" << endl;
+  }
+  cout << endl << "   ExpandTo: " << endl;
+  for (vector<ui> tree : expandTo) {
+    cout << "     { ";
+    for (ui v : tree) {
+      cout << v << " ";
+    }
+    cout << "}" << endl;
+  }
+  cout << endl;
+
+  if (expandTo.empty()) {
     return;
   }
-  ui vertex = ExpandFrom[0];
-  vector<ui> clique;
-  clique.push_back(vertex);
-  vector<ui> temp = intersect(adjList[vertex], ExpandTo);
+  if (mustin.empty()) {
+    return;
+  }
 
-  cout << " first n size " << temp.size() << endl;
+  vector<ui> Q;
 
-  for (ui i = 0; i < temp.size(); i++) {
+  // Q = expandTo ∩ N(vertex),
+  // TODO: need to check once
 
-    if (clique.size() > 2) {
-      break;
-    } else if (clique.size() == 2) {
-      clique.pop_back();
+  vector<ui> R;
+  bool moveToNext = true;
+
+  //*moveToNext = true;
+  ui index = 0;
+  for (ui i = 0; i < mustin.size(); i++) {
+    if (!moveToNext)
+      return;
+
+    if (mustin[i].empty())
+      continue;
+    R.clear();
+    for (ui v : mustin[i]) {
+      R.push_back(v);
     }
-    ui vertex2 = temp[i];
-    clique.push_back(vertex2);
-    vector<ui> temp2 = intersect(adjList[vertex2], temp);
-    cout << "second neighbor size " << temp2.size() << endl;
-    for (ui v : temp2) {
-      if (graph.degree[v] < clique.size())
-        continue;
-      if (canExtend(clique, v)) {
-        clique.push_back(v);
-        cout << "Added to clique " << v << endl;
+    Q.clear();
+    Q = expandTo[i];
+    bool flag = false;
+    enemurate(R, Q, mustin, expandTo, moveToNext, flag, index, level, enlevel);
+    index++;
+  }
+  return;
+}
+
+void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
+                           vector<vector<ui>> &mustin,
+                           vector<vector<ui>> &expandTo, bool &moveToNext,
+                           bool &flag, ui index, ui level, ui enlevel) {
+
+  cout << " rcall " << level << "  Enumerate Level: " << enlevel << endl;
+  cout << "     Enemurate Call:" << endl;
+  cout << "       Current R: ";
+  for (ui v : R) {
+    cout << v << " ";
+  }
+  cout << endl;
+  cout << "       Current Q: ";
+  for (ui v : Q) {
+    cout << v << " ";
+  }
+  cout << endl;
+  cout << "       MoveToNext: " << moveToNext << endl;
+  cout << "       Current Index: " << index << endl;
+
+  // No more enumeration left;
+  if (Q.empty()) {
+    // Maximal clique found
+    if (R.size() > 2) {
+      flag = true;
+      cliqueCount++;
+      maxCliqueSize = max(maxCliqueSize, R.size());
+
+      moveToNext = false;
+      if (debug) {
+        cout << endl << "************************" << endl;
+        cout << "Maximal Clique: { ";
+        for (ui v : R) {
+          cout << v << " ";
+        }
+        cout << "}";
+        cout << endl << "************************" << endl;
       }
+
+      // TODO: Reordering logic to be added here
+
+      vector<vector<ui>> newMustin;
+      vector<vector<ui>> newExpandTo;
+
+      for (ui i = index; i < mustin.size(); i++) {
+        vector<ui> tree = mustin[i];
+        ui len = tree.size();
+
+        // Check how many vertices of tree are in R
+        for (ui v : tree) {
+          if (find(R.begin(), R.end(), v) < R.end()) {
+            len--;
+          }
+        }
+        // If some vertices remain, keep this tree for further expansion
+        if (len > 0) {
+          newMustin.push_back(tree);
+          vector<ui> temp2 = R;
+          for (ui v : tree) {
+            temp2 = intersect(temp2, adjList[v]);
+          }
+          for (ui v : expandTo[i]) {
+            temp2.push_back(v);
+          }
+          newExpandTo.push_back(temp2);
+        }
+      }
+
+      cout << "       New Mustin Trees after removing clique vertices: "
+           << endl;
+      for (vector<ui> tree : newMustin) {
+        cout << "         { ";
+        for (ui v : tree) {
+          cout << v << " ";
+        }
+        cout << "}" << endl;
+      }
+      cout << endl;
+
+      cout << "       New ExpandTo after removing clique vertices: " << endl;
+      for (vector<ui> tree : newExpandTo) {
+        cout << "         { ";
+        for (ui v : tree) {
+          cout << v << " ";
+        }
+        cout << "}" << endl;
+      }
+      cout << endl;
+
+      for (ui i = 0; i < newMustin.size(); i++) {
+        vector<vector<ui>> mustin_;
+        vector<vector<ui>> expand_;
+
+        for (ui v : newExpandTo[i]) {
+          vector<ui> temp = newMustin[i];
+          temp.push_back(v);
+          mustin_.push_back(temp);
+          expand_.push_back(intersect(newExpandTo[i], adjList[v]));
+        }
+        rCall(mustin_, expand_, level + 1, 0);
+      }
+
+      return;
+    } else {
+      return; // clique too small, edge or vertex: move on
     }
   }
 
-  if (clique.size() < 3) {
-    ExpandFrom.erase(ExpandFrom.begin());
-    visited[vertex] = true;
-    vector<ui> newExpandTo;
-    for (ui v : ExpandTo) {
-      if (v != ExpandFrom[0]) {
-        newExpandTo.push_back(v);
-      }
-    }
-    rCall(ExpandFrom, newExpandTo);
-  } else if (clique.size() > 2) {
-    cliqueCount++;
-    maxCliqueSize = max(maxCliqueSize, clique.size());
-    cout << "clique " << cliqueCount << "{  ";
-    for (ui v : clique) {
-      status[v] = true;
-      cout << v << " ";
-    }
-    cout << " }" << endl;
-    ExpandFrom.erase(ExpandFrom.begin());
-    visited[vertex] = true;
-    vector<ui> newExpandFrom;
-    for (ui v : ExpandFrom) {
-      if (!binary_search(clique.begin(), clique.end(), v) & !visited[v]) {
-        newExpandFrom.push_back(v);
-      }
-    }
-    vector<ui> newExpandTo;
-    if (vertex == 0)
-      newExpandTo.push_back(clique[0]);
-    for (ui v : ExpandTo) {
-      if (status[v]) {
-        newExpandTo.push_back(v);
-      }
-    }
+  cout << "       Flag at start of enemurate: " << flag << endl;
+  for (ui v : Q) {
+    if (flag)
+      return;
+    // Add v to R: Partial Clique
+    R.push_back(v);
 
-    for (ui v : ExpandTo) {
-      if (!visited[v] & v != ExpandFrom[0] & !status[v]) {
-        newExpandTo.push_back(v);
-      }
-    }
+    vector<ui> Q_;
+    // Q_ = Q ∩ N(v): New possible candidates i.e. verticies connected to all
+    // verticies in Partial clique R
+    Q_ = intersect(Q, adjList[v]);
 
-    rCall(newExpandFrom, newExpandTo);
+    // Recursive call to enemurate with expanded R and new Q_
+    enemurate(R, Q_, mustin, expandTo, moveToNext, flag, index, level,
+              enlevel + 1);
+
+    // Backtrack: remove v from R
+    R.pop_back();
   }
 }
 
@@ -681,8 +781,8 @@ void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
           cout << "}";
           cout << endl << "************************" << endl;
         }
-        return; // head fully exhausted as no need for redorder as last head is
-                // explored
+        return; // head fully exhausted as no need for redorder as last head
+                // is explored
       }
 
     } else {

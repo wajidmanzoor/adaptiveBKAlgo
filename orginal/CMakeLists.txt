@@ -1,25 +1,27 @@
 cmake_minimum_required(VERSION 3.10)
 
-# Project name
-project(bk_algorithm)
+project(bk_algorithm LANGUAGES CXX)
 
-# Set C++ standard
+# C++ standard
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add compiler flags
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O2")
+# Default to Debug if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug)
+endif()
+
+# Compiler flags per build type
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
 
 # Include directories
 include_directories(inc)
 
-# Source files
-set(SOURCES
+# Sources
+add_executable(bk_algorithm
     main.cpp
     src/common.cpp
     src/graph.cpp
     src/helpers.cpp
 )
-
-# Create executable
-add_executable(bk_algorithm ${SOURCES})
