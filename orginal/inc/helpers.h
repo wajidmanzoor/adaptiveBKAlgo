@@ -84,6 +84,7 @@ private:
                  vector<vector<ui>> &expandTo, bool &moveToNext, bool &flag,
                  ui index, ui level, ui enlevel);
   vector<ui> setDifference(vector<ui> A, vector<ui> B);
+  vector<ui> unionSet(vector<ui> vector1, vector<ui> vector2);
 
 public:
   ReorderBK2(Graph &g);

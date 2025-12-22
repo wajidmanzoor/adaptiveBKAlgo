@@ -87,17 +87,15 @@ Maximal Clique: { 3 1 2 }
          { 3 4 }
 
        New ExpandTo after removing clique vertices: 
-         { 2 2 }
+         { 2 }
 
 RCall Level: 2
 
 RCall State:
    Mustin Trees: 
      { 3 4 2 }
-     { 3 4 2 }
 
    ExpandTo: 
-     { }
      { }
 
  rcall 2  Enumerate Level: 0

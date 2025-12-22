@@ -428,6 +428,30 @@ vector<ui> ReorderBK2::intersect(vector<ui> vector1, vector<ui> vector2) {
       C.push_back(y);
   return C;
 }
+vector<ui> ReorderBK2::unionSet(vector<ui> vector1, vector<ui> vector2) {
+
+  vector<char> seen(n, 0);
+  vector<ui> U;
+
+  // Add elements from vector1
+  for (ui x : vector1) {
+    if (!seen[x]) {
+      seen[x] = 1;
+      U.push_back(x);
+    }
+  }
+
+  // Add elements from vector2
+  for (ui y : vector2) {
+    if (!seen[y]) {
+      seen[y] = 1;
+      U.push_back(y);
+    }
+  }
+
+  return U;
+}
+
 vector<ui> ReorderBK2::setDifference(vector<ui> A, vector<ui> B) {
 
   // Compute A - B
@@ -590,11 +614,9 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
         if (len > 0) {
           newMustin.push_back(tree);
           vector<ui> temp2 = R;
+          temp2 = unionSet(temp2, expandTo[i]);
           for (ui v : tree) {
             temp2 = intersect(temp2, adjList[v]);
-          }
-          for (ui v : expandTo[i]) {
-            temp2.push_back(v);
           }
           newExpandTo.push_back(temp2);
         }
