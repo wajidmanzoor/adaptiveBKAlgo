@@ -74,23 +74,32 @@ private:
   vector<vector<ui>> adjList2; // adjacency lists with only greater vertices
   ui cliqueCount;
   size_t maxCliqueSize;
-  vector<bool> visited; // tracks which vertices have been starting points
-  vector<bool> status;  // tracks status of vertices
-  bool canExtend(const vector<ui> &R, ui vertex) const;
-  bool isConnected(ui u, ui v) const;
-  void rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo, ui level,
-             ui enlevel);
+  // vector<bool> visited; // tracks which vertices have been starting points
+  //  vector<bool> status;  // tracks status of vertices
+  // bool canExtend(const vector<ui> &R, ui vertex) const;
+  // bool isConnected(ui u, ui v) const;
+
+  // Set operations
   vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
-  void enemurate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
-                 vector<vector<ui>> &expandTo, bool &moveToNext, bool &flag,
-                 ui index, ui level, ui enlevel);
   vector<ui> setDifference(vector<ui> A, vector<ui> B);
   vector<ui> unionSet(vector<ui> vector1, vector<ui> vector2);
 
+  // Calls expansion of Trees
+  void rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo, ui level,
+             ui enlevel);
+
+  // Enumerates a tree untill a Maximal clique is found
+  void enemurate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
+                 vector<vector<ui>> &expandTo, bool &moveToNext, bool &flag,
+                 ui index, ui level, ui enlevel);
+
 public:
   ReorderBK2(Graph &g);
+  // Finds all Maximal Cliques
   void findAllMaximalCliques();
+  // Returns number of Maximal cliques found
   ui getCliqueCount() const { return cliqueCount; }
+  // Returns size of maximum maximal clique found
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
 
