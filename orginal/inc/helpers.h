@@ -70,7 +70,8 @@ class ReorderBK2 {
 private:
   Graph graph;
   ui n;
-  vector<vector<ui>> adjList; // adjacency lists
+  vector<vector<ui>> adjList;  // adjacency lists
+  vector<vector<ui>> adjList2; // adjacency lists with only greater vertices
   ui cliqueCount;
   size_t maxCliqueSize;
   vector<bool> visited; // tracks which vertices have been starting points

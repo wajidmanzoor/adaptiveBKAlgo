@@ -393,6 +393,7 @@ ReorderBK2::ReorderBK2(Graph &g) {
   graph = g;
   n = g.n;
   adjList.resize(n);
+  adjList2.resize(n);
   cliqueCount = 0;
   maxCliqueSize = 0;
   visited.resize(n, false);
@@ -402,12 +403,16 @@ ReorderBK2::ReorderBK2(Graph &g) {
   for (ui i = 0; i < n; i++) {
     for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
       ui neighbor = g.neighbors[j];
-      if (neighbor < n) {
+      if ((neighbor < n)) {
         adjList[i].push_back(neighbor);
+      }
+      if ((neighbor < n) && (neighbor > i)) {
+        adjList2[i].push_back(neighbor);
       }
     }
     // Sort for efficient connectivity checks
     sort(adjList[i].begin(), adjList[i].end());
+    sort(adjList2[i].begin(), adjList2[i].end());
   }
 }
 bool ReorderBK2::isConnected(ui u, ui v) const {
@@ -484,6 +489,8 @@ void ReorderBK2::findAllMaximalCliques() {
     vector<ui> temp;
     temp.push_back(v);
     mustin.push_back(temp);
+    // TODO: no need as already in adjList2 with only greater vertices in
+    // constructor replace with adjList2
     auto it = std::upper_bound(adjList[v].begin(), adjList[v].end(), v);
     expandTo.emplace_back(it, adjList[v].end());
   }
@@ -520,9 +527,6 @@ void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
   }
   cout << endl;
 
-  if (expandTo.empty()) {
-    return;
-  }
   if (mustin.empty()) {
     return;
   }
@@ -646,13 +650,18 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
       for (ui i = 0; i < newMustin.size(); i++) {
         vector<vector<ui>> mustin_;
         vector<vector<ui>> expand_;
+        if (newExpandTo[i].empty()) {
+          mustin_.push_back(newMustin[i]);
+          expand_.push_back(newExpandTo[i]);
+        }
 
         for (ui v : newExpandTo[i]) {
           vector<ui> temp = newMustin[i];
           temp.push_back(v);
           mustin_.push_back(temp);
-          expand_.push_back(intersect(newExpandTo[i], adjList[v]));
+          expand_.push_back(intersect(newExpandTo[i], adjList2[v]));
         }
+
         rCall(mustin_, expand_, level + 1, 0);
       }
 
@@ -672,7 +681,7 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
     vector<ui> Q_;
     // Q_ = Q ∩ N(v): New possible candidates i.e. verticies connected to all
     // verticies in Partial clique R
-    Q_ = intersect(Q, adjList[v]);
+    Q_ = intersect(Q, adjList2[v]);
 
     // Recursive call to enemurate with expanded R and new Q_
     enemurate(R, Q_, mustin, expandTo, moveToNext, flag, index, level,

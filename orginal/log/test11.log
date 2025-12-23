@@ -1,7 +1,7 @@
-n=10, m=18
-ofsset 0 3 6 10 15 18 22 24 28 30 32 
-degree 3 3 4 5 3 4 2 4 2 2 
-neighbors 1 2 3 0 2 3 0 1 3 4 0 1 2 4 5 2 3 5 3 4 6 7 5 7 5 6 8 9 7 9 7 8 0 0 0 0 
+n=6, m=12
+ofsset 0 4 8 12 16 20 24 
+degree 4 4 4 4 4 4 
+neighbors 2 3 4 5 2 3 4 5 0 1 3 5 0 1 2 4 0 1 3 5 0 1 2 4 
 Running Original Reordering Bron-Kerbosch Algorithm...
 Starting Reordering Bron-Kerbosch Algorithm...
 RCall Level: 0
@@ -14,124 +14,157 @@ RCall State:
      { 3 }
      { 4 }
      { 5 }
-     { 6 }
-     { 7 }
-     { 8 }
-     { 9 }
 
    ExpandTo: 
-     { 1 2 3 }
-     { 2 3 }
-     { 3 4 }
-     { 4 5 }
+     { 2 3 4 5 }
+     { 2 3 4 5 }
+     { 3 5 }
+     { 4 }
      { 5 }
-     { 6 7 }
-     { 7 }
-     { 8 9 }
-     { 9 }
      { }
 
  rcall 0  Enumerate Level: 0
      Enemurate Call:
        Current R: 0 
-       Current Q: 1 2 3 
+       Current Q: 2 3 4 5 
        MoveToNext: 1
        Current Index: 0
        Flag at start of enemurate: 0
  rcall 0  Enumerate Level: 1
      Enemurate Call:
-       Current R: 0 1 
-       Current Q: 2 3 
+       Current R: 0 2 
+       Current Q: 3 5 
        MoveToNext: 1
        Current Index: 0
        Flag at start of enemurate: 0
  rcall 0  Enumerate Level: 2
      Enemurate Call:
-       Current R: 0 1 2 
-       Current Q: 3 
-       MoveToNext: 1
-       Current Index: 0
-       Flag at start of enemurate: 0
- rcall 0  Enumerate Level: 3
-     Enemurate Call:
-       Current R: 0 1 2 3 
+       Current R: 0 2 3 
        Current Q: 
        MoveToNext: 1
        Current Index: 0
 
 ************************
-Maximal Clique: { 0 1 2 3 }
+Maximal Clique: { 0 2 3 }
 ************************
        New Mustin Trees after removing clique vertices: 
+         { 1 }
          { 4 }
          { 5 }
-         { 6 }
-         { 7 }
-         { 8 }
-         { 9 }
 
        New ExpandTo after removing clique vertices: 
-         { 2 3 5 }
-         { 3 6 7 }
-         { 7 }
-         { 8 9 }
-         { 9 }
-         { }
+         { 2 3 4 5 }
+         { 0 3 5 }
+         { 0 2 }
 
 RCall Level: 1
 
 RCall State:
    Mustin Trees: 
-     { 4 2 }
-     { 4 3 }
-     { 4 5 }
+     { 1 2 }
+     { 1 3 }
+     { 1 4 }
+     { 1 5 }
 
    ExpandTo: 
-     { 3 }
-     { 2 5 }
-     { 3 }
+     { 3 5 }
+     { 4 }
+     { 5 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
-       Current R: 4 2 
-       Current Q: 3 
+       Current R: 1 2 
+       Current Q: 3 5 
        MoveToNext: 1
        Current Index: 0
        Flag at start of enemurate: 0
  rcall 1  Enumerate Level: 1
      Enemurate Call:
-       Current R: 4 2 3 
+       Current R: 1 2 3 
        Current Q: 
        MoveToNext: 1
        Current Index: 0
 
 ************************
-Maximal Clique: { 4 2 3 }
+Maximal Clique: { 1 2 3 }
 ************************
        New Mustin Trees after removing clique vertices: 
-         { 4 5 }
+         { 1 4 }
+         { 1 5 }
 
        New ExpandTo after removing clique vertices: 
-         { 3 }
+         { 3 5 }
+         { 2 }
 
 RCall Level: 2
 
 RCall State:
    Mustin Trees: 
-     { 4 5 3 }
+     { 1 4 3 }
+     { 1 4 5 }
+
+   ExpandTo: 
+     { }
+     { }
+
+ rcall 2  Enumerate Level: 0
+     Enemurate Call:
+       Current R: 1 4 3 
+       Current Q: 
+       MoveToNext: 1
+       Current Index: 0
+
+************************
+Maximal Clique: { 1 4 3 }
+************************
+       New Mustin Trees after removing clique vertices: 
+         { 1 4 5 }
+
+       New ExpandTo after removing clique vertices: 
+         { }
+
+RCall Level: 3
+
+RCall State:
+   Mustin Trees: 
+     { 1 4 5 }
+
+   ExpandTo: 
+     { }
+
+ rcall 3  Enumerate Level: 0
+     Enemurate Call:
+       Current R: 1 4 5 
+       Current Q: 
+       MoveToNext: 1
+       Current Index: 0
+
+************************
+Maximal Clique: { 1 4 5 }
+************************
+       New Mustin Trees after removing clique vertices: 
+
+       New ExpandTo after removing clique vertices: 
+
+RCall Level: 2
+
+RCall State:
+   Mustin Trees: 
+     { 1 5 2 }
 
    ExpandTo: 
      { }
 
  rcall 2  Enumerate Level: 0
      Enemurate Call:
-       Current R: 4 5 3 
+       Current R: 1 5 2 
        Current Q: 
        MoveToNext: 1
        Current Index: 0
 
 ************************
-Maximal Clique: { 4 5 3 }
+Maximal Clique: { 1 5 2 }
 ************************
        New Mustin Trees after removing clique vertices: 
 
@@ -141,84 +174,56 @@ RCall Level: 1
 
 RCall State:
    Mustin Trees: 
-     { 5 3 }
-     { 5 6 }
-     { 5 7 }
+     { 4 0 }
+     { 4 3 }
+     { 4 5 }
 
    ExpandTo: 
+     { 3 5 }
      { }
-     { 7 }
-     { 6 }
-
- rcall 1  Enumerate Level: 0
-     Enemurate Call:
-       Current R: 5 3 
-       Current Q: 
-       MoveToNext: 1
-       Current Index: 0
- rcall 1  Enumerate Level: 0
-     Enemurate Call:
-       Current R: 5 6 
-       Current Q: 7 
-       MoveToNext: 1
-       Current Index: 1
-       Flag at start of enemurate: 0
- rcall 1  Enumerate Level: 1
-     Enemurate Call:
-       Current R: 5 6 7 
-       Current Q: 
-       MoveToNext: 1
-       Current Index: 1
-
-************************
-Maximal Clique: { 5 6 7 }
-************************
-       New Mustin Trees after removing clique vertices: 
-
-       New ExpandTo after removing clique vertices: 
-
-RCall Level: 1
-
-RCall State:
-   Mustin Trees: 
-     { 6 7 }
-
-   ExpandTo: 
      { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
-       Current R: 6 7 
-       Current Q: 
-       MoveToNext: 1
-       Current Index: 0
-RCall Level: 1
-
-RCall State:
-   Mustin Trees: 
-     { 7 8 }
-     { 7 9 }
-
-   ExpandTo: 
-     { 9 }
-     { 8 }
-
- rcall 1  Enumerate Level: 0
-     Enemurate Call:
-       Current R: 7 8 
-       Current Q: 9 
+       Current R: 4 0 
+       Current Q: 3 5 
        MoveToNext: 1
        Current Index: 0
        Flag at start of enemurate: 0
  rcall 1  Enumerate Level: 1
      Enemurate Call:
-       Current R: 7 8 9 
+       Current R: 4 0 3 
        Current Q: 
        MoveToNext: 1
        Current Index: 0
 
 ************************
-Maximal Clique: { 7 8 9 }
+Maximal Clique: { 4 0 3 }
+************************
+       New Mustin Trees after removing clique vertices: 
+         { 4 5 }
+
+       New ExpandTo after removing clique vertices: 
+         { 0 }
+
+RCall Level: 2
+
+RCall State:
+   Mustin Trees: 
+     { 4 5 0 }
+
+   ExpandTo: 
+     { }
+
+ rcall 2  Enumerate Level: 0
+     Enemurate Call:
+       Current R: 4 5 0 
+       Current Q: 
+       MoveToNext: 1
+       Current Index: 0
+
+************************
+Maximal Clique: { 4 5 0 }
 ************************
        New Mustin Trees after removing clique vertices: 
 
@@ -228,25 +233,35 @@ RCall Level: 1
 
 RCall State:
    Mustin Trees: 
-     { 8 9 }
+     { 5 0 }
+     { 5 2 }
 
    ExpandTo: 
+     { 2 }
      { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
-       Current R: 8 9 
+       Current R: 5 0 
+       Current Q: 2 
+       MoveToNext: 1
+       Current Index: 0
+       Flag at start of enemurate: 0
+ rcall 1  Enumerate Level: 1
+     Enemurate Call:
+       Current R: 5 0 2 
        Current Q: 
        MoveToNext: 1
        Current Index: 0
-RCall Level: 1
 
-RCall State:
-   Mustin Trees: 
+************************
+Maximal Clique: { 5 0 2 }
+************************
+       New Mustin Trees after removing clique vertices: 
 
-   ExpandTo: 
+       New ExpandTo after removing clique vertices: 
 
 
 === Algorithm Complete ===
-Total Maximal Cliques Found: 5
-Maximum Clique Size: 4
+Total Maximal Cliques Found: 8
+Maximum Clique Size: 3

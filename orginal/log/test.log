@@ -107,7 +107,7 @@ RCall State:
 
    ExpandTo: 
      { 5 }
-     { 3 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -142,8 +142,8 @@ RCall State:
    ExpandTo: 
      { }
      { 7 8 }
-     { 6 8 }
-     { 6 7 }
+     { 8 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -188,7 +188,7 @@ RCall State:
 
    ExpandTo: 
      { 8 }
-     { 7 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -235,7 +235,7 @@ RCall State:
 
    ExpandTo: 
      { 10 }
-     { 9 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -283,8 +283,8 @@ RCall State:
 
    ExpandTo: 
      { 12 13 }
-     { 11 13 }
-     { 11 12 }
+     { 13 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -323,7 +323,7 @@ RCall State:
 
    ExpandTo: 
      { 13 }
-     { 12 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
@@ -355,7 +355,7 @@ RCall State:
 
    ExpandTo: 
      { 14 }
-     { 13 }
+     { }
 
  rcall 1  Enumerate Level: 0
      Enemurate Call:
