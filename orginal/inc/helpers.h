@@ -74,6 +74,9 @@ private:
   vector<vector<ui>> adjList2; // adjacency lists with only greater vertices
   ui cliqueCount;
   size_t maxCliqueSize;
+  vector<ui> order; // ordering of vertices
+  vector<ui> old2new;
+  vector<ui> new2old;
   // vector<bool> visited; // tracks which vertices have been starting points
   //  vector<bool> status;  // tracks status of vertices
   // bool canExtend(const vector<ui> &R, ui vertex) const;
@@ -94,39 +97,11 @@ private:
                  ui index, ui level, ui enlevel);
 
 public:
-  ReorderBK2(Graph &g);
+  ReorderBK2(Graph &g, bool sortMode = true);
   // Finds all Maximal Cliques
   void findAllMaximalCliques();
   // Returns number of Maximal cliques found
   ui getCliqueCount() const { return cliqueCount; }
   // Returns size of maximum maximal clique found
-  ui getMaxCliqueSize() const { return maxCliqueSize; }
-};
-
-class ReorderBK {
-private:
-  // ----- Graph and adjacency -----
-  Graph graph;
-  ui n;
-  vector<vector<ui>> adjList;
-
-  // ----- Global Clique Stats -----
-  ui cliqueCount;
-  ui maxCliqueSize;
-
-  vector<bool> visited;
-  vector<ui> status;
-
-  // ----- Internal Methods -----
-  void rCall(vector<ui> heads, vector<ui> expandTo);
-  void enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
-                 vector<ui> &expandTo);
-  vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
-
-public:
-  ReorderBK(Graph &g);
-  void findAllMaximalCliques();
-
-  ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };

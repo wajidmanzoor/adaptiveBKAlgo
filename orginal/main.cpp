@@ -25,14 +25,9 @@ int main(int argc, const char *argv[]) {
     cout << "Running Pivot Bron-Kerbosch with pruning..." << endl;
     PivotBK pivotBk(g);
     pivotBk.findAllMaximalCliques();
-  } else if (mode == 3) {
-    cout << "Running New Reordering Bron-Kerbosch Algorithm..." << endl;
-    ReorderBK reorderBk(g);
-    reorderBk.findAllMaximalCliques();
-
   } else if (mode == 4) {
     cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
-    ReorderBK2 reorderBk2(g);
+    ReorderBK2 reorderBk2(g, true);
     reorderBk2.findAllMaximalCliques();
   }
 

@@ -389,7 +389,7 @@ void PivotBK::findAllMaximalCliques() {
 }
 
 // Latest Reordering Bron-Kerbosch Implementation
-ReorderBK2::ReorderBK2(Graph &g) {
+ReorderBK2::ReorderBK2(Graph &g, bool sortMode) {
   graph = g;
   n = g.n;
   adjList.resize(n);
@@ -397,10 +397,75 @@ ReorderBK2::ReorderBK2(Graph &g) {
   cliqueCount = 0;
   maxCliqueSize = 0;
 
+  if (sortMode) {
+    order.resize(n);
+    for (ui i = 0; i < n; i++)
+      order[i] = i;
+
+    sort(order.begin(), order.end(), [&](ui a, ui b) {
+      if (graph.degree[a] != graph.degree[b])
+        return graph.degree[a] > graph.degree[b]; // descending
+      return a < b;                               // tie-break
+    });
+
+    // Maping between old IDs and new IDs
+    old2new.resize(n);
+    new2old.resize(n);
+
+    for (ui newId = 0; newId < n; newId++) {
+      ui oldId = order[newId];
+      old2new[oldId] = newId;
+      new2old[newId] = oldId;
+    }
+
+    // New CSR representation
+    vector<ui> newDegree(n, 0);
+    vector<ui> newOffset(n + 1, 0);
+    vector<ui> newNeighbors;
+
+    // count degrees
+    for (ui oldU = 0; oldU < n; oldU++) {
+      ui newU = old2new[oldU];
+      newDegree[newU] = graph.degree[oldU];
+    }
+
+    // prefix sum
+    for (ui i = 0; i < n; i++)
+      newOffset[i + 1] = newOffset[i] + newDegree[i];
+
+    newNeighbors.resize(newOffset[n]);
+
+    vector<ui> cursor = newOffset;
+
+    for (ui oldU = 0; oldU < n; oldU++) {
+      ui newU = old2new[oldU];
+
+      for (ui j = graph.offset[oldU]; j < graph.offset[oldU + 1]; j++) {
+        ui oldV = graph.neighbors[j];
+        ui newV = old2new[oldV];
+
+        newNeighbors[cursor[newU]++] = newV;
+      }
+    }
+
+    // replace graph with new CSR
+    graph.degree = std::move(newDegree);
+    graph.offset = std::move(newOffset);
+    graph.neighbors = std::move(newNeighbors);
+
+    cout << "Reordered Graph Adjacency Lists:" << endl;
+    for (ui i = 0; i < n; i++) {
+      for (ui j = graph.offset[old2new[i]]; j < graph.offset[old2new[i] + 1];
+           j++) {
+        cout << new2old[graph.neighbors[j]] << " ";
+      }
+    }
+  }
+  cout << endl;
   // Fill adjacency lists from graph
   for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui neighbor = g.neighbors[j];
+    for (ui j = graph.offset[i]; j < graph.offset[i + 1]; j++) {
+      ui neighbor = graph.neighbors[j];
       if ((neighbor < n)) {
         // All neighbors
         adjList[i].push_back(neighbor);
@@ -413,6 +478,23 @@ ReorderBK2::ReorderBK2(Graph &g) {
     // Sort for efficient connectivity checks
     sort(adjList[i].begin(), adjList[i].end());
     sort(adjList2[i].begin(), adjList2[i].end());
+  }
+
+  for (ui i = 0; i < n; i++) {
+    cout << "Adjacency List for vertex " << new2old[i] << ": ";
+    for (ui neighbor : adjList[i]) {
+      cout << new2old[neighbor] << " ";
+    }
+    cout << endl;
+  }
+
+  cout << endl << "order neighbors only greater vertices:" << endl;
+  for (ui i = 0; i < n; i++) {
+    cout << "Adjacency List for vertex " << new2old[i] << ": ";
+    for (ui neighbor : adjList2[i]) {
+      cout << new2old[neighbor] << " ";
+    }
+    cout << endl;
   }
 }
 
@@ -511,7 +593,7 @@ void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
   for (vector<ui> tree : mustin) {
     cout << "     { ";
     for (ui v : tree) {
-      cout << v << " ";
+      cout << new2old[v] << " ";
     }
     cout << "}" << endl;
   }
@@ -519,7 +601,7 @@ void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
   for (vector<ui> tree : expandTo) {
     cout << "     { ";
     for (ui v : tree) {
-      cout << v << " ";
+      cout << new2old[v] << " ";
     }
     cout << "}" << endl;
   }
@@ -536,9 +618,9 @@ void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
   vector<ui> R;
 
   // Falg that represents if we find a maximal clique in this rCall?
-  // If yes, we do not need to continue further in this rCall, and trees will be
-  // updated and new call will be made. If no, we continue to enemurate trees in
-  // this rCall
+  // If yes, we do not need to continue further in this rCall, and trees will
+  // be updated and new call will be made. If no, we continue to enemurate
+  // trees in this rCall
   bool moveToNext = true;
 
   // Index to track which tree we are processing
@@ -578,12 +660,12 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
   cout << "     Enemurate Call:" << endl;
   cout << "       Current R: ";
   for (ui v : R) {
-    cout << v << " ";
+    cout << new2old[v] << " ";
   }
   cout << endl;
   cout << "       Current Q: ";
   for (ui v : Q) {
-    cout << v << " ";
+    cout << new2old[v] << " ";
   }
   cout << endl;
   cout << "       MoveToNext: " << moveToNext << endl;
@@ -601,14 +683,14 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
       cliqueCount++;
       maxCliqueSize = max(maxCliqueSize, R.size());
 
-      // Set moveToNext to false to stop further rCall (tree expansions) as tree
-      // need to be reordered
+      // Set moveToNext to false to stop further rCall (tree expansions) as
+      // tree need to be reordered
       moveToNext = false;
       if (debug) {
         cout << endl << "************************" << endl;
         cout << "Maximal Clique: { ";
         for (ui v : R) {
-          cout << v << " ";
+          cout << new2old[v] << " ";
         }
         cout << "}";
         cout << endl << "************************" << endl;
@@ -621,9 +703,9 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
       vector<vector<ui>> newExpandTo;
 
       // removes trees who mustin vertices are all in maximal Clique(R).
-      // For remaining trees, update their expandTo sets by including Verticies
-      // in of maximal Clique (R), if they are connected to all vertices in
-      // mustin.
+      // For remaining trees, update their expandTo sets by including
+      // Verticies in of maximal Clique (R), if they are connected to all
+      // vertices in mustin.
       for (ui i = index; i < mustin.size(); i++) {
         vector<ui> tree = mustin[i];
         ui len = tree.size();
@@ -651,7 +733,7 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
       for (vector<ui> tree : newMustin) {
         cout << "         { ";
         for (ui v : tree) {
-          cout << v << " ";
+          cout << new2old[v] << " ";
         }
         cout << "}" << endl;
       }
@@ -661,7 +743,7 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
       for (vector<ui> tree : newExpandTo) {
         cout << "         { ";
         for (ui v : tree) {
-          cout << v << " ";
+          cout << new2old[v] << " ";
         }
         cout << "}" << endl;
       }
@@ -716,244 +798,4 @@ void ReorderBK2::enemurate(vector<ui> &R, vector<ui> &Q,
     // Backtrack: remove v from R
     R.pop_back();
   }
-}
-
-/// new implementation of ReorderBK2 class
-// Reordering Bron-Kerbosch Implementation
-
-ReorderBK::ReorderBK(Graph &g) {
-  graph = g;
-  n = g.n;
-  adjList.resize(n);
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-  visited.resize(n, false);
-  status.resize(n, false);
-
-  // Fill adjacency lists from graph
-  for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui neighbor = g.neighbors[j];
-      if (neighbor < n) {
-        adjList[i].push_back(neighbor);
-      }
-    }
-    // Sort for efficient connectivity checks
-    sort(adjList[i].begin(), adjList[i].end());
-  }
-}
-
-vector<ui> ReorderBK::intersect(vector<ui> vector1, vector<ui> vector2) {
-
-  // Intersection between vector1 and vector2
-  vector<char> seen(n, 0);
-
-  for (ui x : vector1)
-    seen[x] = 1;
-
-  std::vector<ui> C;
-  for (ui y : vector2)
-    if (seen[y])
-      C.push_back(y);
-  return C;
-}
-
-void ReorderBK::enemurate(vector<ui> &R, vector<ui> &Q, vector<ui> &heads,
-                          vector<ui> &expandTo) {
-
-  // If Already visited, return
-  if (visited[R[0]]) {
-    // redendant call
-    return;
-  }
-  cout << "   Checking node: " << endl;
-  cout << "   Current R: ";
-
-  for (ui x : R) {
-    cout << x << " ";
-  }
-  cout << endl << "   Current Q: ";
-  for (ui x : Q) {
-    cout << x << " ";
-  }
-  cout << endl;
-
-  // If Q is empty i.e if no more enumeration left, check R for clique and
-  // reorder or return
-  if (Q.empty()) {
-
-    // If maximal clique size > 2, process clique
-    if (R.size() > 2) {
-
-      cliqueCount++;
-      maxCliqueSize = max(maxCliqueSize, (ui)R.size());
-
-      if (debug) {
-        cout << endl << "************************" << endl;
-        cout << "Maximal Clique: { ";
-        for (ui v : R) {
-          cout << v << " ";
-        }
-        cout << "}";
-        cout << endl << "************************" << endl;
-      }
-
-      // If not the last Head, perform reorder call
-      if (heads.size() > 1) {
-
-        // Reordering
-
-        // Prepare new heads
-        vector<ui> newHeads;
-        heads.erase(heads.begin());
-
-        // Update status and visited for vertices in found clique
-        for (ui v : R) {
-          status[v] = cliqueCount;
-        }
-        for (ui v : R) {
-          visited[v] = true;
-        }
-
-        // Fill new heads excluding clique vertices
-        for (ui v : heads) {
-          if (status[v] != cliqueCount) {
-            newHeads.push_back(v);
-          }
-        }
-
-        // Expand with new head
-        rCall(newHeads, expandTo);
-
-        // clique found and reorder call
-        return;
-      } else {
-        // No reorder if we are expanding using the last head.
-        if (debug) {
-          cout << endl << "************************" << endl;
-          cout << "Maximal Clique: { ";
-          for (ui v : R) {
-            cout << v << " ";
-          }
-          cout << "}";
-          cout << endl << "************************" << endl;
-        }
-        return; // head fully exhausted as no need for redorder as last head
-                // is explored
-      }
-
-    } else {
-
-      return; // clique too small, edge or vertex: move on
-    }
-  }
-
-  // Continue enemuration by expanding each vertex in Q
-  for (ui v : Q) {
-
-    // Add v to R: Partial Clique
-    R.push_back(v);
-
-    vector<ui> Q_;
-    // Q_ = Q ∩ N(v): New possible candidates i.e. verticies connected to all
-    // verticies in Partial clique R
-    Q_ = intersect(Q, adjList[v]);
-
-    // Recursive call to enemurate with expanded R and new Q_
-    enemurate(R, Q_, heads, expandTo);
-
-    // Backtrack: remove v from R
-    R.pop_back();
-  }
-}
-
-void ReorderBK::rCall(vector<ui> heads, vector<ui> expandTo) {
-  if (debug) {
-    cout << "\nRCall State:" << endl;
-    cout << "head : { ";
-    for (ui v : heads)
-      cout << v << " ";
-    cout << "}" << endl;
-
-    cout << "Status: { ";
-    for (ui v : status)
-      cout << v << " ";
-    cout << "}" << endl;
-
-    cout << "ExpandTo: { ";
-    for (ui v : expandTo)
-      cout << v << " ";
-    cout << "}" << endl;
-
-    cout << "Visited: ";
-    for (bool val : visited) {
-      cout << val << " ";
-    }
-    cout << endl;
-  }
-
-  // Base case: no more heads to process
-  if (heads.empty()) {
-    return;
-  }
-
-  // Process the one head at a time
-  ui vertex = heads[0];
-
-  // Initialize R (partial clique) and Q (Possible candidates) for enemuration
-  vector<ui> R;
-  R.push_back(vertex);
-  vector<ui> Q;
-
-  // Q = expandTo ∩ N(vertex)
-  Q = intersect(adjList[vertex], expandTo);
-
-  // Start enemuration with current head: Either finds clique and reorder or
-  // marks visited and move to next head
-  enemurate(R, Q, heads, expandTo);
-
-  // If no clique found by expanding this head, mark as visited and proceed
-  if (!visited[vertex]) {
-    cout << "vertex " << vertex << " visited no clique " << endl;
-
-    // Move to next head
-    heads.erase(heads.begin());
-    // Mark vertex as visited
-    visited[vertex] = true;
-
-    // remove vertex from expandTo
-    vector<ui> newExpandTo;
-    for (ui v : expandTo) {
-      if (v != vertex) {
-        newExpandTo.push_back(v);
-      }
-    }
-
-    // Expand new heads with updated expandTo
-    rCall(heads, newExpandTo);
-  }
-}
-
-void ReorderBK::findAllMaximalCliques() {
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-
-  cout << "Starting Reordering Bron-Kerbosch Algorithm..." << endl;
-
-  // Initialize heads and expandTo.
-  vector<ui> heads;
-  vector<ui> expandTo;
-
-  // Fill heads and expandTo with all vertices
-  for (ui v = 0; v < n; v++) {
-    expandTo.push_back(v);
-    heads.push_back(v);
-  }
-
-  // Start the recursive search one head at a time
-  rCall(heads, expandTo);
-
-  cout << "\n=== Algorithm Complete ===" << endl;
-  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
-  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
 }
