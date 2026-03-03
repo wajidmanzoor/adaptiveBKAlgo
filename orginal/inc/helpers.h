@@ -66,7 +66,7 @@ public:
   void findAllMaximalCliques();
 };
 
-class ReorderBK2 {
+class Reorder {
 private:
   Graph graph;
   ui n;
@@ -74,10 +74,10 @@ private:
   vector<vector<ui>> adjList2; // adjacency lists with only greater vertices
   ui cliqueCount;
   size_t maxCliqueSize;
-  vector<ui> order; // ordering of vertices
-  vector<ui> old2new;
-  vector<ui> new2old;
-  vector<vector<ui>> foundCliques;
+  vector<vector<ui>> allCliques;
+  vector<vector<ui>> cliquesByVertex;
+
+  vector<int> status; // tracks status of vertices
   // vector<bool> visited; // tracks which vertices have been starting points
   //  vector<bool> status;  // tracks status of vertices
   // bool canExtend(const vector<ui> &R, ui vertex) const;
@@ -98,13 +98,11 @@ private:
                  ui index, ui level, ui enlevel);
 
 public:
-  ReorderBK2(Graph &g, bool sortMode = true);
+  Reorder(Graph &g);
   // Finds all Maximal Cliques
   void findAllMaximalCliques();
   // Returns number of Maximal cliques found
   ui getCliqueCount() const { return cliqueCount; }
   // Returns size of maximum maximal clique found
   ui getMaxCliqueSize() const { return maxCliqueSize; }
-  vector<ui> applyPreviousCliqueEffects(const vector<ui> &tree,
-                                        const vector<ui> &Q);
 };

@@ -28,8 +28,8 @@ int main(int argc, const char *argv[]) {
     pivotBk.findAllMaximalCliques();
   } else if (mode == 4) {
     cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
-    ReorderBK2 reorderBk2(g, true);
-    reorderBk2.findAllMaximalCliques();
+    Reorder reorder(g);
+    reorder.findAllMaximalCliques();
   }
 
   else {
