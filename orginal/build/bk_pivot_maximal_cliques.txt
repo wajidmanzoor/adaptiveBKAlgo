@@ -1,0 +1,24 @@
+Maximal Clique Found: { 3 0 1 2 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 6 5 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }
+Maximal Clique Found: { 3 0 1 2 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 6 5 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }
+Maximal Clique Found: { 3 0 1 2 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 6 5 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }
+Maximal Clique Found: { 3 0 1 2 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 6 5 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }

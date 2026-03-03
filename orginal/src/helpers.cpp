@@ -148,6 +148,43 @@ vector<ui> AdjListBK::intersect(const vector<ui> &set1,
 }
 
 bool AdjListBK::isEmpty(const vector<ui> &set) { return set.empty(); }
+vector<ui> ReorderBK2::applyPreviousCliqueEffects(const vector<ui> &tree,
+                                                  const vector<ui> &Q) {
+  vector<ui> filtered = Q;
+
+  // For every previously found maximal clique
+  for (const auto &C : foundCliques) {
+    bool affectsTree = false;
+
+    // If this clique shares at least one vertex with current tree,
+    // then it can constrain this tree
+    for (ui x : tree) {
+      if (find(C.begin(), C.end(), x) != C.end()) {
+        affectsTree = true;
+        break;
+      }
+    }
+
+    if (!affectsTree)
+      continue;
+
+    // Remove clique vertices that are not already in the tree.
+    // Those cannot be reused in expandTo for this tree.
+    vector<ui> next;
+    for (ui v : filtered) {
+      bool inClique = (find(C.begin(), C.end(), v) != C.end());
+      bool inTree = (find(tree.begin(), tree.end(), v) != tree.end());
+
+      if (!(inClique && !inTree)) {
+        next.push_back(v);
+      }
+    }
+
+    filtered.swap(next);
+  }
+
+  return filtered;
+}
 
 void AdjListBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
                                       vector<ui> &X) {
@@ -254,59 +291,44 @@ bool PivotBK::isConnected(ui u, ui v) {
   return binary_search(adjList[u].begin(), adjList[u].end(), v);
 }
 
-bool PivotBK::isRedundantX(ui x, const vector<ui> &P) {
-  // Check if x is connected to all vertices in P
-  for (ui p : P) {
-    if (!isConnected(x, p)) {
-      return false;
-    }
-  }
-  return true;
-}
 ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
   ui bestPivot = P.empty() ? (X.empty() ? 0 : X[0]) : P[0];
   ui maxElimination = 0;
 
   // Check vertices in P to find the one that maximizes |P ∩ N(u)|
   for (ui u : P) {
-    ui elimination = intersect(P, adjList[u]).size();
+    ui elimination = (ui)intersect(P, adjList[u]).size();
     if (elimination > maxElimination) {
       maxElimination = elimination;
       bestPivot = u;
     }
   }
-
-  // Check vertices in X to find the one that maximizes |P ∩ N(u)|
   for (ui u : X) {
-    ui elimination = intersect(P, adjList[u]).size();
+    ui elimination = (ui)intersect(P, adjList[u]).size();
     if (elimination > maxElimination) {
       maxElimination = elimination;
       bestPivot = u;
     }
   }
-
-  // maximize |P ∩ N(u)|
   return bestPivot;
 }
-void PivotBK::applyDegreePruning(vector<ui> &P, const vector<ui> &R) {
-  // Remove vertices with degree less than current clique size
-  P.erase(remove_if(P.begin(), P.end(),
-                    [this, &R](ui v) { return adjList[v].size() < R.size(); }),
-          P.end());
+// Returns true if P is a subset of any already-found maximal clique
+bool PivotBK::isPSubsetOfFoundClique(const vector<ui> &P) {
+  for (const vector<ui> &clique : foundCliques) {
+    // Check if every vertex in P exists in this clique
+    bool allFound = true;
+    for (ui v : P) {
+      if (find(clique.begin(), clique.end(), v) == clique.end()) {
+        allFound = false;
+        break;
+      }
+    }
+    if (allFound)
+      return true;
+  }
+  return false;
 }
 
-void PivotBK::applyNeighborhoodPruning(vector<ui> &P, const vector<ui> &R) {
-  // Remove vertices that can't form cliques larger than current max
-  if (maxCliqueSize == 0)
-    return;
-  P.erase(remove_if(P.begin(), P.end(),
-                    [this, &R, &P](ui v) {
-                      ui potentialSize =
-                          intersect(P, adjList[v]).size() + R.size();
-                      return potentialSize < maxCliqueSize;
-                    }),
-          P.end());
-}
 void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
                                     vector<ui> &X) {
   // Basic pruning: check if P and X are empty
@@ -323,6 +345,7 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
           outfile << x << " ";
         outfile << "}\n";
       }
+      foundCliques.push_back(R);
     }
     if (debug) {
       cout << "Maximal Clique: { ";
@@ -334,58 +357,70 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     return;
   }
 
-  // Apply pruning rules
-  // any vertx in P with degree less than current clique size (size of R) is
-  // removed
-  applyDegreePruning(P, R);
-
-  // If P is empty after pruning, return
-  if (isEmpty(P)) {
+  // P empty but X non-empty: R is NOT maximal, prune
+  if (isEmpty(P))
     return;
-  }
-  // Choose pivot using Tomita et al. strategy
+
+  // Choose pivot from P ∪ X
   ui pivot = choosePivot(P, X);
 
-  vector<ui> P_copy = P; // Copy to iterate over
+  if (isPSubsetOfFoundClique(P)) {
+    redendantChecks.push_back(P);
+    redundancy++;
+  }
 
-  for (ui v : P_copy) {
-    // Skip if v is a neighbor of the pivot
-    // iter only to P \ N(pivot)
-    if (isConnected(v, pivot)) {
-      continue;
-    }
-    vector<ui> new_R = R;
-    new_R.push_back(v);
+  // Snapshot P \ N(pivot) before modifying P
+  vector<ui> candidates;
+  candidates.reserve(P.size());
+  for (ui v : P) {
+    if (!isConnected(v, pivot))
+      candidates.push_back(v);
+  }
 
-    // Create P ∩ N(v) and X ∩ N(v)
+  for (ui v : candidates) {
+    R.push_back(v);
     vector<ui> new_P = intersect(P, adjList[v]);
     vector<ui> new_X = intersect(X, adjList[v]);
 
-    // Recursive call
-    bronKerboschRecursive(new_R, new_P, new_X);
+    bronKerboschRecursive(R, new_P, new_X);
 
-    // Move v from P to X
-    P.erase(find(P.begin(), P.end(), v));
-    X.push_back(v);
+    R.pop_back(); // O(1) backtrack — no copy needed
+
+    // Move v from P to X, keeping X sorted
+    auto it = find(P.begin(), P.end(), v);
+    if (it != P.end())
+      P.erase(it);
+    X.insert(lower_bound(X.begin(), X.end(), v), v);
   }
 }
 void PivotBK::findAllMaximalCliques() {
-  // Initialize sets
-  vector<ui> R; // Current clique (empty)
-  vector<ui> P; // All vertices as candidates
-  vector<ui> X; // Excluded set (empty)
+  vector<ui> R;
+  vector<ui> X;
+  vector<ui> P(n);
+  foundCliques.clear();
 
-  // Fill P with all vertices
-  for (ui i = 0; i < n; i++) {
-    P.push_back(i);
-  }
+  redundancy = 0;
+  for (ui i = 0; i < n; i++)
+    P[i] = i;
 
   cliqueCount = 0;
   maxCliqueSize = 0;
+
   bronKerboschRecursive(R, P, X);
 
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+
+  cout << endl << endl << "Redundancy Count: " << redundancy << endl;
+
+  cout << "Redundant Checks: ";
+  for (const auto &check : redendantChecks) {
+    cout << "{ ";
+    for (ui v : check)
+      cout << v << " ";
+    cout << "} ";
+  }
+  cout << endl;
 }
 
 // Latest Reordering Bron-Kerbosch Implementation
@@ -640,7 +675,8 @@ void ReorderBK2::rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
       R.push_back(v);
     }
     Q.clear();
-    Q = expandTo[i];
+    // Q = expandTo[i];
+    Q = applyPreviousCliqueEffects(mustin[i], expandTo[i]);
 
     // Flag to indicate if maximal clique found in enemurate. Usefull to stop
     // further enemuration in this rCall

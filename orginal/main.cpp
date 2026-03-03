@@ -21,6 +21,7 @@ int main(int argc, const char *argv[]) {
     cout << "Running Adjacency List Bron-Kerbosch..." << endl;
     AdjListBK adjListBk(g);
     adjListBk.findAllMaximalCliques();
+
   } else if (mode == 2) {
     cout << "Running Pivot Bron-Kerbosch with pruning..." << endl;
     PivotBK pivotBk(g);

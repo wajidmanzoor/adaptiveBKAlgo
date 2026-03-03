@@ -46,24 +46,24 @@ private:
   vector<vector<ui>> adjList; // adjacency lists
   ui cliqueCount;
   ui maxCliqueSize; // for neighborhood size pruning
+  ui redundancy;
 
-  void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
+  vector<vector<ui>> redendantChecks; // Track redundant vertices for pruning
+
+  vector<vector<ui>>
+      foundCliques; // Store found maximal cliques for output/debugging
+
   vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
   bool isEmpty(const vector<ui> &set);
-
-  // Pivoting strategy
-  ui choosePivot(const vector<ui> &P, const vector<ui> &X);
-
-  // Pruning rules
-  bool isRedundantX(ui x, const vector<ui> &P);
   bool isConnected(ui u, ui v);
-  void applyDegreePruning(vector<ui> &P, const vector<ui> &R);
-  void applyNeighborhoodPruning(vector<ui> &P, const vector<ui> &R);
+  ui choosePivot(const vector<ui> &P, const vector<ui> &X);
+  void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
+  bool isPSubsetOfFoundClique(const vector<ui> &P);
 
 public:
   PivotBK(Graph &g);
+
   void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
 };
 
 class ReorderBK2 {
@@ -77,6 +77,7 @@ private:
   vector<ui> order; // ordering of vertices
   vector<ui> old2new;
   vector<ui> new2old;
+  vector<vector<ui>> foundCliques;
   // vector<bool> visited; // tracks which vertices have been starting points
   //  vector<bool> status;  // tracks status of vertices
   // bool canExtend(const vector<ui> &R, ui vertex) const;
@@ -104,4 +105,6 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
   // Returns size of maximum maximal clique found
   ui getMaxCliqueSize() const { return maxCliqueSize; }
+  vector<ui> applyPreviousCliqueEffects(const vector<ui> &tree,
+                                        const vector<ui> &Q);
 };
