@@ -1,4 +1,4 @@
-CXX = clang++
+CXX = g++
 CXXFLAGS = -std=c++17 -Wall -g -O0
 SRCDIR = src
 INCDIR = inc
