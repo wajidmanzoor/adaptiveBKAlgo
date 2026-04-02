@@ -5,10 +5,13 @@
 
 DATA_DIR="${1:-/data/labdata/wajid/AdjacencyList}"
 LOGS_DIR="${2:-./logs}"
-BIN="./bk_algorithm"
-
-if [ ! -f "$BIN" ]; then
-  echo "Error: $BIN not found. Run 'make' first."
+# Prefer root binary, fall back to build/
+if [ -f "./bk_algorithm" ]; then
+  BIN="./bk_algorithm"
+elif [ -f "./build/bk_algorithm" ]; then
+  BIN="./build/bk_algorithm"
+else
+  echo "Error: bk_algorithm not found. Run 'make' first."
   exit 1
 fi
 
