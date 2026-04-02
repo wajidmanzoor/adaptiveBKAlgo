@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Usage: ./run_benchmark.sh <data_dir> [logs_dir]
-# Defaults: data_dir=./data, logs_dir=./logs
+# Defaults: data_dir=/data/labdata/wajid/AdjacencyList, logs_dir=./logs
 
-DATA_DIR="${1:- /data/labdata/wajid/AdjacencyList}"
+DATA_DIR="${1:-/data/labdata/wajid/AdjacencyList}"
 LOGS_DIR="${2:-./logs}"
 BIN="./bk_algorithm"
 
@@ -28,18 +28,18 @@ for GRAPH in "$DATA_DIR"/*.txt; do
   [ -f "$GRAPH" ] || continue
   NAME=$(basename "$GRAPH")
 
-  PIVOT_OUT=$("$BIN" "$GRAPH" 2 2>&1)
-  PIVOT_CLIQUES=$(echo "$PIVOT_OUT" | grep -oP 'Total Maximal Cliques Found: \K[0-9]+')
-  PIVOT_MAXSIZE=$(echo "$PIVOT_OUT" | grep -oP 'Maximum Clique Size: \K[0-9]+')
-  PIVOT_CHECKS=$(echo  "$PIVOT_OUT" | grep -oP 'Total Vertex-Set Checks: \K[0-9]+')
-  PIVOT_TIME=$(echo    "$PIVOT_OUT" | grep -oP 'Time: \K[0-9]+\.?[0-9]*')
+  # Filter to summary lines only — suppresses per-clique debug output
+  PIVOT_OUT=$("$BIN" "$GRAPH" 2 2>&1 | grep -E "^(Total Maximal|Maximum Clique|Total Vertex|Time:)")
+  PIVOT_CLIQUES=$(echo "$PIVOT_OUT" | awk '/Total Maximal Cliques Found:/{print $NF}')
+  PIVOT_MAXSIZE=$(echo "$PIVOT_OUT" | awk '/Maximum Clique Size:/{print $NF}')
+  PIVOT_CHECKS=$(echo  "$PIVOT_OUT" | awk '/Total Vertex-Set Checks:/{print $NF}')
+  PIVOT_TIME=$(echo    "$PIVOT_OUT" | awk '/^Time:/{print $2}')
 
-  REORDER_OUT=$("$BIN" "$GRAPH" 5 2>&1)
-  REORDER_LINE=$(echo "$REORDER_OUT" | grep "^ReorderNew:")
-  REORDER_CLIQUES=$(echo "$REORDER_LINE" | grep -oP 'cliques=\K[0-9]+')
-  REORDER_MAXSIZE=$(echo "$REORDER_LINE" | grep -oP 'maxSize=\K[0-9]+')
-  REORDER_CHECKS=$(echo  "$REORDER_LINE" | grep -oP 'checks=\K[0-9]+')
-  REORDER_TIME=$(echo    "$REORDER_LINE" | grep -oP 'time=\K[0-9]+\.?[0-9]*')
+  REORDER_LINE=$("$BIN" "$GRAPH" 5 2>&1 | grep "^ReorderNew:")
+  REORDER_CLIQUES=$(echo "$REORDER_LINE" | awk -F'cliques=' '{print $2}' | awk '{print $1}')
+  REORDER_MAXSIZE=$(echo "$REORDER_LINE" | awk -F'maxSize='  '{print $2}' | awk '{print $1}')
+  REORDER_CHECKS=$(echo  "$REORDER_LINE" | awk -F'checks='   '{print $2}' | awk '{print $1}')
+  REORDER_TIME=$(echo    "$REORDER_LINE" | awk -F'time='     '{print $2}' | awk '{print $1}')
 
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
     "$NAME" "$PIVOT_CLIQUES" "$PIVOT_MAXSIZE" \
