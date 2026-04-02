@@ -17,7 +17,8 @@ if [ ! -d "$DATA_DIR" ]; then
   exit 1
 fi
 
-mkdir -p "$LOGS_DIR"
+mkdir -p "$LOGS_DIR/pivot"
+mkdir -p "$LOGS_DIR/reorder"
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 OUTFILE="$LOGS_DIR/benchmark_${TIMESTAMP}.tsv"
@@ -27,15 +28,17 @@ printf "Graph\tCliques\tMaxSize\tPivot Checks\tReorder Checks\tPivot Time (ms)\t
 for GRAPH in "$DATA_DIR"/*.txt; do
   [ -f "$GRAPH" ] || continue
   NAME=$(basename "$GRAPH")
+  STEM="${NAME%.txt}"
 
-  # Filter to summary lines only — suppresses per-clique debug output
-  PIVOT_OUT=$("$BIN" "$GRAPH" 2 2>&1 | grep -E "^(Total Maximal|Maximum Clique|Total Vertex|Time:)")
+  "$BIN" "$GRAPH" 2 > "$LOGS_DIR/pivot/${STEM}.log" 2>&1
+  PIVOT_OUT=$(cat "$LOGS_DIR/pivot/${STEM}.log")
   PIVOT_CLIQUES=$(echo "$PIVOT_OUT" | awk '/Total Maximal Cliques Found:/{print $NF}')
   PIVOT_MAXSIZE=$(echo "$PIVOT_OUT" | awk '/Maximum Clique Size:/{print $NF}')
   PIVOT_CHECKS=$(echo  "$PIVOT_OUT" | awk '/Total Vertex-Set Checks:/{print $NF}')
   PIVOT_TIME=$(echo    "$PIVOT_OUT" | awk '/^Time:/{print $2}')
 
-  REORDER_LINE=$("$BIN" "$GRAPH" 5 2>&1 | grep "^ReorderNew:")
+  "$BIN" "$GRAPH" 5 > "$LOGS_DIR/reorder/${STEM}.log" 2>&1
+  REORDER_LINE=$(grep "^ReorderNew:" "$LOGS_DIR/reorder/${STEM}.log")
   REORDER_CLIQUES=$(echo "$REORDER_LINE" | awk -F'cliques=' '{print $2}' | awk '{print $1}')
   REORDER_MAXSIZE=$(echo "$REORDER_LINE" | awk -F'maxSize='  '{print $2}' | awk '{print $1}')
   REORDER_CHECKS=$(echo  "$REORDER_LINE" | awk -F'checks='   '{print $2}' | awk '{print $1}')
@@ -51,3 +54,4 @@ done
 
 echo ""
 echo "Results saved to: $OUTFILE"
+echo "Per-graph logs:   $LOGS_DIR/pivot/  and  $LOGS_DIR/reorder/"

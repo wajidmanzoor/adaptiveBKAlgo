@@ -1,0 +1,18 @@
+n=15, m=26
+ofsset 0 3 6 9 14 16 21 24 27 32 34 39 42 46 50 52 
+degree 3 3 3 5 2 5 3 3 5 2 5 3 4 4 2 
+neighbors 1 2 3 0 2 3 0 1 3 0 1 2 4 5 3 5 3 4 6 7 8 5 7 8 5 6 8 5 6 7 9 10 8 10 8 9 11 12 13 10 12 13 10 11 13 14 10 11 12 14 12 13 
+Running Pivot Bron-Kerbosch with pruning...
+Maximal Clique: { 3 0 1 2 }
+Maximal Clique: { 3 4 5 }
+Maximal Clique: { 6 5 7 8 }
+Maximal Clique: { 8 9 10 }
+Maximal Clique: { 10 11 12 13 }
+Maximal Clique: { 12 13 14 }
+Total Maximal Cliques Found: 6
+Maximum Clique Size: 4
+Total Vertex-Set Checks: 28
+Time: 0.334875 ms
+
+Redundancy Count: 4
+Redundant Checks: { 5 8 } { 10 } { 12 13 } { 14 } 
