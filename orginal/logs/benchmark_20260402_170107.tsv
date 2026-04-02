@@ -1,0 +1,12 @@
+Graph	Cliques	MaxSize	Pivot Checks	Reorder Checks	Pivot Time (ms)	Reorder Time (ms)
+test.txt	6	4	28	22	0.461042	0.135
+test1.txt	2	4	6	8	0.10125	0.04275
+test10.txt	6	3	21	17	0.194625	0.0965
+test11.txt	8	3	15	18	0.247792	0.09125
+test2.txt	3	3	7	8	0.102167	0.051
+test3.txt	5	4	17	15	0.162167	0.081541
+test5.txt	3	3	12	10	0.135958	0.053
+test6.txt	4	3	16	13	0.159958	0.08225
+test7.txt	4	3	20	16	0.138291	0.092625
+test8.txt	4	3	18	15	0.256542	0.0765
+test9.txt	5	3	18	15	0.186541	0.085209

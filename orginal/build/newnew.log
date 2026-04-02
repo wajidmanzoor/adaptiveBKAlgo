@@ -1,0 +1,276 @@
+n=15, m=26
+ofsset 0 3 6 9 14 16 21 24 27 32 34 39 42 46 50 52 
+degree 3 3 3 5 2 5 3 3 5 2 5 3 4 4 2 
+neighbors 1 2 3 0 2 3 0 1 3 0 1 2 4 5 3 5 3 4 6 7 8 5 7 8 5 6 8 5 6 7 9 10 8 10 8 9 11 12 13 10 12 13 10 11 13 14 10 11 12 14 12 13 
+Running Original Reordering Bron-Kerbosch Algorithm...
+
+[INIT] Initial forest:
+
+    [0]  mustin=[ 0 ]  expandTo=[ 1 2 3 ]
+    [1]  mustin=[ 1 ]  expandTo=[ 2 3 ]
+    [2]  mustin=[ 2 ]  expandTo=[ 3 ]
+    [3]  mustin=[ 3 ]  expandTo=[ 4 5 ]
+    [4]  mustin=[ 4 ]  expandTo=[ 5 ]
+    [5]  mustin=[ 5 ]  expandTo=[ 6 7 8 ]
+    [6]  mustin=[ 6 ]  expandTo=[ 7 8 ]
+    [7]  mustin=[ 7 ]  expandTo=[ 8 ]
+    [8]  mustin=[ 8 ]  expandTo=[ 9 10 ]
+    [9]  mustin=[ 9 ]  expandTo=[ 10 ]
+    [10]  mustin=[ 10 ]  expandTo=[ 11 12 13 ]
+    [11]  mustin=[ 11 ]  expandTo=[ 12 13 ]
+    [12]  mustin=[ 12 ]  expandTo=[ 13 14 ]
+    [13]  mustin=[ 13 ]  expandTo=[ 14 ]
+    [14]  mustin=[ 14 ]  expandTo=[ ]
+
+┌─[rCall level=0]
+│  Forest in:
+    [0]  mustin=[ 0 ]  expandTo=[ 1 2 3 ]
+    [1]  mustin=[ 1 ]  expandTo=[ 2 3 ]
+    [2]  mustin=[ 2 ]  expandTo=[ 3 ]
+    [3]  mustin=[ 3 ]  expandTo=[ 4 5 ]
+    [4]  mustin=[ 4 ]  expandTo=[ 5 ]
+    [5]  mustin=[ 5 ]  expandTo=[ 6 7 8 ]
+    [6]  mustin=[ 6 ]  expandTo=[ 7 8 ]
+    [7]  mustin=[ 7 ]  expandTo=[ 8 ]
+    [8]  mustin=[ 8 ]  expandTo=[ 9 10 ]
+    [9]  mustin=[ 9 ]  expandTo=[ 10 ]
+    [10]  mustin=[ 10 ]  expandTo=[ 11 12 13 ]
+    [11]  mustin=[ 11 ]  expandTo=[ 12 13 ]
+    [12]  mustin=[ 12 ]  expandTo=[ 13 14 ]
+    [13]  mustin=[ 13 ]  expandTo=[ 14 ]
+    [14]  mustin=[ 14 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 1 2 3 
+│
+│  [tree 0] starting enumeration
+│    R={ 0 }
+│    Q={ 1 2 3 }
+    enumerate(level=0 enlevel=0
+    enumerate(level=0 enlevel=1
+    enumerate(level=0 enlevel=2
+    ★ CLIQUE #1 (idx=0): { 0 1 2 3 }
+      
+    [0]  mustin=[ 0 ]  expandTo=[ 1 2 3 ]
+    [1]  mustin=[ 1 ]  expandTo=[ 2 3 ]
+    [2]  mustin=[ 2 ]  expandTo=[ 3 ]
+    [3]  mustin=[ 3 ]  expandTo=[ 4 5 ]
+    [4]  mustin=[ 4 ]  expandTo=[ 3 5 ]
+    [5]  mustin=[ 5 ]  expandTo=[ 3 6 7 8 ]
+    [6]  mustin=[ 6 ]  expandTo=[ 7 8 ]
+    [7]  mustin=[ 7 ]  expandTo=[ 8 ]
+    [8]  mustin=[ 8 ]  expandTo=[ 9 10 ]
+    [9]  mustin=[ 9 ]  expandTo=[ 10 ]
+    [10]  mustin=[ 10 ]  expandTo=[ 11 12 13 ]
+    [11]  mustin=[ 11 ]  expandTo=[ 12 13 ]
+    [12]  mustin=[ 12 ]  expandTo=[ 13 14 ]
+    [13]  mustin=[ 13 ]  expandTo=[ 14 ]
+    [14]  mustin=[ 14 ]  expandTo=[ ]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 4 3 ]  expandTo=[ 5 ]
+    [1]  mustin=[ 4 5 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 5 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 4 3 }
+  │    Q={ 5 }
+      enumerate(level=1 enlevel=0
+      ★ CLIQUE #2 (idx=1): { 4 3 5 }
+        
+    [0]  mustin=[ 4 3 ]  expandTo=[ 5 ]
+    [1]  mustin=[ 4 5 ]  expandTo=[ ]
+  │  moveToNext=false — stopping rCall loop
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 5 3 ]  expandTo=[ ]
+    [1]  mustin=[ 5 6 ]  expandTo=[ 7 8 ]
+    [2]  mustin=[ 5 7 ]  expandTo=[ 8 ]
+    [3]  mustin=[ 5 8 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 5 affects clique 1
+clique 435
+ New ExpandTo 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 5 3 }
+  │    Q={ }
+ Sibling effect for tree[1]
+- Vertex 5 affects clique 1
+clique 435
+ Sibling effect for tree[2]
+- Vertex 5 affects clique 1
+clique 435
+ Sibling effect for tree[3]
+- Vertex 5 affects clique 1
+clique 435
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 6 7 ]  expandTo=[ 8 ]
+    [1]  mustin=[ 6 8 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 8 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 6 7 }
+  │    Q={ 8 }
+      enumerate(level=1 enlevel=0
+      ★ CLIQUE #3 (idx=2): { 6 7 8 }
+        
+    [0]  mustin=[ 6 7 ]  expandTo=[ 8 ]
+    [1]  mustin=[ 6 8 ]  expandTo=[ ]
+  │  moveToNext=false — stopping rCall loop
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 7 8 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 7 affects clique 2
+clique 678
+ New ExpandTo 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 7 8 }
+  │    Q={ }
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 8 9 ]  expandTo=[ 10 ]
+    [1]  mustin=[ 8 10 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 8 affects clique 2
+clique 678
+ Sibling effect for tree[1]
+- Vertex 8 affects clique 2
+clique 678
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 9 10 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 9 10 }
+  │    Q={ }
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 10 11 ]  expandTo=[ 12 13 ]
+    [1]  mustin=[ 10 12 ]  expandTo=[ 13 ]
+    [2]  mustin=[ 10 13 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 12 13 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 10 11 }
+  │    Q={ 12 13 }
+      enumerate(level=1 enlevel=0
+      enumerate(level=1 enlevel=1
+      ★ CLIQUE #4 (idx=3): { 10 11 12 13 }
+        
+    [0]  mustin=[ 10 11 ]  expandTo=[ 12 13 ]
+    [1]  mustin=[ 10 12 ]  expandTo=[ 13 ]
+    [2]  mustin=[ 10 13 ]  expandTo=[ ]
+  │  moveToNext=false — stopping rCall loop
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 11 12 ]  expandTo=[ 13 ]
+    [1]  mustin=[ 11 13 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 11 affects clique 3
+clique 10111213
+ New ExpandTo 13 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 11 12 }
+  │    Q={ 13 }
+      enumerate(level=1 enlevel=0
+      ★ CLIQUE #5 (idx=4): { 11 12 13 }
+        
+    [0]  mustin=[ 11 12 ]  expandTo=[ 13 ]
+    [1]  mustin=[ 11 13 ]  expandTo=[ ]
+  │  moveToNext=false — stopping rCall loop
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 12 13 ]  expandTo=[ 14 ]
+    [1]  mustin=[ 12 14 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 12 affects clique 3
+clique 10111213
+- Vertex 12 affects clique 4
+clique 111213
+ New ExpandTo 14 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 12 13 }
+  │    Q={ 14 }
+      enumerate(level=1 enlevel=0
+      ★ CLIQUE #6 (idx=5): { 12 13 14 }
+        
+    [0]  mustin=[ 12 13 ]  expandTo=[ 14 ]
+    [1]  mustin=[ 12 14 ]  expandTo=[ ]
+  │  moveToNext=false — stopping rCall loop
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 13 14 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+- Vertex 13 affects clique 3
+clique 10111213
+  └─[rCall level=1 done]
+
+  ┌─[rCall level=1]
+  │  Forest in:
+    [0]  mustin=[ 14 ]  expandTo=[ ]
+ Sibling effect for tree[0]
+ New ExpandTo 
+  │
+  │  [tree 0] starting enumeration
+  │    R={ 14 }
+  │    Q={ }
+  └─[rCall level=1 done]
+│  moveToNext=false — stopping rCall loop
+└─[rCall level=0 done]
+
+╔══════════════════════════════════════════════╗
+║  DONE  cliques=6  maxSize=4
+╚══════════════════════════════════════════════╝
+
+[RESULT] allCliques (6 total):
+  [0] { 0 1 2 3 }
+  [1] { 4 3 5 }
+  [2] { 6 7 8 }
+  [3] { 10 11 12 13 }
+  [4] { 11 12 13 }
+  [5] { 12 13 14 }
+
+[RESULT] cliquesByVertex:
+  vertex 0 -> clique indices { 0 }
+  vertex 1 -> clique indices { 0 }
+  vertex 2 -> clique indices { 0 }
+  vertex 3 -> clique indices { 0 1 }
+  vertex 4 -> clique indices { 1 }
+  vertex 5 -> clique indices { 1 }
+  vertex 6 -> clique indices { 2 }
+  vertex 7 -> clique indices { 2 }
+  vertex 8 -> clique indices { 2 }
+  vertex 10 -> clique indices { 3 }
+  vertex 11 -> clique indices { 3 4 }
+  vertex 12 -> clique indices { 3 4 5 }
+  vertex 13 -> clique indices { 3 4 5 }
+  vertex 14 -> clique indices { 5 }

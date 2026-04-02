@@ -46,6 +46,7 @@ private:
   vector<vector<ui>> adjList; // adjacency lists
   ui cliqueCount;
   ui maxCliqueSize; // for neighborhood size pruning
+  ui checksCount;   // total vertex-set checks in bronKerboschRecursive
   ui redundancy;
 
   vector<vector<ui>> redendantChecks; // Track redundant vertices for pruning
@@ -66,6 +67,40 @@ public:
   void findAllMaximalCliques();
 };
 
+class ReorderNew {
+private:
+  ui n;
+  vector<vector<ui>> adjList;
+  vector<vector<ui>> adjList2;
+  ui cliqueCount;
+  size_t maxCliqueSize;
+  ui checksCount; // total vertex-set checks in enumerate
+  vector<vector<ui>> allCliques;
+  vector<vector<ui>> cliquesByVertex;
+
+  vector<ui> intersect(vector<ui> A, vector<ui> B);
+  vector<ui> setDiff(vector<ui> A, vector<ui> B);
+  vector<ui> unionSet(vector<ui> A, vector<ui> B);
+  vector<ui> commonNeighbors(const vector<ui> &mustin);
+
+  // Apply effect of clique C on tree j. Returns true if tree should be skipped.
+  bool applyEffect(vector<ui> &mustinJ, vector<ui> &expandToJ,
+                   const vector<ui> &C);
+  // Retroactive restriction from all cliques found so far.
+  bool retroRestrict(vector<ui> &mustinI, vector<ui> &expandToI);
+
+  void rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo, ui level);
+  void enumerate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
+                 vector<vector<ui>> &expandTo, ui treeIndex, ui level,
+                 bool &done);
+
+public:
+  ReorderNew(Graph &g);
+  void findAllMaximalCliques();
+  ui getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+};
+
 class Reorder {
 private:
   Graph graph;
@@ -77,16 +112,12 @@ private:
   vector<vector<ui>> allCliques;
   vector<vector<ui>> cliquesByVertex;
 
-  vector<int> status; // tracks status of vertices
-  // vector<bool> visited; // tracks which vertices have been starting points
-  //  vector<bool> status;  // tracks status of vertices
-  // bool canExtend(const vector<ui> &R, ui vertex) const;
-  // bool isConnected(ui u, ui v) const;
-
   // Set operations
   vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
   vector<ui> setDifference(vector<ui> A, vector<ui> B);
   vector<ui> unionSet(vector<ui> vector1, vector<ui> vector2);
+
+  vector<ui> compliment(vector<ui> &vector1);
 
   // Calls expansion of Trees
   void rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo, ui level,

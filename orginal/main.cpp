@@ -30,6 +30,10 @@ int main(int argc, const char *argv[]) {
     cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
     Reorder reorder(g);
     reorder.findAllMaximalCliques();
+  } else if (mode == 5) {
+    cout << "Running ReorderNew Bron-Kerbosch Algorithm..." << endl;
+    ReorderNew reorderNew(g);
+    reorderNew.findAllMaximalCliques();
   }
 
   else {
