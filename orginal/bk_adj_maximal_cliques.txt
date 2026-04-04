@@ -1,0 +1,12 @@
+Maximal Clique Found: { 0 1 2 3 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 5 6 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }
+Maximal Clique Found: { 0 1 2 3 }
+Maximal Clique Found: { 3 4 5 }
+Maximal Clique Found: { 5 6 7 8 }
+Maximal Clique Found: { 8 9 10 }
+Maximal Clique Found: { 10 11 12 13 }
+Maximal Clique Found: { 12 13 14 }

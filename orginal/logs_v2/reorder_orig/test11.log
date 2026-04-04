@@ -1,0 +1,6 @@
+n=6, m=12
+ofsset 0 4 8 12 16 20 24 
+degree 4 4 4 4 4 4 
+neighbors 2 3 4 5 2 3 4 5 0 1 3 5 0 1 2 4 0 1 3 5 0 1 2 4 
+Running ReorderNew Bron-Kerbosch Algorithm...
+ReorderNew: cliques=8  maxSize=3

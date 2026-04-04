@@ -1,0 +1,12 @@
+Graph	Cliques	MaxSize	Pivot Checks	Orig Checks	Asc Checks	Desc Checks	Pivot Time (ms)	Orig Time (ms)	Asc Time (ms)	Desc Time (ms)
+test.txt	6	4								
+test1.txt	2	4								
+test10.txt	7	3								
+test11.txt	8	3								
+test2.txt	3	3								
+test3.txt	5	4								
+test5.txt	4	3								
+test6.txt	5	3								
+test7.txt	10	3								
+test8.txt	8	3								
+test9.txt	7	3								

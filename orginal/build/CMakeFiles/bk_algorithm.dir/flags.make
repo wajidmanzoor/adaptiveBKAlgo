@@ -6,7 +6,7 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/orginal/inc
 
-CXX_FLAGSarm64 = -g -O0 -Wall -std=gnu++11 -arch arm64
+CXX_FLAGSarm64 = -g -O0 -Wall -std=gnu++17 -arch arm64
 
-CXX_FLAGS = -g -O0 -Wall -std=gnu++11 -arch arm64
+CXX_FLAGS = -g -O0 -Wall -std=gnu++17 -arch arm64
 

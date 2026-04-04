@@ -3,6 +3,8 @@
 #include "common.h"
 #include "graph.h"
 
+enum class DegOrder { ORIGINAL, ASCENDING, DESCENDING };
+
 // Adjacency Matrix based Bron-Kerbosch
 class AdjMatBK {
 private:
@@ -62,7 +64,7 @@ private:
   bool isPSubsetOfFoundClique(const vector<ui> &P);
 
 public:
-  PivotBK(Graph &g);
+  PivotBK(Graph &g, DegOrder order = DegOrder::ASCENDING);
 
   void findAllMaximalCliques();
 };
@@ -95,7 +97,7 @@ private:
                  bool &done);
 
 public:
-  ReorderNew(Graph &g);
+  ReorderNew(Graph &g, DegOrder order = DegOrder::ORIGINAL);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }

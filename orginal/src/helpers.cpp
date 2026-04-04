@@ -2,6 +2,71 @@
 #include <chrono>
 #include <numeric>
 
+// ── Degeneracy ordering helpers ───────────────────────────────────────────────
+// Returns peelSeq where peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest.
+// Operates on a copy of g.degree so the graph is not modified.
+static vector<ui> computePeelSeq(const Graph &g) {
+  ui n = g.n;
+  vector<ui> deg(g.degree.begin(), g.degree.end());
+  ui maxDeg = *max_element(deg.begin(), deg.end());
+
+  vector<ui> bins(maxDeg + 1, 0);
+  for (ui d : deg) bins[d]++;
+  vector<ui> binStart(maxDeg + 1, 0);
+  partial_sum(bins.begin(), bins.end() - 1, binStart.begin() + 1);
+
+  vector<ui> pos(n), sorted(n);
+  for (ui v = 0; v < n; v++) {
+    pos[v] = binStart[deg[v]]++;
+    sorted[pos[v]] = v;
+  }
+  for (ui d = 0; d <= maxDeg; d++)
+    binStart[d] -= bins[d]; // reset to start of each bin
+
+  vector<ui> peelSeq(n);
+  for (ui i = 0; i < n; i++) {
+    ui v = sorted[i];
+    peelSeq[n - 1 - i] = v; // ascending peel order → descending in array
+    for (ui j = g.offset[v]; j < g.offset[v + 1]; j++) {
+      ui u = g.neighbors[j];
+      if (deg[u] > deg[v]) {
+        ui du = deg[u];
+        ui pu = pos[u];
+        ui pw = binStart[du];
+        ui w = sorted[pw];
+        if (u != w) {
+          pos[u] = pw; sorted[pu] = w;
+          pos[w] = pu; sorted[pw] = u;
+        }
+        binStart[du]++;
+        deg[u]--;
+      }
+    }
+  }
+  return peelSeq;
+}
+
+// Build adjList (all neighbors) and adjList2 (higher-index neighbors only)
+// in the relabeled space defined by perm[old_v] = new_v.
+static void buildAdjLists(const Graph &g, const vector<ui> &perm,
+                           vector<vector<ui>> &adjList,
+                           vector<vector<ui>> &adjList2) {
+  ui n = g.n;
+  adjList.assign(n, {});
+  adjList2.assign(n, {});
+  for (ui u = 0; u < n; u++) {
+    ui nu = perm[u];
+    for (ui j = g.offset[u]; j < g.offset[u + 1]; j++) {
+      ui nv = perm[g.neighbors[j]];
+      adjList[nu].push_back(nv);
+      if (nv > nu)
+        adjList2[nu].push_back(nv);
+    }
+    sort(adjList[nu].begin(), adjList[nu].end());
+    sort(adjList2[nu].begin(), adjList2[nu].end());
+  }
+}
+
 AdjMatBK::AdjMatBK(Graph &g) {
   n = g.n;
   cliqueCount = 0;
@@ -211,24 +276,29 @@ void AdjListBK::findAllMaximalCliques() {
 }
 
 // PivotBK Implementation
-PivotBK::PivotBK(Graph &g) {
+PivotBK::PivotBK(Graph &g, DegOrder order) {
   n = g.n;
-  adjList.resize(n);
   cliqueCount = 0;
   maxCliqueSize = 0;
   checksCount = 0;
 
-  // Fill adjacency lists from graph
-  for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui neighbor = g.neighbors[j];
-      if (neighbor < n) {
-        adjList[i].push_back(neighbor);
-      }
+  vector<ui> perm(n);
+  if (order == DegOrder::ORIGINAL) {
+    for (ui i = 0; i < n; i++) perm[i] = i;
+  } else {
+    vector<ui> peelSeq = computePeelSeq(g);
+    if (order == DegOrder::ASCENDING) {
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[n - 1 - i]] = i; // low-core → low index
+    } else {
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[i]] = i;          // high-core → low index
     }
-    // Sort for efficient intersection operations
-    sort(adjList[i].begin(), adjList[i].end());
   }
+
+  adjList.resize(n);
+  vector<vector<ui>> dummy;
+  buildAdjLists(g, perm, adjList, dummy);
 }
 
 vector<ui> PivotBK::intersect(const vector<ui> &set1,
@@ -303,26 +373,9 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
     if (R.size() <= 2)
       return;
 
-    // Found a maximal clique
+    // Found a maximal clique — only update counters inside timed section
     cliqueCount++;
     maxCliqueSize = max(maxCliqueSize, (ui)R.size());
-
-    ofstream outfile("bk_pivot_maximal_cliques.txt", std::ios::app);
-    if (outfile.is_open()) {
-      outfile << "Maximal Clique Found: { ";
-      for (ui x : R)
-        outfile << x << " ";
-      outfile << "}\n";
-    }
-    foundCliques.push_back(R);
-
-    if (debug) {
-      cout << "Maximal Clique: { ";
-      for (ui v : R) {
-        cout << v << " ";
-      }
-      cout << "}" << endl;
-    }
     return;
   }
 
@@ -368,8 +421,6 @@ void PivotBK::findAllMaximalCliques() {
   vector<ui> R;
   vector<ui> X;
   vector<ui> P(n);
-  foundCliques.clear();
-
   redundancy = 0;
   for (ui i = 0; i < n; i++)
     P[i] = i;
@@ -433,66 +484,72 @@ static void printForest(const string &label, const vector<vector<ui>> &mustin,
 // ReorderNew
 // ═════════════════════════════════════════════════════════════════════════════
 
-ReorderNew::ReorderNew(Graph &g) {
+ReorderNew::ReorderNew(Graph &g, DegOrder order) {
   n = g.n;
-  adjList.resize(n);
-  adjList2.resize(n);
   cliqueCount = 0;
   maxCliqueSize = 0;
   checksCount = 0;
   cliquesByVertex.resize(n);
 
-  for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui nb = g.neighbors[j];
-      adjList[i].push_back(nb);
-      if (nb > i)
-        adjList2[i].push_back(nb);
+  vector<ui> perm(n);
+  if (order == DegOrder::ORIGINAL) {
+    // Identity permutation — original vertex indices
+    for (ui i = 0; i < n; i++) perm[i] = i;
+  } else {
+    vector<ui> peelSeq = computePeelSeq(g);
+    if (order == DegOrder::ASCENDING) {
+      // Low-core vertex → low index (same as standard pivot BK)
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[n - 1 - i]] = i;
+    } else { // DESCENDING
+      // High-core vertex → low index (explore dense region first)
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[i]] = i;
     }
-    sort(adjList[i].begin(), adjList[i].end());
-    sort(adjList2[i].begin(), adjList2[i].end());
   }
+
+  buildAdjLists(g, perm, adjList, adjList2);
 }
 
 // ─── set helpers ─────────────────────────────────────────────────────────────
 
+// All vectors are kept sorted — use O(|A|+|B|) merge ops instead of O(n) bitmaps
+
 vector<ui> ReorderNew::intersect(vector<ui> A, vector<ui> B) {
-  vector<char> seen(n, 0);
-  for (ui x : A)
-    seen[x] = 1;
   vector<ui> C;
-  for (ui y : B)
-    if (seen[y])
-      C.push_back(y);
+  C.reserve(min(A.size(), B.size()));
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if      (A[i] == B[j]) { C.push_back(A[i]); i++; j++; }
+    else if (A[i] <  B[j]) i++;
+    else                   j++;
+  }
   return C;
 }
 
 vector<ui> ReorderNew::setDiff(vector<ui> A, vector<ui> B) {
-  vector<char> seen(n, 0);
-  for (ui x : B)
-    seen[x] = 1;
   vector<ui> C;
-  for (ui y : A)
-    if (!seen[y])
-      C.push_back(y);
+  C.reserve(A.size());
+  ui i = 0, j = 0;
+  while (i < A.size()) {
+    if (j == (ui)B.size() || A[i] < B[j])      { C.push_back(A[i]); i++; }
+    else if (A[i] == B[j])                      { i++; j++; }
+    else                                         j++;
+  }
   return C;
 }
 
 vector<ui> ReorderNew::unionSet(vector<ui> A, vector<ui> B) {
-  vector<char> seen(n, 0);
   vector<ui> U;
-  for (ui x : A) {
-    if (!seen[x]) {
-      seen[x] = 1;
-      U.push_back(x);
-    }
+  U.reserve(A.size() + B.size());
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if      (A[i] < B[j])  { U.push_back(A[i]); i++; }
+    else if (A[i] > B[j])  { U.push_back(B[j]); j++; }
+    else                   { U.push_back(A[i]); i++; j++; }
   }
-  for (ui y : B) {
-    if (!seen[y]) {
-      seen[y] = 1;
-      U.push_back(y);
-    }
-  }
+  while (i < A.size()) { U.push_back(A[i]); i++; }
+  while (j < B.size()) { U.push_back(B[j]); j++; }
   return U;
 }
 
@@ -526,65 +583,66 @@ vector<ui> ReorderNew::commonNeighbors(const vector<ui> &mustin) {
 
 bool ReorderNew::applyEffect(vector<ui> &mustinJ, vector<ui> &expandToJ,
                               const vector<ui> &C) {
-  vector<char> inC(n, 0);
-  for (ui v : C)
-    inC[v] = 1;
-
-  // Check mustinJ ⊆ C
+  // C and mustinJ are sorted — use binary_search, avoid O(n) bitmaps
+  // min of sorted vector is [0]
   bool allInC = true;
   for (ui v : mustinJ)
-    if (!inC[v]) {
-      allInC = false;
-      break;
-    }
+    if (!binary_search(C.begin(), C.end(), v)) { allInC = false; break; }
 
   if (allInC) {
-    ui minM = *min_element(mustinJ.begin(), mustinJ.end());
-    ui minC = *min_element(C.begin(), C.end());
-
-    vector<char> inMustin(n, 0);
-    for (ui v : mustinJ)
-      inMustin[v] = 1;
+    ui minM = mustinJ[0];
+    ui minC = C[0];
 
     if (minM == minC) {
-      // Full restriction: remove all C\M — would re-find C from this root
+      // Full restriction: remove all C\M (sorted subset of sorted C)
       vector<ui> toRemove;
       for (ui v : C)
-        if (!inMustin[v])
+        if (!binary_search(mustinJ.begin(), mustinJ.end(), v))
           toRemove.push_back(v);
       expandToJ = setDiff(expandToJ, toRemove);
       return expandToJ.empty();
     } else {
-      // Partial restriction: remove enriched lower-index C members
+      // Partial: remove only {v ∈ C : v < minM} not in mustin
       vector<ui> toRemove;
-      for (ui v : C)
-        if (v < minM && !inMustin[v])
+      for (ui v : C) {
+        if (v >= minM) break; // C is sorted, no need to continue
+        if (!binary_search(mustinJ.begin(), mustinJ.end(), v))
           toRemove.push_back(v);
+      }
       if (!toRemove.empty())
         expandToJ = setDiff(expandToJ, toRemove);
-      // If every remaining candidate is still inside C, all DFS paths lead to
-      // subsets of C (non-maximal) — skip the tree entirely
+      // Dead-path removal: also remove v∈C where expanding through v stays
+      // entirely within C (expandTo∩adjList2[v] ⊆ C). Such paths can only
+      // produce non-maximal subsets of C regardless of ordering.
+      vector<ui> safe;
+      for (ui v : expandToJ) {
+        if (binary_search(C.begin(), C.end(), v)) {
+          vector<ui> Q = intersect(expandToJ, adjList2[v]);
+          bool deadPath = true;
+          for (ui w : Q)
+            if (!binary_search(C.begin(), C.end(), w)) { deadPath = false; break; }
+          if (deadPath) continue; // remove v
+        }
+        safe.push_back(v);
+      }
+      expandToJ = safe;
+      // If all remaining candidates ∈ C → skip
       for (ui v : expandToJ)
-        if (!inC[v])
-          return false; // at least one non-C candidate exists
-      return expandToJ.empty() ? false : true; // non-empty but all-in-C → skip
+        if (!binary_search(C.begin(), C.end(), v))
+          return false;
+      return expandToJ.empty() ? false : true;
     }
   }
 
   bool hasOverlap = false;
   for (ui v : mustinJ)
-    if (inC[v]) {
-      hasOverlap = true;
-      break;
-    }
+    if (binary_search(C.begin(), C.end(), v)) { hasOverlap = true; break; }
 
   if (!hasOverlap) {
-    // Enrichment: add C members adjacent to all of mustinJ
     vector<ui> cn = commonNeighbors(mustinJ);
-    vector<ui> toAdd = intersect(vector<ui>(C.begin(), C.end()), cn);
+    vector<ui> toAdd = intersect(C, cn); // both sorted
     expandToJ = unionSet(expandToJ, toAdd);
   }
-  // Mixed case: no action
   return false;
 }
 
@@ -594,54 +652,77 @@ bool ReorderNew::applyEffect(vector<ui> &mustinJ, vector<ui> &expandToJ,
 // was last set. Returns true if the tree should be skipped.
 
 bool ReorderNew::retroRestrict(vector<ui> &mustinI, vector<ui> &expandToI) {
+  // Deduplicate clique IDs — multiple mustin vertices may share the same clique
+  unordered_set<ui> seen;
+  if (mustinI.empty()) return false;
+  ui minM = mustinI[0]; // mustinI is sorted
+
+  // If expandTo is empty, mustin itself is the clique candidate.
+  // Check if mustin ⊆ any already-found clique — if so it's non-maximal, skip.
+  if (expandToI.empty()) {
+    for (ui v : mustinI) {
+      for (ui cliqueId : cliquesByVertex[v]) {
+        if (!seen.insert(cliqueId).second) continue;
+        const vector<ui> &C = allCliques[cliqueId];
+        if (C.size() <= mustinI.size()) continue; // C can't strictly contain mustinI
+        bool allIn = true;
+        for (ui x : mustinI)
+          if (!binary_search(C.begin(), C.end(), x)) { allIn = false; break; }
+        if (allIn) return true; // mustin is a non-maximal subset of C
+      }
+    }
+    return false;
+  }
+
   for (ui v : mustinI) {
     for (ui cliqueId : cliquesByVertex[v]) {
-      const vector<ui> &C = allCliques[cliqueId];
-      vector<char> inC(n, 0);
-      for (ui x : C)
-        inC[x] = 1;
+      if (!seen.insert(cliqueId).second)
+        continue;
+
+      const vector<ui> &C = allCliques[cliqueId]; // C is sorted
 
       // Only restrict when mustinI ⊆ C
       bool allIn = true;
       for (ui x : mustinI)
-        if (!inC[x]) {
-          allIn = false;
-          break;
-        }
+        if (!binary_search(C.begin(), C.end(), x)) { allIn = false; break; }
       if (!allIn)
         continue;
 
-      ui minM = *min_element(mustinI.begin(), mustinI.end());
-      ui minC = *min_element(C.begin(), C.end());
-
-      vector<char> inMustin(n, 0);
-      for (ui x : mustinI)
-        inMustin[x] = 1;
+      ui minC = C[0];
 
       if (minM == minC) {
-        // Full restriction
         vector<ui> toRemove;
         for (ui x : C)
-          if (!inMustin[x])
+          if (!binary_search(mustinI.begin(), mustinI.end(), x))
             toRemove.push_back(x);
         expandToI = setDiff(expandToI, toRemove);
         if (expandToI.empty())
           return true;
       } else {
-        // Partial restriction: only lower-index enriched C members
         vector<ui> toRemove;
-        for (ui x : C)
-          if (x < minM && !inMustin[x])
+        for (ui x : C) {
+          if (x >= minM) break;
+          if (!binary_search(mustinI.begin(), mustinI.end(), x))
             toRemove.push_back(x);
+        }
         if (!toRemove.empty())
           expandToI = setDiff(expandToI, toRemove);
-        // If every remaining candidate is in C, all paths lead to subsets of C
+        // Dead-path removal (same as applyEffect)
+        vector<ui> safe;
+        for (ui v : expandToI) {
+          if (binary_search(C.begin(), C.end(), v)) {
+            vector<ui> Q = intersect(expandToI, adjList2[v]);
+            bool deadPath = true;
+            for (ui w : Q)
+              if (!binary_search(C.begin(), C.end(), w)) { deadPath = false; break; }
+            if (deadPath) continue;
+          }
+          safe.push_back(v);
+        }
+        expandToI = safe;
         bool allInC = true;
         for (ui x : expandToI)
-          if (!inC[x]) {
-            allInC = false;
-            break;
-          }
+          if (!binary_search(C.begin(), C.end(), x)) { allInC = false; break; }
         if (allInC && !expandToI.empty())
           return true;
       }
@@ -678,19 +759,38 @@ void ReorderNew::enumerate(vector<ui> &R, vector<ui> &Q,
   // ── Base case: no candidates left ────────────────────────────────────────
   if (Q.empty()) {
     if ((ui)R.size() > 2) {
-      // Record clique
+      // Sort clique before storing — enrichment can produce unsorted R
+      vector<ui> C = R;
+      sort(C.begin(), C.end());
+
+      // Guard: check R is not a duplicate or non-maximal subset of an already-found clique.
+      // This can happen with descending order when enriched vertices leave dead paths.
+      bool nonMaximal = false;
+      for (ui v : C) {
+        for (ui cliqueId : cliquesByVertex[v]) {
+          const vector<ui> &prev = allCliques[cliqueId];
+          if (prev.size() < C.size()) continue; // prev can't contain C
+          bool sub = true;
+          for (ui x : C)
+            if (!binary_search(prev.begin(), prev.end(), x)) { sub = false; break; }
+          if (sub) { nonMaximal = true; break; }
+        }
+        if (nonMaximal) break;
+      }
+      if (nonMaximal) return;
+
       cliqueCount++;
-      if ((ui)R.size() > maxCliqueSize)
-        maxCliqueSize = (ui)R.size();
+      if ((ui)C.size() > maxCliqueSize)
+        maxCliqueSize = (ui)C.size();
       ui cliqueIdx = (ui)allCliques.size();
-      allCliques.push_back(R);
-      for (ui v : R)
+      allCliques.push_back(C);
+      for (ui v : C)
         cliquesByVertex[v].push_back(cliqueIdx);
 
-      // Apply effect of R on trees treeIndex..end, then spawn sub-rCalls
+      // Apply effect of C on trees treeIndex..end, then spawn sub-rCalls
       vector<bool> skip(mustin.size(), false);
       for (ui j = treeIndex; j < (ui)mustin.size(); j++)
-        skip[j] = applyEffect(mustin[j], expandTo[j], R);
+        skip[j] = applyEffect(mustin[j], expandTo[j], C);
 
       for (ui j = treeIndex; j < (ui)mustin.size(); j++) {
         if (skip[j])
@@ -702,22 +802,41 @@ void ReorderNew::enumerate(vector<ui> &R, vector<ui> &Q,
 
         if (expandTo[j].empty()) {
           // No expansion: mustin[j] itself is a maximal clique candidate
+          // Skip if mustin[j] ⊆ C — it's a non-maximal subset of already-found C
           if ((ui)mustin[j].size() > 2) {
-            subMustin.push_back(mustin[j]);
-            subExpandTo.push_back({});
+            bool mjInC = true;
+            for (ui x : mustin[j])
+              if (!binary_search(C.begin(), C.end(), x)) { mjInC = false; break; }
+            if (!mjInC) {
+              subMustin.push_back(mustin[j]);
+              subExpandTo.push_back({});
+            }
           }
         } else {
           for (ui v : expandTo[j]) {
             vector<ui> newMustin = mustin[j];
             newMustin.push_back(v);
+            // mustin[j] is sorted; only sort if v is out of order (enrichment case)
+            if (newMustin.size() > 1 && v < newMustin[newMustin.size() - 2])
+              sort(newMustin.begin(), newMustin.end());
             vector<ui> newET = intersect(expandTo[j], adjList2[v]);
+
+            // Skip sub-tree if newMustin ⊆ C and newET ⊆ C entirely
+            bool allInC = true;
+            for (ui x : newMustin)
+              if (!binary_search(C.begin(), C.end(), x)) { allInC = false; break; }
+            if (allInC)
+              for (ui x : newET)
+                if (!binary_search(C.begin(), C.end(), x)) { allInC = false; break; }
+            if (allInC) continue;
+
             subMustin.push_back(newMustin);
             subExpandTo.push_back(newET);
           }
         }
 
         if (!subMustin.empty())
-          rCall(subMustin, subExpandTo, level + 1);
+          rCall(std::move(subMustin), std::move(subExpandTo), level + 1);
       }
       done = true;
     }
@@ -753,7 +872,7 @@ void ReorderNew::findAllMaximalCliques() {
   }
 
   auto t0 = chrono::high_resolution_clock::now();
-  rCall(mustin, expandTo, 0);
+  rCall(std::move(mustin), std::move(expandTo), 0);
   auto t1 = chrono::high_resolution_clock::now();
   double ms = chrono::duration<double, milli>(t1 - t0).count();
 

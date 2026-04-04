@@ -23,8 +23,16 @@ int main(int argc, const char *argv[]) {
     adjListBk.findAllMaximalCliques();
 
   } else if (mode == 2) {
-    cout << "Running Pivot Bron-Kerbosch with pruning..." << endl;
-    PivotBK pivotBk(g);
+    cout << "Running Pivot BK (Original order)..." << endl;
+    PivotBK pivotBk(g, DegOrder::ORIGINAL);
+    pivotBk.findAllMaximalCliques();
+  } else if (mode == 3) {
+    cout << "Running Pivot BK (Ascending degeneracy)..." << endl;
+    PivotBK pivotBk(g, DegOrder::ASCENDING);
+    pivotBk.findAllMaximalCliques();
+  } else if (mode == 8) {
+    cout << "Running Pivot BK (Descending degeneracy)..." << endl;
+    PivotBK pivotBk(g, DegOrder::DESCENDING);
     pivotBk.findAllMaximalCliques();
   } else if (mode == 4) {
     cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
@@ -32,12 +40,24 @@ int main(int argc, const char *argv[]) {
     reorder.findAllMaximalCliques();
   } else if (mode == 5) {
     cout << "Running ReorderNew Bron-Kerbosch Algorithm..." << endl;
-    ReorderNew reorderNew(g);
+    ReorderNew reorderNew(g, DegOrder::ORIGINAL);
+    reorderNew.findAllMaximalCliques();
+  } else if (mode == 6) {
+    cout << "Running ReorderNew (Ascending Degeneracy) Bron-Kerbosch "
+            "Algorithm..."
+         << endl;
+    ReorderNew reorderNew(g, DegOrder::ASCENDING);
+    reorderNew.findAllMaximalCliques();
+  } else if (mode == 7) {
+    cout << "Running ReorderNew (Descending Degeneracy) Bron-Kerbosch "
+            "Algorithm..."
+         << endl;
+    ReorderNew reorderNew(g, DegOrder::DESCENDING);
     reorderNew.findAllMaximalCliques();
   }
 
   else {
-    cout << "Invalid mode! Use 0, 1, 2 or 3. " << endl;
+    cout << "Invalid mode! Use 0, 1, 2, 5, 6, or 7." << endl;
     exit(1);
   }
 

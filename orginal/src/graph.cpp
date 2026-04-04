@@ -76,7 +76,7 @@ void Graph::coreDecompose(std::vector<ui> &arr) {
      values. */
   core.resize(n);
   int maxDegree = *std::max_element(degree.begin(), degree.end());
-  std::cout << "Max Degree=" << maxDegree << std::endl;
+  if (debug) std::cout << "Max Degree=" << maxDegree << std::endl;
 
   // Initialize bins
   std::vector<ui> bins(maxDegree + 1, 0);

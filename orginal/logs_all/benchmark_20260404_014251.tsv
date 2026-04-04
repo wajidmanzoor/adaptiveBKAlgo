@@ -1,0 +1,12 @@
+Graph	Cliques	MaxSize	P.Orig Checks	P.Asc Checks	P.Desc Checks	R.Orig Checks	R.Asc Checks	R.Desc Checks	P.Orig Time	P.Asc Time	P.Desc Time	R.Orig Time	R.Asc Time	R.Desc Time
+test.txt	6	4	28			18	19	17	0.046458			0.1195	0.1225	0.130458
+test1.txt	2	4	6			6	7	8	0.008375			0.037459	0.033292	0.034625
+test10.txt	6	3	21			13	15	15	0.026542			0.090708	0.087542	0.086416
+test11.txt	8	3	15			14	14	15	0.016084			0.094542	0.09675	0.080292
+test2.txt	3	3	7			7	7	8	0.008958			0.05175	0.043459	0.046792
+test3.txt	5	4	16			12	13	13	0.019416			0.074166	0.068583	0.064292
+test5.txt	3	3	12			8	9	8	0.014416			0.049625	0.044084	0.058625
+test6.txt	4	3	16			10	10	10	0.018083			0.059417	0.054667	0.053791
+test7.txt	4	3	20			14	15	16	0.021			0.0785	0.066458	0.073042
+test8.txt	4	3	19			13	14	13	0.021959			0.0835	0.077875	0.074
+test9.txt	5	3	18			13	14	15	0.02025			0.076	0.070416	0.071041
