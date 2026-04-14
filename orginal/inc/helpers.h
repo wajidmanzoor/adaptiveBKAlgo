@@ -69,7 +69,7 @@ public:
   void findAllMaximalCliques();
 };
 
-class ReorderNew {
+class Reorder {
 private:
   ui n;
   vector<vector<ui>> adjList;
@@ -78,18 +78,13 @@ private:
   size_t maxCliqueSize;
   ui checksCount; // total vertex-set checks in enumerate
   vector<vector<ui>> allCliques;
+  vector<ui> foundLevel;
   vector<vector<ui>> cliquesByVertex;
 
   vector<ui> intersect(vector<ui> A, vector<ui> B);
   vector<ui> setDiff(vector<ui> A, vector<ui> B);
   vector<ui> unionSet(vector<ui> A, vector<ui> B);
-  vector<ui> commonNeighbors(const vector<ui> &mustin);
-
-  // Apply effect of clique C on tree j. Returns true if tree should be skipped.
-  bool applyEffect(vector<ui> &mustinJ, vector<ui> &expandToJ,
-                   const vector<ui> &C);
-  // Retroactive restriction from all cliques found so far.
-  bool retroRestrict(vector<ui> &mustinI, vector<ui> &expandToI);
+  vector<ui> compliment(const vector<ui> &vector1);
 
   void rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo, ui level);
   void enumerate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
@@ -97,45 +92,8 @@ private:
                  bool &done);
 
 public:
-  ReorderNew(Graph &g, DegOrder order = DegOrder::ORIGINAL);
+  Reorder(Graph &g, DegOrder order = DegOrder::ORIGINAL);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
-  ui getMaxCliqueSize() const { return maxCliqueSize; }
-};
-
-class Reorder {
-private:
-  Graph graph;
-  ui n;
-  vector<vector<ui>> adjList;  // adjacency lists
-  vector<vector<ui>> adjList2; // adjacency lists with only greater vertices
-  ui cliqueCount;
-  size_t maxCliqueSize;
-  vector<vector<ui>> allCliques;
-  vector<vector<ui>> cliquesByVertex;
-
-  // Set operations
-  vector<ui> intersect(vector<ui> vector1, vector<ui> vector2);
-  vector<ui> setDifference(vector<ui> A, vector<ui> B);
-  vector<ui> unionSet(vector<ui> vector1, vector<ui> vector2);
-
-  vector<ui> compliment(vector<ui> &vector1);
-
-  // Calls expansion of Trees
-  void rCall(vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo, ui level,
-             ui enlevel);
-
-  // Enumerates a tree untill a Maximal clique is found
-  void enemurate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
-                 vector<vector<ui>> &expandTo, bool &moveToNext, bool &flag,
-                 ui index, ui level, ui enlevel);
-
-public:
-  Reorder(Graph &g);
-  // Finds all Maximal Cliques
-  void findAllMaximalCliques();
-  // Returns number of Maximal cliques found
-  ui getCliqueCount() const { return cliqueCount; }
-  // Returns size of maximum maximal clique found
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };

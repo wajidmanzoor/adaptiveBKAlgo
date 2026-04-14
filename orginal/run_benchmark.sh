@@ -14,14 +14,8 @@
 DATA_DIR="${1:-/data/labdata/wajid/AdjacencyList}"
 LOGS_DIR="${2:-./logs}"
 
-if [ -f "./build/bk_algorithm" ]; then
-  BIN="./build/bk_algorithm"
-elif [ -f "./bk_algorithm" ]; then
-  BIN="./bk_algorithm"
-else
-  echo "Error: bk_algorithm not found. Run 'cmake --build build' or 'make' first."
-  exit 1
-fi
+BIN="./build/bk_algorithm"
+
 
 if [ ! -d "$DATA_DIR" ]; then
   echo "Error: data directory '$DATA_DIR' not found."

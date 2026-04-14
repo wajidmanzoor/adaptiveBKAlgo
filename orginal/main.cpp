@@ -14,46 +14,33 @@ int main(int argc, const char *argv[]) {
   Graph g(filepath);
 
   if (mode == 0) {
-    cout << "Running Adjacency Matrix Bron-Kerbosch..." << endl;
-    AdjMatBK adjMatBk(g);
-    adjMatBk.findAllMaximalCliques();
-  } else if (mode == 1) {
-    cout << "Running Adjacency List Bron-Kerbosch..." << endl;
-    AdjListBK adjListBk(g);
-    adjListBk.findAllMaximalCliques();
-
-  } else if (mode == 2) {
     cout << "Running Pivot BK (Original order)..." << endl;
     PivotBK pivotBk(g, DegOrder::ORIGINAL);
     pivotBk.findAllMaximalCliques();
-  } else if (mode == 3) {
+  } else if (mode == 1) {
     cout << "Running Pivot BK (Ascending degeneracy)..." << endl;
     PivotBK pivotBk(g, DegOrder::ASCENDING);
     pivotBk.findAllMaximalCliques();
-  } else if (mode == 8) {
+  } else if (mode == 2) {
     cout << "Running Pivot BK (Descending degeneracy)..." << endl;
     PivotBK pivotBk(g, DegOrder::DESCENDING);
     pivotBk.findAllMaximalCliques();
+  } else if (mode == 3) {
+    cout << "Running Reorder Bron-Kerbosch Algorithm..." << endl;
+    Reorder reorder(g, DegOrder::ORIGINAL);
+    reorder.findAllMaximalCliques();
   } else if (mode == 4) {
-    cout << "Running Original Reordering Bron-Kerbosch Algorithm..." << endl;
-    Reorder reorder(g);
+    cout << "Running Reorder (Ascending Degeneracy) Bron-Kerbosch "
+            "Algorithm..."
+         << endl;
+    Reorder reorder(g, DegOrder::ASCENDING);
     reorder.findAllMaximalCliques();
   } else if (mode == 5) {
-    cout << "Running ReorderNew Bron-Kerbosch Algorithm..." << endl;
-    ReorderNew reorderNew(g, DegOrder::ORIGINAL);
-    reorderNew.findAllMaximalCliques();
-  } else if (mode == 6) {
-    cout << "Running ReorderNew (Ascending Degeneracy) Bron-Kerbosch "
+    cout << "Running Reorder (Descending Degeneracy) Bron-Kerbosch "
             "Algorithm..."
          << endl;
-    ReorderNew reorderNew(g, DegOrder::ASCENDING);
-    reorderNew.findAllMaximalCliques();
-  } else if (mode == 7) {
-    cout << "Running ReorderNew (Descending Degeneracy) Bron-Kerbosch "
-            "Algorithm..."
-         << endl;
-    ReorderNew reorderNew(g, DegOrder::DESCENDING);
-    reorderNew.findAllMaximalCliques();
+    Reorder reorder(g, DegOrder::DESCENDING);
+    reorder.findAllMaximalCliques();
   }
 
   else {
