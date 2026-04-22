@@ -1,0 +1,35 @@
+n=5, m=6
+ofsset 0 4 7 9 10 12 
+degree 4 3 2 1 2 
+neighbors 1 2 3 4 0 2 4 0 1 0 0 1 
+Running Reorder Bron-Kerbosch Algorithm...
+Level 0: mustin and expandTo sets:
+Vertex 0: mustin={ 0 }  expandTo={ 1 2 3 4 }
+Vertex 1: mustin={ 1 }  expandTo={ 2 4 }
+Vertex 2: mustin={ 2 }  expandTo={ }
+Vertex 3: mustin={ 3 }  expandTo={ }
+Vertex 4: mustin={ 4 }  expandTo={ }
+Level 0: Checking R={ 0 }  Q={ 1 2 3 4 }
+Level 0: Checking R={ 0 1 }  Q={ 2 4 }
+Level 0: Checking R={ 0 1 2 }  Q={ }
+Maximal Clique Found: { 0 1 2 }
+here
+Level 0: After Reorder:
+Vertex 0: mustin={ 3 }  expandTo={ 0 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 3 }  expandTo={ 0 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 3 0 }  expandTo={ }
+     Level 1: Checking R={ 3 0 }  Q={ }
+Level 0: After Reorder:
+Vertex 0: mustin={ 4 }  expandTo={ 0 1 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 4 }  expandTo={ 0 1 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 4 0 }  expandTo={ 1 }
+     Vertex 1: mustin={ 4 1 }  expandTo={ 0 }
+     Level 1: Checking R={ 4 0 }  Q={ 1 }
+     Level 1: Checking R={ 4 0 1 }  Q={ }
+   Maximal Clique Found: { 0 1 4 }
+new here
+ReorderNew: cliques=2  maxSize=3  checks=6  time=0.123208 ms

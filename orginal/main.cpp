@@ -41,10 +41,33 @@ int main(int argc, const char *argv[]) {
          << endl;
     Reorder reorder(g, DegOrder::DESCENDING);
     reorder.findAllMaximalCliques();
+  } else if (mode == 6) {
+    cout << "Running ReorderSib (Brute Force By Size) Algorithm..." << endl;
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BRUTE_FORCE);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 7) {
+    cout << "Running ReorderSib (Backtracking Branch And Bound) Algorithm..."
+         << endl;
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BACKTRACKING);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 8) {
+    cout << "Running ReorderSib (Greedy Approximation) Algorithm..." << endl;
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::GREEDY);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 9) {
+    cout << "Running ReorderSib (Bitmask Exact Search) Algorithm..." << endl;
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BITMASK);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 10) {
+    cout << "Running ReorderSib (Inclusion-Minimal Clique Hitting Set) "
+            "Algorithm..."
+         << endl;
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::MIN_HITTING_SET);
+    reorder.findAllMaximalCliques();
   }
 
   else {
-    cout << "Invalid mode! Use 0, 1, 2, 5, 6, or 7." << endl;
+    cout << "Invalid mode! Use 0..10." << endl;
     exit(1);
   }
 
