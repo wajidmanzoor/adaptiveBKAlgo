@@ -118,9 +118,9 @@ private:
   vector<ui> foundLevel;
   vector<vector<ui>> cliquesByVertex;
 
-  vector<ui> intersect(vector<ui> A, vector<ui> B);
-  vector<ui> setDiff(vector<ui> A, vector<ui> B);
-  vector<ui> unionSet(vector<ui> A, vector<ui> B);
+  vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
+  vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
+  vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
   vector<ui> compliment(const vector<ui> &vector1);
 
   bool isCliqueSet(const vector<ui> &S);
@@ -135,6 +135,9 @@ private:
 
   vector<vector<ui>> generateSiblingSets(const vector<ui> &M,
                                          const vector<ui> &E, ui level);
+  vector<vector<ui>>
+  generateSiblingSetsFromCliques(const vector<ui> &E,
+                                 const vector<ui> &cliqueIds);
   vector<vector<ui>> bruteForceBySize(const vector<ui> &E,
                                       const vector<vector<ui>> &hitSets);
   vector<vector<ui>> backtrackingBranchBound(

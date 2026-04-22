@@ -867,7 +867,7 @@ ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method) {
   buildAdjLists(g, perm, adjList, adjList2);
 }
 
-vector<ui> ReorderSib::intersect(vector<ui> A, vector<ui> B) {
+vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
   vector<ui> C;
   C.reserve(min(A.size(), B.size()));
   ui i = 0, j = 0;
@@ -884,7 +884,7 @@ vector<ui> ReorderSib::intersect(vector<ui> A, vector<ui> B) {
   return C;
 }
 
-vector<ui> ReorderSib::setDiff(vector<ui> A, vector<ui> B) {
+vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
   vector<ui> C;
   C.reserve(A.size());
   ui i = 0, j = 0;
@@ -901,7 +901,7 @@ vector<ui> ReorderSib::setDiff(vector<ui> A, vector<ui> B) {
   return C;
 }
 
-vector<ui> ReorderSib::unionSet(vector<ui> A, vector<ui> B) {
+vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
   vector<ui> U;
   U.reserve(A.size() + B.size());
   ui i = 0, j = 0;
@@ -972,30 +972,24 @@ vector<ui> ReorderSib::commonExpand(const vector<ui> &E,
 
 vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
   vector<ui> result;
-  vector<char> seen(allCliques.size(), 0);
   if (M.empty())
     return result;
 
+  ui seed = M[0];
   for (ui v : M) {
-    for (ui cId : cliquesByVertex[v]) {
-      if (cId >= allCliques.size() || seen[cId])
-        continue;
-      if (foundLevel[cId] < level - 1)
-        continue;
+    if (cliquesByVertex[v].size() < cliquesByVertex[seed].size())
+      seed = v;
+  }
 
-      bool containsAllMustin = true;
-      for (ui mv : M) {
-        if (!binary_search(allCliques[cId].begin(), allCliques[cId].end(),
-                           mv)) {
-          containsAllMustin = false;
-          break;
-        }
-      }
-      if (containsAllMustin) {
-        seen[cId] = 1;
-        result.push_back(cId);
-      }
-    }
+  for (ui cId : cliquesByVertex[seed]) {
+    if (cId >= allCliques.size() || foundLevel[cId] < level - 1)
+      continue;
+
+    bool containsAllMustin =
+        includes(allCliques[cId].begin(), allCliques[cId].end(), M.begin(),
+                 M.end());
+    if (containsAllMustin)
+      result.push_back(cId);
   }
   return result;
 }
@@ -1005,7 +999,7 @@ vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
   vector<vector<ui>> hitSets;
   hitSets.reserve(cliqueIds.size());
   for (ui cId : cliqueIds)
-    hitSets.push_back(intersect(E, compliment(allCliques[cId])));
+    hitSets.push_back(setDiff(E, allCliques[cId]));
   return hitSets;
 }
 
@@ -1067,6 +1061,12 @@ vector<vector<ui>> ReorderSib::generateSiblingSets(const vector<ui> &M,
                                                    const vector<ui> &E,
                                                    ui level) {
   vector<ui> cliqueIds = collectCoveringCliques(M, level);
+  return generateSiblingSetsFromCliques(E, cliqueIds);
+}
+
+vector<vector<ui>>
+ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
+                                           const vector<ui> &cliqueIds) {
   if (cliqueIds.empty())
     return singletonBranches(E);
 
@@ -1104,7 +1104,7 @@ ReorderSib::bruteForceBySize(const vector<ui> &E,
   function<void(ui, ui, ui)> choose = [&](ui start, ui remaining,
                                           ui targetSize) {
     if (remaining == 0) {
-      if (isCliqueSet(current) && hitsAll(current, hitSets))
+      if (hitsAll(current, hitSets))
         solutions.push_back(current);
       return;
     }
@@ -1231,6 +1231,7 @@ vector<vector<ui>>
 ReorderSib::greedyApproximation(const vector<ui> &E,
                                 const vector<vector<ui>> &hitSets) {
   vector<ui> S;
+  vector<char> inS(n, 0);
   vector<char> covered(hitSets.size(), 0);
   ui coveredCount = 0;
 
@@ -1239,7 +1240,7 @@ ReorderSib::greedyApproximation(const vector<ui> &E,
     ui bestGain = 0;
 
     for (ui v : E) {
-      if (find(S.begin(), S.end(), v) != S.end())
+      if (inS[v])
         continue;
 
       bool connected = true;
@@ -1267,6 +1268,7 @@ ReorderSib::greedyApproximation(const vector<ui> &E,
       return {};
 
     S.push_back(bestVertex);
+    inS[bestVertex] = 1;
     for (ui i = 0; i < hitSets.size(); i++) {
       if (!covered[i] &&
           binary_search(hitSets[i].begin(), hitSets[i].end(), bestVertex)) {
@@ -1291,15 +1293,34 @@ ReorderSib::bitmaskExactSearch(const vector<ui> &E,
     fullMask |= (1ULL << i);
 
   vector<ull> masks(E.size(), 0);
-  for (ui i = 0; i < E.size(); i++) {
-    for (ui j = 0; j < hitSets.size(); j++) {
-      if (binary_search(hitSets[j].begin(), hitSets[j].end(), E[i]))
-        masks[i] |= (1ULL << j);
+  vector<ui> eIndex(n, n);
+  for (ui i = 0; i < E.size(); i++)
+    eIndex[E[i]] = i;
+  for (ui j = 0; j < hitSets.size(); j++) {
+    for (ui v : hitSets[j]) {
+      ui idx = eIndex[v];
+      if (idx < E.size())
+        masks[idx] |= (1ULL << j);
     }
   }
 
   vector<vector<ui>> solutions;
   vector<ui> current;
+  vector<ui> currentIndices;
+  const size_t eSize = E.size();
+  const bool useCompatTable = eSize <= 4096;
+  vector<char> compatible;
+  if (useCompatTable) {
+    compatible.assign(eSize * eSize, 0);
+    for (ui i = 0; i < eSize; i++) {
+      for (ui j = 0; j < i; j++) {
+        if (binary_search(adjList[E[j]].begin(), adjList[E[j]].end(), E[i])) {
+          compatible[i * eSize + j] = 1;
+          compatible[j * eSize + i] = 1;
+        }
+      }
+    }
+  }
 
   function<void(ui, ui, ull)> dfs = [&](ui start, ui remaining, ull mask) {
     if (remaining == 0) {
@@ -1312,17 +1333,28 @@ ReorderSib::bitmaskExactSearch(const vector<ui> &E,
 
     for (ui i = start; i < E.size(); i++) {
       bool connected = true;
-      for (ui v : current) {
-        if (!binary_search(adjList[v].begin(), adjList[v].end(), E[i])) {
-          connected = false;
-          break;
+      if (useCompatTable) {
+        for (ui idx : currentIndices) {
+          if (!compatible[idx * eSize + i]) {
+            connected = false;
+            break;
+          }
+        }
+      } else {
+        for (ui v : current) {
+          if (!binary_search(adjList[v].begin(), adjList[v].end(), E[i])) {
+            connected = false;
+            break;
+          }
         }
       }
       if (!connected)
         continue;
 
       current.push_back(E[i]);
+      currentIndices.push_back(i);
       dfs(i + 1, remaining - 1, mask | masks[i]);
+      currentIndices.pop_back();
       current.pop_back();
     }
   };
@@ -1342,15 +1374,8 @@ ReorderSib::minimumCliqueHittingSet(const vector<ui> &E,
 bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
                                          const vector<ui> &E,
                                          const vector<ui> &C) {
-  for (ui v : M) {
-    if (!binary_search(C.begin(), C.end(), v))
-      return false;
-  }
-  for (ui v : E) {
-    if (!binary_search(C.begin(), C.end(), v))
-      return false;
-  }
-  return true;
+  return includes(C.begin(), C.end(), M.begin(), M.end()) &&
+         includes(C.begin(), C.end(), E.begin(), E.end());
 }
 
 void ReorderSib::rCall(vector<vector<ui>> mustin,
@@ -1382,7 +1407,8 @@ void ReorderSib::rCall(vector<vector<ui>> mustin,
     vector<ui> coveringCliques = collectCoveringCliques(baseM, level);
     bool hasCoveringCliques = !coveringCliques.empty();
     bool needsFullSkip = fullSkipCheck.empty() ? false : fullSkipCheck[0];
-    vector<vector<ui>> siblingSets = generateSiblingSets(baseM, baseE, level);
+    vector<vector<ui>> siblingSets =
+        generateSiblingSetsFromCliques(baseE, coveringCliques);
 
     mustin.clear();
     expandTo.clear();
@@ -1492,10 +1518,12 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
       vector<vector<ui>> newExpandTo;
       vector<char> newFullSkipCheck;
 
+#if debug
       if (level == 0)
         cout << "here" << endl;
       else
         cout << "new here" << endl;
+#endif
 
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
         bool skipBranch = false;
