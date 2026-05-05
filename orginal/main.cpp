@@ -64,10 +64,38 @@ int main(int argc, const char *argv[]) {
          << endl;
     ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::MIN_HITTING_SET);
     reorder.findAllMaximalCliques();
-  }
-
-  else {
-    cout << "Invalid mode! Use 0..10." << endl;
+  } else if (mode == 11) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BRUTE_FORCE);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 12) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BACKTRACKING);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 13) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::GREEDY);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 14) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BITMASK);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 15) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::MIN_HITTING_SET);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 16) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BRUTE_FORCE);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 17) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BACKTRACKING);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 18) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::GREEDY);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 19) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BITMASK);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 20) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::MIN_HITTING_SET);
+    reorder.findAllMaximalCliques();
+  } else {
+    cout << "Invalid mode! Use 0..20." << endl;
     exit(1);
   }
 

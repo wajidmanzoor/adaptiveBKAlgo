@@ -459,33 +459,6 @@ void PivotBK::findAllMaximalCliques() {
 #endif
 }
 
-static void printVec(const string &label, const vector<ui> &v);
-static void printForest(const string &label, const vector<vector<ui>> &mustin,
-                        const vector<vector<ui>> &expandTo);
-
-// ── print helpers
-// ─────────────────────────────────────────────────────────────
-static void printVec(const string &label, const vector<ui> &v) {
-  cout << label << "{ ";
-  for (ui x : v)
-    cout << x << " ";
-  cout << "}" << endl;
-}
-
-static void printForest(const string &label, const vector<vector<ui>> &mustin,
-                        const vector<vector<ui>> &expandTo) {
-  cout << label << endl;
-  for (ui i = 0; i < mustin.size(); i++) {
-    cout << "    [" << i << "]  mustin=[ ";
-    for (ui v : mustin[i])
-      cout << v << " ";
-    cout << "]  expandTo=[ ";
-    for (ui v : expandTo[i])
-      cout << v << " ";
-    cout << "]" << endl;
-  }
-}
-
 /// Compliment reorder
 
 Reorder::Reorder(Graph &g, DegOrder order) {
@@ -936,16 +909,6 @@ vector<ui> ReorderSib::compliment(const vector<ui> &vector1) {
   return C;
 }
 
-bool ReorderSib::isCliqueSet(const vector<ui> &S) {
-  for (ui i = 0; i < S.size(); i++) {
-    for (ui j = i + 1; j < S.size(); j++) {
-      if (!binary_search(adjList[S[i]].begin(), adjList[S[i]].end(), S[j]))
-        return false;
-    }
-  }
-  return true;
-}
-
 bool ReorderSib::hitsAll(const vector<ui> &S,
                          const vector<vector<ui>> &hitSets) {
   for (const vector<ui> &hitSet : hitSets) {
@@ -962,14 +925,17 @@ bool ReorderSib::hitsAll(const vector<ui> &S,
   return true;
 }
 
-vector<ui> ReorderSib::commonExpand(const vector<ui> &E,
-                                    const vector<ui> &S) {
+// After choosing a sibling set S, only vertices still in E and adjacent to
+// every vertex of S can continue to grow the branch.
+vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
   vector<ui> result = setDiff(E, S);
   for (ui v : S)
     result = intersect(result, adjList[v]);
   return result;
 }
 
+// Find previously discovered cliques that already contain M. These are the
+// only cliques that matter for the sibling effect at this branch.
 vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
   vector<ui> result;
   if (M.empty())
@@ -982,18 +948,21 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
   }
 
   for (ui cId : cliquesByVertex[seed]) {
+    // Only keep cliques from the previous level or deeper; older levels have
+    // already contributed their reorder/sibling information.
     if (cId >= allCliques.size() || foundLevel[cId] < level - 1)
       continue;
 
-    bool containsAllMustin =
-        includes(allCliques[cId].begin(), allCliques[cId].end(), M.begin(),
-                 M.end());
+    bool containsAllMustin = includes(
+        allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
     if (containsAllMustin)
       result.push_back(cId);
   }
   return result;
 }
 
+// Each covering clique C contributes the constraint "pick something from E
+// that is outside C", which is exactly E \ C.
 vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
                                             const vector<ui> &cliqueIds) {
   vector<vector<ui>> hitSets;
@@ -1003,6 +972,8 @@ vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
   return hitSets;
 }
 
+// If M is not covered by any old clique, the sibling effect does nothing and
+// we branch on one vertex at a time exactly like the base reorder search.
 vector<vector<ui>> ReorderSib::singletonBranches(const vector<ui> &E) {
   vector<vector<ui>> branches;
   branches.reserve(E.size());
@@ -1011,27 +982,9 @@ vector<vector<ui>> ReorderSib::singletonBranches(const vector<ui> &E) {
   return branches;
 }
 
-vector<vector<ui>> ReorderSib::minimalBySize(vector<vector<ui>> solutions) {
-  for (vector<ui> &S : solutions)
-    sort(S.begin(), S.end());
-  sort(solutions.begin(), solutions.end());
-  solutions.erase(unique(solutions.begin(), solutions.end()), solutions.end());
-
-  if (solutions.empty())
-    return solutions;
-
-  size_t bestSize = solutions[0].size();
-  for (const vector<ui> &S : solutions)
-    bestSize = min(bestSize, S.size());
-
-  vector<vector<ui>> minimal;
-  for (const vector<ui> &S : solutions) {
-    if (S.size() == bestSize)
-      minimal.push_back(S);
-  }
-  return minimal;
-}
-
+// Remove duplicate sibling sets, then keep only the ones that are minimal by
+// inclusion. If S1 contains S2, S1 is unnecessary because S2 already enforces
+// the same sibling split with a smaller branch seed.
 vector<vector<ui>>
 ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
   for (vector<ui> &S : solutions)
@@ -1057,13 +1010,9 @@ ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
   return minimal;
 }
 
-vector<vector<ui>> ReorderSib::generateSiblingSets(const vector<ui> &M,
-                                                   const vector<ui> &E,
-                                                   ui level) {
-  vector<ui> cliqueIds = collectCoveringCliques(M, level);
-  return generateSiblingSetsFromCliques(E, cliqueIds);
-}
-
+// Convert the sibling effect into a clique-constrained hitting-set problem
+// over the already discovered covering cliques, then solve it with the
+// requested strategy.
 vector<vector<ui>>
 ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
                                            const vector<ui> &cliqueIds) {
@@ -1071,6 +1020,9 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
     return singletonBranches(E);
 
   vector<vector<ui>> hitSets = buildHitSets(E, cliqueIds);
+
+  // An empty hit set means some old clique fully contains E, so no sibling
+  // choice can separate the current branch from that clique.
   for (const vector<ui> &hitSet : hitSets) {
     if (hitSet.empty())
       return {};
@@ -1101,8 +1053,8 @@ ReorderSib::bruteForceBySize(const vector<ui> &E,
   vector<vector<ui>> solutions;
   vector<ui> current;
 
-  function<void(ui, ui, ui)> choose = [&](ui start, ui remaining,
-                                          ui targetSize) {
+  // Enumerate clique-compatible subsets of E in increasing size.
+  function<void(ui, ui)> choose = [&](ui start, ui remaining) {
     if (remaining == 0) {
       if (hitsAll(current, hitSets))
         solutions.push_back(current);
@@ -1123,13 +1075,13 @@ ReorderSib::bruteForceBySize(const vector<ui> &E,
         continue;
 
       current.push_back(E[i]);
-      choose(i + 1, remaining - 1, targetSize);
+      choose(i + 1, remaining - 1);
       current.pop_back();
     }
   };
 
   for (ui targetSize = 1; targetSize <= E.size(); targetSize++) {
-    choose(0, targetSize, targetSize);
+    choose(0, targetSize);
   }
   return minimalByInclusion(solutions);
 }
@@ -1140,6 +1092,8 @@ ReorderSib::backtrackingBranchBound(const vector<ui> &E,
   vector<vector<ui>> solutions;
   vector<ui> current;
 
+  // DFS over clique-compatible subsets of E. Once the current set already hits
+  // every constraint, record it and stop descending that branch.
   function<void(ui)> dfs = [&](ui start) {
     if (hitsAll(current, hitSets)) {
       solutions.push_back(current);
@@ -1167,66 +1121,6 @@ ReorderSib::backtrackingBranchBound(const vector<ui> &E,
   return minimalByInclusion(solutions);
 }
 
-void ReorderSib::backtrackSearch(const vector<ui> &E,
-                                 const vector<vector<ui>> &hitSets,
-                                 vector<ui> &current, vector<char> &covered,
-                                 ui coveredCount, ui start, ui &bestSize,
-                                 vector<vector<ui>> &solutions) {
-  if (coveredCount == hitSets.size()) {
-    if (current.size() < bestSize) {
-      bestSize = (ui)current.size();
-      solutions.clear();
-    }
-    if (current.size() == bestSize)
-      solutions.push_back(current);
-    return;
-  }
-  if (current.size() >= bestSize)
-    return;
-
-  // Pick the first uncovered set, then branch on its feasible vertices.
-  ui target = 0;
-  while (target < hitSets.size() && covered[target])
-    target++;
-  if (target == hitSets.size())
-    return;
-
-  for (ui v : hitSets[target]) {
-    if (find(current.begin(), current.end(), v) != current.end())
-      continue;
-    bool inE = binary_search(E.begin(), E.end(), v);
-    if (!inE)
-      continue;
-
-    bool connected = true;
-    for (ui u : current) {
-      if (!binary_search(adjList[u].begin(), adjList[u].end(), v)) {
-        connected = false;
-        break;
-      }
-    }
-    if (!connected)
-      continue;
-
-    vector<ui> newlyCovered;
-    for (ui i = 0; i < hitSets.size(); i++) {
-      if (!covered[i] && binary_search(hitSets[i].begin(), hitSets[i].end(), v)) {
-        covered[i] = 1;
-        newlyCovered.push_back(i);
-      }
-    }
-
-    current.push_back(v);
-    backtrackSearch(E, hitSets, current, covered,
-                    coveredCount + (ui)newlyCovered.size(), start + 1,
-                    bestSize, solutions);
-    current.pop_back();
-
-    for (ui i : newlyCovered)
-      covered[i] = 0;
-  }
-}
-
 vector<vector<ui>>
 ReorderSib::greedyApproximation(const vector<ui> &E,
                                 const vector<vector<ui>> &hitSets) {
@@ -1235,6 +1129,8 @@ ReorderSib::greedyApproximation(const vector<ui> &E,
   vector<char> covered(hitSets.size(), 0);
   ui coveredCount = 0;
 
+  // Greedily add the clique-compatible vertex that hits the largest number of
+  // still-uncovered constraints.
   while (coveredCount < hitSets.size()) {
     ui bestVertex = numeric_limits<ui>::max();
     ui bestGain = 0;
@@ -1255,7 +1151,8 @@ ReorderSib::greedyApproximation(const vector<ui> &E,
 
       ui gain = 0;
       for (ui i = 0; i < hitSets.size(); i++) {
-        if (!covered[i] && binary_search(hitSets[i].begin(), hitSets[i].end(), v))
+        if (!covered[i] &&
+            binary_search(hitSets[i].begin(), hitSets[i].end(), v))
           gain++;
       }
       if (gain > bestGain || (gain == bestGain && gain > 0 && v < bestVertex)) {
@@ -1288,6 +1185,8 @@ ReorderSib::bitmaskExactSearch(const vector<ui> &E,
   if (hitSets.size() > 63)
     return backtrackingBranchBound(E, hitSets);
 
+  // Encode "which hit sets does this vertex cover?" as a 64-bit mask so the
+  // exact search can update coverage with fast bitwise OR operations.
   ull fullMask = 0;
   for (ui i = 0; i < hitSets.size(); i++)
     fullMask |= (1ULL << i);
@@ -1368,7 +1267,18 @@ ReorderSib::bitmaskExactSearch(const vector<ui> &E,
 vector<vector<ui>>
 ReorderSib::minimumCliqueHittingSet(const vector<ui> &E,
                                     const vector<vector<ui>> &hitSets) {
+  // This mode currently reuses the exact backtracking solver.
   return backtrackingBranchBound(E, hitSets);
+}
+
+static string encodeClique(const vector<ui> &C) {
+  string key;
+  key.reserve(C.size() * 6);
+  for (ui v : C) {
+    key += to_string(v);
+    key.push_back(',');
+  }
+  return key;
 }
 
 bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
@@ -1378,9 +1288,10 @@ bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
          includes(C.begin(), C.end(), E.begin(), E.end());
 }
 
-void ReorderSib::rCall(vector<vector<ui>> mustin,
-                       vector<vector<ui>> expandTo, ui level,
-                       vector<char> fullSkipCheck) {
+// Apply the sibling effect at this level, then continue the reorder search on
+// the resulting branch seeds (mustin, expandTo).
+void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
+                       ui level, vector<char> fullSkipCheck) {
   if (fullSkipCheck.size() != mustin.size())
     fullSkipCheck.assign(mustin.size(), 0);
 
@@ -1404,9 +1315,13 @@ void ReorderSib::rCall(vector<vector<ui>> mustin,
   if (level != 0 && !expandTo.empty() && !expandTo[0].empty()) {
     vector<ui> baseM = mustin[0];
     vector<ui> baseE = expandTo[0];
+
+    // Old cliques containing M are exactly the cliques that can force a
+    // sibling split at this branch.
     vector<ui> coveringCliques = collectCoveringCliques(baseM, level);
     bool hasCoveringCliques = !coveringCliques.empty();
     bool needsFullSkip = fullSkipCheck.empty() ? false : fullSkipCheck[0];
+
     vector<vector<ui>> siblingSets =
         generateSiblingSetsFromCliques(baseE, coveringCliques);
 
@@ -1424,16 +1339,6 @@ void ReorderSib::rCall(vector<vector<ui>> mustin,
         fullSkipCheck.push_back(branchNeedsFullSkip);
       } else {
         for (ui v : baseExpand) {
-          bool connectsToBase = true;
-          for (ui u : baseMustin) {
-            if (!binary_search(adjList[u].begin(), adjList[u].end(), v)) {
-              connectsToBase = false;
-              break;
-            }
-          }
-          if (!connectsToBase)
-            continue;
-
           vector<ui> childMustin = unionSet(baseMustin, {v});
           mustin.push_back(childMustin);
           expandTo.push_back(intersect(baseExpand, adjList[v]));
@@ -1470,11 +1375,13 @@ void ReorderSib::rCall(vector<vector<ui>> mustin,
   }
 }
 
+// Standard forward-neighbor clique enumeration, with the sibling-effect seeds
+// produced by rCall driving which branches are explored next.
 void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
                            vector<vector<ui>> &mustin,
                            vector<vector<ui>> &expandTo,
-                           vector<char> &fullSkipCheck, ui treeIndex,
-                           ui level, bool &done) {
+                           vector<char> &fullSkipCheck, ui treeIndex, ui level,
+                           bool &done) {
   checksCount++;
 
   if (debug) {
@@ -1493,41 +1400,35 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     if ((ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
-      bool alreadyFound =
-          find(allCliques.begin(), allCliques.end(), C) != allCliques.end();
-      if (!alreadyFound) {
-        cliqueCount++;
-        if (debug) {
-          for (ui i = 0; i < level; i++)
-            cout << "   ";
-          cout << "Maximal Clique Found: { ";
-          for (ui v : C)
-            cout << v << " ";
-          cout << "}" << endl;
-        }
-        maxCliqueSize = max(maxCliqueSize, C.size());
-        ui cliqueIdx = (ui)allCliques.size();
-        allCliques.push_back(C);
-        foundLevel.push_back(level);
+      if (!seenCliques.insert(encodeClique(C)).second)
+        return;
+
+      cliqueCount++;
+      if (debug) {
+        for (ui i = 0; i < level; i++)
+          cout << "   ";
+        cout << "Maximal Clique Found: { ";
         for (ui v : C)
-          cliquesByVertex[v].push_back(cliqueIdx);
+          cout << v << " ";
+        cout << "}" << endl;
       }
+      maxCliqueSize = max(maxCliqueSize, C.size());
+      ui cliqueIdx = (ui)allCliques.size();
+      allCliques.push_back(C);
+      foundLevel.push_back(level);
+      for (ui v : C)
+        cliquesByVertex[v].push_back(cliqueIdx);
 
       done = true;
       vector<vector<ui>> newMustin;
       vector<vector<ui>> newExpandTo;
       vector<char> newFullSkipCheck;
 
-#if debug
-      if (level == 0)
-        cout << "here" << endl;
-      else
-        cout << "new here" << endl;
-#endif
-
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
         bool skipBranch = false;
         if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
+          // Full-skip mode means the whole seeded search space for this branch
+          // sits inside the clique we just found, so we can discard it.
           skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
         } else {
           skipBranch = find(C.begin(), C.end(), mustin[i].back()) != C.end();
@@ -1538,10 +1439,12 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
         bool usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
         vector<ui> reorderedExpand;
         if (usesFullSkip) {
+          // Rebuild the entire branch space from M and the new clique C.
           reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
           for (ui mv : mustin[i])
             reorderedExpand = intersect(reorderedExpand, adjList[mv]);
         } else {
+          // Base reorder update: branch from the last mandatory vertex only.
           reorderedExpand =
               intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
                         unionSet(C, expandTo[i]));
@@ -1590,6 +1493,7 @@ void ReorderSib::findAllMaximalCliques() {
   checksCount = 0;
   allCliques.clear();
   foundLevel.clear();
+  seenCliques.clear();
   for (ui v = 0; v < n; v++)
     cliquesByVertex[v].clear();
 
@@ -1606,7 +1510,6 @@ void ReorderSib::findAllMaximalCliques() {
   auto t1 = chrono::high_resolution_clock::now();
   double ms = chrono::duration<double, milli>(t1 - t0).count();
 
-  cout << "ReorderSib: cliques=" << cliqueCount
-       << "  maxSize=" << maxCliqueSize << "  checks=" << checksCount
-       << "  time=" << ms << " ms" << endl;
+  cout << "ReorderSib: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
+       << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
 }

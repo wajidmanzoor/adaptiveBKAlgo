@@ -1,0 +1,3 @@
+/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/orginal/build/release_build/CMakeFiles/bk_algorithm.dir
+/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/orginal/build/release_build/CMakeFiles/edit_cache.dir
+/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/orginal/build/release_build/CMakeFiles/rebuild_cache.dir

@@ -117,24 +117,21 @@ private:
   vector<vector<ui>> allCliques;
   vector<ui> foundLevel;
   vector<vector<ui>> cliquesByVertex;
+  unordered_set<string> seenCliques;
 
   vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
   vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
   vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
   vector<ui> compliment(const vector<ui> &vector1);
 
-  bool isCliqueSet(const vector<ui> &S);
   bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);
   vector<ui> collectCoveringCliques(const vector<ui> &M, ui level);
   vector<vector<ui>> buildHitSets(const vector<ui> &E,
                                   const vector<ui> &cliqueIds);
   vector<vector<ui>> singletonBranches(const vector<ui> &E);
-  vector<vector<ui>> minimalBySize(vector<vector<ui>> solutions);
   vector<vector<ui>> minimalByInclusion(vector<vector<ui>> solutions);
 
-  vector<vector<ui>> generateSiblingSets(const vector<ui> &M,
-                                         const vector<ui> &E, ui level);
   vector<vector<ui>>
   generateSiblingSetsFromCliques(const vector<ui> &E,
                                  const vector<ui> &cliqueIds);
@@ -142,17 +139,12 @@ private:
                                       const vector<vector<ui>> &hitSets);
   vector<vector<ui>> backtrackingBranchBound(
       const vector<ui> &E, const vector<vector<ui>> &hitSets);
-  void backtrackSearch(const vector<ui> &E, const vector<vector<ui>> &hitSets,
-                       vector<ui> &current, vector<char> &covered,
-                       ui coveredCount, ui start, ui &bestSize,
-                       vector<vector<ui>> &solutions);
   vector<vector<ui>> greedyApproximation(const vector<ui> &E,
                                          const vector<vector<ui>> &hitSets);
   vector<vector<ui>> bitmaskExactSearch(const vector<ui> &E,
                                         const vector<vector<ui>> &hitSets);
   vector<vector<ui>> minimumCliqueHittingSet(
       const vector<ui> &E, const vector<vector<ui>> &hitSets);
-
   bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
                                const vector<ui> &C);
 
@@ -169,3 +161,4 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
+
