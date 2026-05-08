@@ -813,6 +813,37 @@ void Reorder::findAllMaximalCliques() {
        << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
 }
 
+// ── ReorderSib profiling ──────────────────────────────────────────────────────
+struct RSibProf {
+  double rCall_ms=0, enumerate_ms=0, collect_ms=0, solver_ms=0;
+  double minimal_ms=0, commonExp_ms=0, dedup_ms=0, buildHit_ms=0;
+  long   rCall_n=0, enumerate_n=0, collect_n=0, solver_n=0;
+  long   minimal_n=0, commonExp_n=0, dedup_n=0, buildHit_n=0;
+  void reset(){ *this = RSibProf{}; }
+  void print(double total_ms) const {
+    auto pct=[&](double v){ return total_ms>0?100.0*v/total_ms:0.0; };
+    printf("\n── ReorderSib cost breakdown ─────────────────────────────────\n");
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","enumerate (core search)",enumerate_ms,pct(enumerate_ms),enumerate_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","rCall overhead",         rCall_ms,    pct(rCall_ms),    rCall_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","backtrackingBranchBound",solver_ms,   pct(solver_ms),   solver_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","collectCoveringCliques", collect_ms,  pct(collect_ms),  collect_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","buildHitSets",           buildHit_ms, pct(buildHit_ms), buildHit_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","minimalByInclusion",     minimal_ms,  pct(minimal_ms),  minimal_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","commonExpand",           commonExp_ms,pct(commonExp_ms),commonExp_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","seenCliques dedup",      dedup_ms,    pct(dedup_ms),    dedup_n);
+    printf("  %-30s %9.3f ms  %5.1f%%\n",           "TOTAL (wall)",           total_ms,    100.0);
+    printf("──────────────────────────────────────────────────────────────\n");
+  }
+};
+static RSibProf rsp;
+
+struct ScopedTimer {
+  chrono::high_resolution_clock::time_point t0;
+  double &acc; long &cnt;
+  ScopedTimer(double &a, long &c): t0(chrono::high_resolution_clock::now()), acc(a), cnt(c){}
+  ~ScopedTimer(){ acc+=chrono::duration<double,milli>(chrono::high_resolution_clock::now()-t0).count(); ++cnt; }
+};
+
 // ReorderSib Implementation
 ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method) {
   n = g.n;
@@ -928,6 +959,7 @@ bool ReorderSib::hitsAll(const vector<ui> &S,
 // After choosing a sibling set S, only vertices still in E and adjacent to
 // every vertex of S can continue to grow the branch.
 vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
+  ScopedTimer _t(rsp.commonExp_ms, rsp.commonExp_n);
   vector<ui> result = setDiff(E, S);
   for (ui v : S)
     result = intersect(result, adjList[v]);
@@ -937,6 +969,7 @@ vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
 // Find previously discovered cliques that already contain M. These are the
 // only cliques that matter for the sibling effect at this branch.
 vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
+  ScopedTimer _t(rsp.collect_ms, rsp.collect_n);
   vector<ui> result;
   if (M.empty())
     return result;
@@ -965,6 +998,7 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
 // that is outside C", which is exactly E \ C.
 vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
                                             const vector<ui> &cliqueIds) {
+  ScopedTimer _t(rsp.buildHit_ms, rsp.buildHit_n);
   vector<vector<ui>> hitSets;
   hitSets.reserve(cliqueIds.size());
   for (ui cId : cliqueIds)
@@ -987,6 +1021,7 @@ vector<vector<ui>> ReorderSib::singletonBranches(const vector<ui> &E) {
 // the same sibling split with a smaller branch seed.
 vector<vector<ui>>
 ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
+  ScopedTimer _t(rsp.minimal_ms, rsp.minimal_n);
   for (vector<ui> &S : solutions)
     sort(S.begin(), S.end());
   sort(solutions.begin(), solutions.end());
@@ -1042,6 +1077,8 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
     return bitmaskExactSearch(E, hitSets);
   case SibMethod::MIN_HITTING_SET:
     return minimumCliqueHittingSet(E, hitSets);
+  case SibMethod::OPTIMIZED:
+    return efficientHittingSet(E, hitSets);
   }
 
   return bruteForceBySize(E, hitSets);
@@ -1089,6 +1126,7 @@ ReorderSib::bruteForceBySize(const vector<ui> &E,
 vector<vector<ui>>
 ReorderSib::backtrackingBranchBound(const vector<ui> &E,
                                     const vector<vector<ui>> &hitSets) {
+  ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
   vector<vector<ui>> solutions;
   vector<ui> current;
 
@@ -1267,8 +1305,144 @@ ReorderSib::bitmaskExactSearch(const vector<ui> &E,
 vector<vector<ui>>
 ReorderSib::minimumCliqueHittingSet(const vector<ui> &E,
                                     const vector<vector<ui>> &hitSets) {
-  // This mode currently reuses the exact backtracking solver.
   return backtrackingBranchBound(E, hitSets);
+}
+
+// Optimized exact solver for all minimal clique-constrained hitting sets.
+//
+// Improvements over backtrackingBranchBound:
+//   1. Bitmask coverage  — done-check and update are O(1) bitwise ops.
+//   2. Incremental candidate list — compat-filtered frontier passed down,
+//      no per-step binary_search into adjList.
+//   3. Fail-first dead-branch  — prune as soon as any uncovered constraint
+//      has zero candidates left.
+//   4. "Covers nothing new" skip — a vertex that adds no new coverage can
+//      never be part of a minimal solution; skip it unconditionally.
+//   5. Live minimal-set maintenance — dominated solutions are removed the
+//      moment a smaller one is found; no post-pass minimalByInclusion needed.
+//   6. Coverage-descending candidate order — high-utility vertices tried
+//      first, producing solutions earlier and enabling more pruning.
+vector<vector<ui>>
+ReorderSib::efficientHittingSet(const vector<ui> &E,
+                                const vector<vector<ui>> &hitSets) {
+  const ui eSize = (ui)E.size();
+  const ui hSize = (ui)hitSets.size();
+
+  // Fall back if bitmask cannot cover all constraints.
+  if (hSize > 63) return backtrackingBranchBound(E, hitSets);
+
+  // ── Pre-computation ───────────────────────────────────────────────────────
+
+  // compat[i*eSize+j] = 1  iff  E[i] and E[j] are adjacent in the graph.
+  vector<char> compat(eSize * eSize, 0);
+  for (ui i = 0; i < eSize; i++)
+    for (ui j = i + 1; j < eSize; j++)
+      if (binary_search(adjList[E[i]].begin(), adjList[E[i]].end(), E[j]))
+        compat[i * eSize + j] = compat[j * eSize + i] = 1;
+
+  // cov[i] = bitmask of hitSets that E[i] covers.
+  const ull fullMask = (hSize == 64) ? ~0ULL : ((1ULL << hSize) - 1);
+  vector<ull> cov(eSize, 0);
+  {
+    vector<ui> eIdx(n, eSize);
+    for (ui i = 0; i < eSize; i++) eIdx[E[i]] = i;
+    for (ui h = 0; h < hSize; h++)
+      for (ui v : hitSets[h])
+        if (eIdx[v] < eSize)
+          cov[eIdx[v]] |= (1ULL << h);
+  }
+
+  // Initial candidate order: descending coverage count so high-utility
+  // vertices are tried first, finding solutions sooner for better pruning.
+  vector<ui> initCands(eSize);
+  iota(initCands.begin(), initCands.end(), 0);
+  sort(initCands.begin(), initCands.end(), [&](ui a, ui b) {
+    return __builtin_popcountll(cov[a]) > __builtin_popcountll(cov[b]);
+  });
+
+  // ── DFS ───────────────────────────────────────────────────────────────────
+
+  // solutions is maintained as a live minimal-by-inclusion set throughout.
+  vector<vector<ui>> solutions;
+  // cur holds E-indices of the partial solution, in strictly increasing order.
+  vector<ui> cur;
+
+  // cands : E-indices still reachable (clique-compatible with cur, index >
+  //         last element of cur). Passed by value so each level owns its copy.
+  // covered: bitmask of constraints already satisfied by cur.
+  function<void(vector<ui>, ull)> dfs = [&](vector<ui> cands, ull covered) {
+
+    if (covered == fullMask) {
+      // Before recording, verify cur is not a superset of an existing solution.
+      for (const auto &s : solutions)
+        if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+          return;
+      // Remove any existing solutions that cur dominates (cur is a subset).
+      solutions.erase(
+          remove_if(solutions.begin(), solutions.end(),
+                    [&](const vector<ui> &s) {
+                      return includes(s.begin(), s.end(),
+                                      cur.begin(), cur.end());
+                    }),
+          solutions.end());
+      solutions.push_back(cur);
+      return;
+    }
+
+    const ull uncovered = fullMask & ~covered;
+
+    // Superset pruning: cur already contains a known minimal solution so any
+    // extension of cur cannot be minimal.
+    for (const auto &s : solutions)
+      if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+        return;
+
+    // Fail-first dead-branch check: for every uncovered constraint verify at
+    // least one candidate can cover it. If any constraint is impossible, prune.
+    {
+      ull tmp = uncovered;
+      while (tmp) {
+        const int h = __builtin_ctzll(tmp);
+        tmp &= tmp - 1;
+        bool found = false;
+        for (ui ci : cands)
+          if (cov[ci] & (1ULL << h)) { found = true; break; }
+        if (!found) return;
+      }
+    }
+
+    for (ui ci : cands) {
+      // Improvement 4: skip vertices that add no new coverage — they can
+      // never appear in a minimal solution at this point.
+      if (!(cov[ci] & uncovered)) continue;
+
+      // Build next-level candidates: those in cands with E-index > ci that
+      // are adjacent to ci (enforces clique property and avoids duplicates).
+      vector<ui> next;
+      next.reserve(cands.size());
+      for (ui cj : cands)
+        if (cj > ci && compat[ci * eSize + cj])
+          next.push_back(cj);
+
+      cur.push_back(ci);
+      dfs(std::move(next), covered | cov[ci]);
+      cur.pop_back();
+    }
+  };
+
+  dfs(std::move(initCands), 0);
+
+  // Convert E-index solutions back to actual vertex IDs.
+  vector<vector<ui>> result;
+  result.reserve(solutions.size());
+  for (const auto &sol : solutions) {
+    vector<ui> vsol;
+    vsol.reserve(sol.size());
+    for (ui idx : sol) vsol.push_back(E[idx]);
+    sort(vsol.begin(), vsol.end());
+    result.push_back(std::move(vsol));
+  }
+  return result;
 }
 
 static string encodeClique(const vector<ui> &C) {
@@ -1292,6 +1466,7 @@ bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
 // the resulting branch seeds (mustin, expandTo).
 void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
                        ui level, vector<char> fullSkipCheck) {
+  ScopedTimer _t(rsp.rCall_ms, rsp.rCall_n);
   if (fullSkipCheck.size() != mustin.size())
     fullSkipCheck.assign(mustin.size(), 0);
 
@@ -1382,6 +1557,7 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
                            vector<vector<ui>> &expandTo,
                            vector<char> &fullSkipCheck, ui treeIndex, ui level,
                            bool &done) {
+  ScopedTimer _t(rsp.enumerate_ms, rsp.enumerate_n);
   checksCount++;
 
   if (debug) {
@@ -1400,8 +1576,8 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     if ((ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
-      if (!seenCliques.insert(encodeClique(C)).second)
-        return;
+      { ScopedTimer _td(rsp.dedup_ms, rsp.dedup_n);
+        if (!seenCliques.insert(encodeClique(C)).second) return; }
 
       cliqueCount++;
       if (debug) {
@@ -1488,6 +1664,7 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
 }
 
 void ReorderSib::findAllMaximalCliques() {
+  rsp.reset();
   cliqueCount = 0;
   maxCliqueSize = 0;
   checksCount = 0;
@@ -1512,4 +1689,5 @@ void ReorderSib::findAllMaximalCliques() {
 
   cout << "ReorderSib: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
        << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
+  rsp.print(ms);
 }

@@ -9,7 +9,8 @@ enum class SibMethod {
   BACKTRACKING,
   GREEDY,
   BITMASK,
-  MIN_HITTING_SET
+  MIN_HITTING_SET,
+  OPTIMIZED
 };
 
 // Adjacency Matrix based Bron-Kerbosch
@@ -145,6 +146,8 @@ private:
                                         const vector<vector<ui>> &hitSets);
   vector<vector<ui>> minimumCliqueHittingSet(
       const vector<ui> &E, const vector<vector<ui>> &hitSets);
+  vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
+                                         const vector<vector<ui>> &hitSets);
   bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
                                const vector<ui> &C);
 

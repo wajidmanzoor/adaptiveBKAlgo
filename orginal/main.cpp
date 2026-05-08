@@ -94,6 +94,15 @@ int main(int argc, const char *argv[]) {
   } else if (mode == 20) {
     ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::MIN_HITTING_SET);
     reorder.findAllMaximalCliques();
+  } else if (mode == 21) {
+    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::OPTIMIZED);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 22) {
+    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::OPTIMIZED);
+    reorder.findAllMaximalCliques();
+  } else if (mode == 23) {
+    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::OPTIMIZED);
+    reorder.findAllMaximalCliques();
   } else {
     cout << "Invalid mode! Use 0..20." << endl;
     exit(1);
