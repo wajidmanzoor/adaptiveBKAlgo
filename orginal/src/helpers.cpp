@@ -2,11 +2,8 @@
 #include <chrono>
 #include <functional>
 #include <numeric>
-
-// ── Degeneracy ordering helpers
-// ─────────────────────────────────────────────── Returns peelSeq where
-// peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest. Operates on a copy
-// of g.degree so the graph is not modified.
+// Returns peelSeq index of verticies by core value
+// peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest.
 static vector<ui> computePeelSeq(const Graph &g) {
   ui n = g.n;
   vector<ui> deg(g.degree.begin(), g.degree.end());
@@ -51,8 +48,8 @@ static vector<ui> computePeelSeq(const Graph &g) {
   return peelSeq;
 }
 
-// Build adjList (all neighbors) and adjList2 (higher-index neighbors only)
-// in the relabeled space defined by perm[old_v] = new_v.
+// Build adjList (all neighbors) and adjList2 (only neighbors with higher index
+// in the permuted order).
 static void buildAdjLists(const Graph &g, const vector<ui> &perm,
                           vector<vector<ui>> &adjList,
                           vector<vector<ui>> &adjList2) {
@@ -72,214 +69,6 @@ static void buildAdjLists(const Graph &g, const vector<ui> &perm,
   }
 }
 
-AdjMatBK::AdjMatBK(Graph &g) {
-  n = g.n;
-  cliqueCount = 0;
-  adjMatrix.resize(n, vector<bool>(n, false));
-
-  // Initialize adjacency matrix from graph's adjacency list
-  for (ui u = 0; u < n; u++) {
-    for (ui idx = g.offset[u]; idx < g.offset[u + 1]; idx++) {
-      ui v = g.neighbors[idx];
-      adjMatrix[u][v] = true;
-      adjMatrix[v][u] = true; // Undirected graph
-    }
-  }
-}
-
-vector<bool> AdjMatBK::intersect(const vector<bool> &set1,
-                                 const vector<bool> &set2) {
-  vector<bool> result(n, false);
-  for (ui i = 0; i < n; i++) {
-    result[i] = set1[i] && set2[i];
-  }
-  return result;
-}
-
-vector<bool> AdjMatBK::setUnion(const vector<bool> &set1,
-                                const vector<bool> &set2) {
-  vector<bool> result(n, false);
-  for (ui i = 0; i < n; i++) {
-    result[i] = set1[i] || set2[i];
-  }
-  return result;
-}
-
-vector<bool> AdjMatBK::setDifference(const vector<bool> &set1,
-                                     const vector<bool> &set2) {
-  vector<bool> result(n, false);
-  for (ui i = 0; i < n; i++) {
-    result[i] = set1[i] && !set2[i];
-  }
-  return result;
-}
-
-bool AdjMatBK::isEmpty(const vector<bool> &set) {
-  for (bool val : set) {
-    if (val)
-      return false;
-  }
-  return true;
-}
-
-void AdjMatBK::printSet(const vector<bool> &set, const string &name) {
-  cout << name << ": { ";
-  for (ui i = 0; i < n; i++) {
-    if (set[i]) {
-      cout << i << " ";
-    }
-  }
-  cout << "}" << endl;
-}
-
-void AdjMatBK::bronKerboschRecursive(vector<bool> &R, vector<bool> &P,
-                                     vector<bool> &X) {
-  if (isEmpty(P) && isEmpty(X)) {
-    // Found a maximal clique
-    cliqueCount++;
-    if (debug) {
-      cout << "Maximal Clique: { ";
-      for (ui i = 0; i < n; i++) {
-        if (R[i]) {
-          cout << i << " ";
-        }
-      }
-      cout << "}" << endl;
-    }
-    return;
-  }
-
-  vector<bool> P_copy = P; // Copy of P to iterate over
-
-  for (ui v = 0; v < n; v++) {
-    if (P_copy[v]) {
-
-      vector<bool> new_R = R;
-      new_R[v] = true;
-
-      // Create P ∩ N(v) and X ∩ N(v)
-      vector<bool> new_P = intersect(P, adjMatrix[v]);
-      vector<bool> new_X = intersect(X, adjMatrix[v]);
-
-      // Recursive call
-      bronKerboschRecursive(new_R, new_P, new_X);
-
-      // Move v from P to X
-      P[v] = false;
-      X[v] = true;
-    }
-  }
-}
-
-void AdjMatBK::findAllMaximalCliques() {
-  vector<bool> R(n, false); // Current clique
-  vector<bool> P(n, true);  // Potential candidates
-  vector<bool> X(n, false); // Already processed
-  cliqueCount = 0;
-  bronKerboschRecursive(R, P, X);
-  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
-}
-
-// Adjacency List based Bron-Kerbosch
-AdjListBK::AdjListBK(Graph &g) {
-  n = g.n;
-  adjList.resize(n);
-
-  // Fill adjacency lists from graph
-  for (ui i = 0; i < n; i++) {
-    for (ui j = g.offset[i]; j < g.offset[i + 1]; j++) {
-      ui neighbor = g.neighbors[j];
-      if (neighbor < n) {
-        adjList[i].push_back(neighbor);
-      }
-    }
-    // Sort for efficient intersection operations
-    sort(adjList[i].begin(), adjList[i].end());
-  }
-}
-
-vector<ui> AdjListBK::intersect(const vector<ui> &set1,
-                                const vector<ui> &neighbors) {
-  vector<ui> result;
-  result.reserve(min(set1.size(), neighbors.size()));
-  ui i = 0, j = 0;
-  while (i < set1.size() && j < neighbors.size()) {
-    if (set1[i] == neighbors[j]) {
-      result.push_back(set1[i]);
-      i++;
-      j++;
-    } else if (set1[i] < neighbors[j]) {
-      i++;
-    } else {
-      j++;
-    }
-  }
-
-  return result;
-}
-
-bool AdjListBK::isEmpty(const vector<ui> &set) { return set.empty(); }
-
-void AdjListBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
-                                      vector<ui> &X) {
-  if (isEmpty(P) && isEmpty(X)) {
-    // Found a maximal clique
-    cliqueCount++;
-    if (R.size() > 2) {
-      ofstream outfile("bk_adj_maximal_cliques.txt", std::ios::app);
-      if (outfile.is_open()) {
-        outfile << "Maximal Clique Found: { ";
-        for (ui x : R)
-          outfile << x << " ";
-        outfile << "}\n";
-      }
-    }
-    if (debug) {
-      cout << "Maximal Clique: { ";
-      for (ui v : R) {
-        cout << v << " ";
-      }
-      cout << "}" << endl;
-    }
-    return;
-  }
-
-  vector<ui> P_copy = P; // Copy of P to iterate over
-
-  for (ui v : P_copy) {
-    vector<ui> new_R = R;
-    new_R.push_back(v);
-
-    // Create P ∩ N(v) and X ∩ N(v)
-    vector<ui> new_P = intersect(P, adjList[v]);
-    vector<ui> new_X = intersect(X, adjList[v]);
-
-    // Recursive call
-    bronKerboschRecursive(new_R, new_P, new_X);
-
-    // Move v from P to X
-    P.erase(find(P.begin(), P.end(), v));
-    X.push_back(v);
-  }
-}
-
-void AdjListBK::findAllMaximalCliques() {
-  // Initialize sets
-  vector<ui> R; // Current clique (empty)
-  vector<ui> P; // All vertices as candidates
-  vector<ui> X; // Excluded set (empty)
-
-  // Fill P with all vertices
-  for (ui i = 0; i < n; i++) {
-    P.push_back(i);
-  }
-
-  cliqueCount = 0;
-  bronKerboschRecursive(R, P, X);
-
-  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
-}
-
 // PivotBK Implementation
 PivotBK::PivotBK(Graph &g, DegOrder order) {
   n = g.n;
@@ -288,15 +77,20 @@ PivotBK::PivotBK(Graph &g, DegOrder order) {
   checksCount = 0;
 
   vector<ui> perm(n);
+
+  // Canonical order
   if (order == DegOrder::ORIGINAL) {
     for (ui i = 0; i < n; i++)
       perm[i] = i;
   } else {
     vector<ui> peelSeq = computePeelSeq(g);
+
+    // Ascending degeneracy order
     if (order == DegOrder::ASCENDING) {
       for (ui i = 0; i < n; i++)
         perm[peelSeq[n - 1 - i]] = i; // low-core → low index
     } else {
+      // Descending degeneracy order
       for (ui i = 0; i < n; i++)
         perm[peelSeq[i]] = i; // high-core → low index
     }
@@ -329,6 +123,7 @@ bool PivotBK::isEmpty(const vector<ui> &set) { return set.empty(); }
 
 bool PivotBK::isConnected(ui u, ui v) {
   // Binary search in sorted adjacency list
+  // if v and u are connected.
   return binary_search(adjList[u].begin(), adjList[u].end(), v);
 }
 
@@ -344,6 +139,8 @@ ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
       bestPivot = u;
     }
   }
+
+  // check vertices in X as well, since pivot can be from P ∪ X
   for (ui u : X) {
     ui elimination = (ui)intersect(P, adjList[u]).size();
     if (elimination > maxElimination) {
@@ -375,11 +172,12 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   checksCount++;
 
   // Basic pruning: check if P and X are empty
+  // Clique found
   if (isEmpty(P) && isEmpty(X)) {
     if (R.size() <= 2)
       return;
 
-    // Found a maximal clique — only update counters inside timed section
+    // Found a maximal clique
     cliqueCount++;
     maxCliqueSize = max(maxCliqueSize, (ui)R.size());
     return;
@@ -389,9 +187,11 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   if (isEmpty(P))
     return;
 
-  // Choose pivot from P ∪ X
+  // Choose pivot from P ∪ X such that |P ∩ N(pivot)| is maximized to minimize
+  // recursive calls
   ui pivot = choosePivot(P, X);
 
+  // Track redundent checks for profiling
 #if debug
   if (isPSubsetOfFoundClique(P)) {
     redendantChecks.push_back(P);
@@ -399,7 +199,7 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   }
 #endif
 
-  // Snapshot P \ N(pivot) before modifying P
+  // P = P \ N(pivot)
   vector<ui> candidates;
   candidates.reserve(P.size());
   for (ui v : P) {
@@ -407,14 +207,20 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
       candidates.push_back(v);
   }
 
+  // For each candidate vertex v, we add it to the growing clique R and
+  // recursively explore.
   for (ui v : candidates) {
+    // add v to partial clique R
     R.push_back(v);
+
+    // new P =  P ∩ N(v), new X = X ∩ N(v)
     vector<ui> new_P = intersect(P, adjList[v]);
     vector<ui> new_X = intersect(X, adjList[v]);
 
+    // recurse with new sets
     bronKerboschRecursive(R, new_P, new_X);
 
-    R.pop_back(); // O(1) backtrack — no copy needed
+    R.pop_back(); // backtrack
 
     // Move v from P to X, keeping X sorted
     auto it = find(P.begin(), P.end(), v);
@@ -427,6 +233,9 @@ void PivotBK::findAllMaximalCliques() {
   vector<ui> R;
   vector<ui> X;
   vector<ui> P(n);
+
+  // keeps track of redunant checks (check that are subset of cliques arleady
+  // found) for profiling
   redundancy = 0;
   for (ui i = 0; i < n; i++)
     P[i] = i;
@@ -459,379 +268,37 @@ void PivotBK::findAllMaximalCliques() {
 #endif
 }
 
-/// Compliment reorder
-
-Reorder::Reorder(Graph &g, DegOrder order) {
-  n = g.n;
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-  checksCount = 0;
-  cliquesByVertex.resize(n);
-
-  vector<ui> perm(n);
-  if (order == DegOrder::ORIGINAL) {
-    // Canonical Order.
-    for (ui i = 0; i < n; i++)
-      perm[i] = i;
-  } else {
-    vector<ui> peelSeq = computePeelSeq(g);
-    if (order == DegOrder::ASCENDING) {
-
-      // ascending core value.
-      for (ui i = 0; i < n; i++)
-        perm[peelSeq[n - 1 - i]] = i;
-    } else { // DESCENDING
-
-      // descending core value.
-
-      for (ui i = 0; i < n; i++)
-        perm[peelSeq[i]] = i;
-    }
-  }
-
-  buildAdjLists(g, perm, adjList, adjList2);
-}
-
-vector<ui> Reorder::intersect(vector<ui> A, vector<ui> B) {
-  vector<ui> C;
-  C.reserve(min(A.size(), B.size()));
-  ui i = 0, j = 0;
-  while (i < A.size() && j < B.size()) {
-    if (A[i] == B[j]) {
-      C.push_back(A[i]);
-      i++;
-      j++;
-    } else if (A[i] < B[j])
-      i++;
-    else
-      j++;
-  }
-  return C;
-}
-
-vector<ui> Reorder::setDiff(vector<ui> A, vector<ui> B) {
-  vector<ui> C;
-  C.reserve(A.size());
-  ui i = 0, j = 0;
-  while (i < A.size()) {
-    if (j == (ui)B.size() || A[i] < B[j]) {
-      C.push_back(A[i]);
-      i++;
-    } else if (A[i] == B[j]) {
-      i++;
-      j++;
-    } else
-      j++;
-  }
-  return C;
-}
-
-vector<ui> Reorder::compliment(const vector<ui> &vector1) {
-  vector<char> seen(n, 0);
-  for (ui x : vector1)
-    seen[x] = 1;
-  vector<ui> C;
-  for (ui i = 0; i < n; i++)
-    if (!seen[i])
-      C.push_back(i);
-  return C;
-}
-
-vector<ui> Reorder::unionSet(vector<ui> A, vector<ui> B) {
-  vector<ui> U;
-  U.reserve(A.size() + B.size());
-  ui i = 0, j = 0;
-  while (i < A.size() && j < B.size()) {
-    if (A[i] < B[j]) {
-      U.push_back(A[i]);
-      i++;
-    } else if (A[i] > B[j]) {
-      U.push_back(B[j]);
-      j++;
-    } else {
-      U.push_back(A[i]);
-      i++;
-      j++;
-    }
-  }
-  while (i < A.size()) {
-    U.push_back(A[i]);
-    i++;
-  }
-  while (j < B.size()) {
-    U.push_back(B[j]);
-    j++;
-  }
-  return U;
-}
-
-void Reorder::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
-                    ui level) {
-  if (debug) {
-    for (ui i = 0; i < level; i++) {
-      cout << "     ";
-      ;
-    }
-    cout << "Level " << level << ": mustin and expandTo sets:" << endl;
-    for (ui i = 0; i < mustin.size(); i++) {
-      for (ui i = 0; i < level; i++) {
-        cout << "     ";
-      }
-      cout << "Vertex " << i << ": mustin={ ";
-      for (ui v : mustin[i])
-        cout << v << " ";
-      cout << "}  expandTo={ ";
-      for (ui v : expandTo[i])
-        cout << v << " ";
-      cout << "}" << endl;
-    }
-  }
-
-  if (level != 0) {
-    if (!expandTo[0].empty()) {
-
-      vector<vector<ui>> tempmustin = mustin;
-      vector<vector<ui>> tempexpandTo = expandTo;
-
-      vector<ui> temp;
-      bool oneFullFound = false;
-
-      for (ui v : mustin[0]) {
-        for (ui cId : cliquesByVertex[v]) {
-          if (foundLevel[cId] < level - 1)
-            continue;
-          bool containsAllMustin = true;
-          for (ui mv : tempmustin[0]) {
-            if (!binary_search(allCliques[cId].begin(), allCliques[cId].end(),
-                               mv)) {
-              containsAllMustin = false;
-              break;
-            }
-          }
-          if (containsAllMustin) {
-            oneFullFound = true;
-            temp = unionSet(
-                temp, intersect(tempexpandTo[0], compliment(allCliques[cId])));
-          }
-        }
-      }
-
-      if (!oneFullFound)
-        temp = tempexpandTo[0];
-
-      mustin.clear();
-      expandTo.clear();
-      for (ui v : temp) {
-        vector<ui> newMustin = tempmustin[0];
-        newMustin.push_back(v);
-        mustin.push_back(newMustin);
-        expandTo.push_back(intersect(tempexpandTo[0], adjList[v]));
-      }
-      if (debug) {
-        for (ui i = 0; i < level; i++) {
-          cout << "     ";
-        }
-        cout << "Level " << level << ": After Sibling Effect:" << endl;
-        for (ui i = 0; i < mustin.size(); i++) {
-          for (ui j = 0; j < level; j++) {
-            cout << "     ";
-          }
-          cout << "Vertex " << i << ": mustin={ ";
-          for (ui v : mustin[i])
-            cout << v << " ";
-          cout << "}  expandTo={ ";
-          for (ui v : expandTo[i])
-            cout << v << " ";
-          cout << "}" << endl;
-        }
-      }
-    }
-  }
-  for (ui i = 0; i < (ui)mustin.size(); i++) {
-    vector<ui> R = mustin[i];
-    vector<ui> Q = expandTo[i];
-    bool done = false;
-    enumerate(R, Q, mustin, expandTo, i, level, done);
-    if (done)
-      break;
-  }
-}
-
-void Reorder::enumerate(vector<ui> &R, vector<ui> &Q,
-                        vector<vector<ui>> &mustin,
-                        vector<vector<ui>> &expandTo, ui treeIndex, ui level,
-                        bool &done) {
-  checksCount++;
-
-  if (debug) {
-    for (ui i = 0; i < level; i++) {
-      cout << "     ";
-      ;
-    }
-    cout << "Level " << level << ": Checking R={ ";
-    for (ui v : R)
-      cout << v << " ";
-    cout << "}  Q={ ";
-    for (ui v : Q)
-      cout << v << " ";
-    cout << "}" << endl;
-  }
-
-  if (Q.empty()) {
-    if ((ui)R.size() > 2) {
-      vector<ui> C = R;
-      sort(C.begin(), C.end());
-      cliqueCount++;
-      if (debug) {
-        for (ui i = 0; i < level; i++) {
-          cout << "   ";
-        }
-        cout << "Maximal Clique Found: { ";
-        for (ui v : C)
-          cout << v << " ";
-        cout << "}" << endl;
-      }
-      if ((ui)C.size() > maxCliqueSize)
-        maxCliqueSize = (ui)C.size();
-      ui cliqueIdx = (ui)allCliques.size();
-      allCliques.push_back(C);
-      foundLevel.push_back(level);
-      for (ui v : C)
-        cliquesByVertex[v].push_back(cliqueIdx);
-
-      vector<ui> comp = compliment(C);
-      done = true;
-
-      if (level == 0) {
-        cout << "here" << endl;
-        vector<vector<ui>> newMustin;
-        vector<vector<ui>> newExpandTo;
-        for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
-          if (find(C.begin(), C.end(), mustin[i].back()) != C.end())
-            continue;
-          newMustin.push_back(mustin[i]);
-          newExpandTo.push_back(
-              intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
-                        unionSet(C, expandTo[i])));
-          if (debug) {
-            for (ui i = 0; i < level; i++) {
-              cout << "   ";
-            }
-            cout << "Level " << level << ": After Reorder:" << endl;
-            for (ui i = 0; i < newMustin.size(); i++) {
-              for (ui j = 0; j < level; j++) {
-                cout << "     ";
-              }
-              cout << "Vertex " << i << ": mustin={ ";
-              for (ui v : newMustin[i])
-                cout << v << " ";
-              cout << "}  expandTo={ ";
-              for (ui v : newExpandTo[i])
-                cout << v << " ";
-              cout << "}" << endl;
-            }
-          }
-          rCall(std::move(newMustin), std::move(newExpandTo), level + 1);
-        }
-
-        return;
-
-      } else {
-        // Same as level 0: generate seeds for all complement vertices adjacent
-        // to C
-        vector<vector<ui>> newMustin;
-        vector<vector<ui>> newExpandTo;
-        cout << "new here" << endl;
-
-        for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
-          /*cout << "Tree Index " << i << " mustin[i].back() " <<
-             mustin[i].back()
-               << endl;*/
-          if (find(C.begin(), C.end(), mustin[i].back()) != C.end())
-            continue;
-          vector<ui> newExp =
-              intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
-                        unionSet(C, expandTo[i]));
-          newMustin.push_back(mustin[i]);
-          newExpandTo.push_back(newExp);
-          if (debug) {
-            for (ui i = 0; i < level; i++) {
-              cout << "     ";
-            }
-            cout << "Level " << level << ": After Reorder:" << endl;
-            for (ui i = 0; i < newMustin.size(); i++) {
-              for (ui j = 0; j < level; j++) {
-                cout << "     ";
-              }
-              cout << "Vertex " << i << ": mustin={ ";
-              for (ui v : newMustin[i])
-                cout << v << " ";
-              cout << "}  expandTo={ ";
-              for (ui v : newExpandTo[i])
-                cout << v << " ";
-              cout << "}" << endl;
-            }
-          }
-          rCall(std::move(newMustin), std::move(newExpandTo), level + 1);
-        }
-
-        return;
-      }
-    }
-  }
-
-  for (ui v : Q) {
-    R.push_back(v);
-    vector<ui> Qp = intersect(Q, adjList2[v]);
-    enumerate(R, Qp, mustin, expandTo, treeIndex, level, done);
-    R.pop_back();
-    if (done)
-      return;
-  }
-}
-
-void Reorder::findAllMaximalCliques() {
-  cliqueCount = 0;
-  maxCliqueSize = 0;
-  checksCount = 0;
-  allCliques.clear();
-  for (ui v = 0; v < n; v++)
-    cliquesByVertex[v].clear();
-
-  vector<vector<ui>> mustin;
-  vector<vector<ui>> expandTo;
-  for (ui v = 0; v < n; v++) {
-    mustin.push_back({v});
-    expandTo.push_back(adjList2[v]);
-  }
-  auto t0 = chrono::high_resolution_clock::now();
-  rCall(std::move(mustin), std::move(expandTo), 0);
-  auto t1 = chrono::high_resolution_clock::now();
-  double ms = chrono::duration<double, milli>(t1 - t0).count();
-
-  cout << "ReorderNew: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
-       << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
-}
-
-// ── ReorderSib profiling ──────────────────────────────────────────────────────
+// ── ReorderSib profiling
+// ──────────────────────────────────────────────────────
 struct RSibProf {
-  double rCall_ms=0, enumerate_ms=0, collect_ms=0, solver_ms=0;
-  double minimal_ms=0, commonExp_ms=0, dedup_ms=0, buildHit_ms=0;
-  long   rCall_n=0, enumerate_n=0, collect_n=0, solver_n=0;
-  long   minimal_n=0, commonExp_n=0, dedup_n=0, buildHit_n=0;
-  void reset(){ *this = RSibProf{}; }
+  double rCall_ms = 0, enumerate_ms = 0, collect_ms = 0, solver_ms = 0;
+  double minimal_ms = 0, commonExp_ms = 0, dedup_ms = 0, buildHit_ms = 0;
+  long rCall_n = 0, enumerate_n = 0, collect_n = 0, solver_n = 0;
+  long minimal_n = 0, commonExp_n = 0, dedup_n = 0, buildHit_n = 0;
+  void reset() { *this = RSibProf{}; }
   void print(double total_ms) const {
-    auto pct=[&](double v){ return total_ms>0?100.0*v/total_ms:0.0; };
-    printf("\n── ReorderSib cost breakdown ─────────────────────────────────\n");
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","enumerate (core search)",enumerate_ms,pct(enumerate_ms),enumerate_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","rCall overhead",         rCall_ms,    pct(rCall_ms),    rCall_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","backtrackingBranchBound",solver_ms,   pct(solver_ms),   solver_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","collectCoveringCliques", collect_ms,  pct(collect_ms),  collect_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","buildHitSets",           buildHit_ms, pct(buildHit_ms), buildHit_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","minimalByInclusion",     minimal_ms,  pct(minimal_ms),  minimal_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","commonExpand",           commonExp_ms,pct(commonExp_ms),commonExp_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n","seenCliques dedup",      dedup_ms,    pct(dedup_ms),    dedup_n);
-    printf("  %-30s %9.3f ms  %5.1f%%\n",           "TOTAL (wall)",           total_ms,    100.0);
+    auto pct = [&](double v) {
+      return total_ms > 0 ? 100.0 * v / total_ms : 0.0;
+    };
+    printf(
+        "\n── ReorderSib cost breakdown ─────────────────────────────────\n");
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "enumerate (core search)",
+           enumerate_ms, pct(enumerate_ms), enumerate_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "rCall overhead", rCall_ms,
+           pct(rCall_ms), rCall_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "backtrackingBranchBound",
+           solver_ms, pct(solver_ms), solver_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "collectCoveringCliques",
+           collect_ms, pct(collect_ms), collect_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "buildHitSets",
+           buildHit_ms, pct(buildHit_ms), buildHit_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "minimalByInclusion",
+           minimal_ms, pct(minimal_ms), minimal_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "commonExpand",
+           commonExp_ms, pct(commonExp_ms), commonExp_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "seenCliques dedup",
+           dedup_ms, pct(dedup_ms), dedup_n);
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
     printf("──────────────────────────────────────────────────────────────\n");
   }
 };
@@ -839,9 +306,16 @@ static RSibProf rsp;
 
 struct ScopedTimer {
   chrono::high_resolution_clock::time_point t0;
-  double &acc; long &cnt;
-  ScopedTimer(double &a, long &c): t0(chrono::high_resolution_clock::now()), acc(a), cnt(c){}
-  ~ScopedTimer(){ acc+=chrono::duration<double,milli>(chrono::high_resolution_clock::now()-t0).count(); ++cnt; }
+  double &acc;
+  long &cnt;
+  ScopedTimer(double &a, long &c)
+      : t0(chrono::high_resolution_clock::now()), acc(a), cnt(c) {}
+  ~ScopedTimer() {
+    acc += chrono::duration<double, milli>(
+               chrono::high_resolution_clock::now() - t0)
+               .count();
+    ++cnt;
+  }
 };
 
 // ReorderSib Implementation
@@ -850,14 +324,19 @@ ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method) {
   cliqueCount = 0;
   maxCliqueSize = 0;
   checksCount = 0;
+
+  // methods to get the sibling effect.
   this->method = method;
   cliquesByVertex.resize(n);
 
   vector<ui> perm(n);
+
+  // Canonical order
   if (order == DegOrder::ORIGINAL) {
     for (ui i = 0; i < n; i++)
       perm[i] = i;
   } else {
+    // Degeneracy order Ascending or Descending
     vector<ui> peelSeq = computePeelSeq(g);
     if (order == DegOrder::ASCENDING) {
       for (ui i = 0; i < n; i++)
@@ -1329,7 +808,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   const ui hSize = (ui)hitSets.size();
 
   // Fall back if bitmask cannot cover all constraints.
-  if (hSize > 63) return backtrackingBranchBound(E, hitSets);
+  if (hSize > 63)
+    return backtrackingBranchBound(E, hitSets);
 
   // ── Pre-computation ───────────────────────────────────────────────────────
 
@@ -1345,7 +825,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   vector<ull> cov(eSize, 0);
   {
     vector<ui> eIdx(n, eSize);
-    for (ui i = 0; i < eSize; i++) eIdx[E[i]] = i;
+    for (ui i = 0; i < eSize; i++)
+      eIdx[E[i]] = i;
     for (ui h = 0; h < hSize; h++)
       for (ui v : hitSets[h])
         if (eIdx[v] < eSize)
@@ -1371,20 +852,18 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   //         last element of cur). Passed by value so each level owns its copy.
   // covered: bitmask of constraints already satisfied by cur.
   function<void(vector<ui>, ull)> dfs = [&](vector<ui> cands, ull covered) {
-
     if (covered == fullMask) {
       // Before recording, verify cur is not a superset of an existing solution.
       for (const auto &s : solutions)
         if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
           return;
       // Remove any existing solutions that cur dominates (cur is a subset).
-      solutions.erase(
-          remove_if(solutions.begin(), solutions.end(),
-                    [&](const vector<ui> &s) {
-                      return includes(s.begin(), s.end(),
-                                      cur.begin(), cur.end());
-                    }),
-          solutions.end());
+      solutions.erase(remove_if(solutions.begin(), solutions.end(),
+                                [&](const vector<ui> &s) {
+                                  return includes(s.begin(), s.end(),
+                                                  cur.begin(), cur.end());
+                                }),
+                      solutions.end());
       solutions.push_back(cur);
       return;
     }
@@ -1406,15 +885,20 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
         tmp &= tmp - 1;
         bool found = false;
         for (ui ci : cands)
-          if (cov[ci] & (1ULL << h)) { found = true; break; }
-        if (!found) return;
+          if (cov[ci] & (1ULL << h)) {
+            found = true;
+            break;
+          }
+        if (!found)
+          return;
       }
     }
 
     for (ui ci : cands) {
       // Improvement 4: skip vertices that add no new coverage — they can
       // never appear in a minimal solution at this point.
-      if (!(cov[ci] & uncovered)) continue;
+      if (!(cov[ci] & uncovered))
+        continue;
 
       // Build next-level candidates: those in cands with E-index > ci that
       // are adjacent to ci (enforces clique property and avoids duplicates).
@@ -1438,7 +922,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   for (const auto &sol : solutions) {
     vector<ui> vsol;
     vsol.reserve(sol.size());
-    for (ui idx : sol) vsol.push_back(E[idx]);
+    for (ui idx : sol)
+      vsol.push_back(E[idx]);
     sort(vsol.begin(), vsol.end());
     result.push_back(std::move(vsol));
   }
@@ -1540,6 +1025,7 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     }
   }
 
+  // Enumerate each  branch until we find the next maximal clique.
   for (ui i = 0; i < (ui)mustin.size(); i++) {
     vector<ui> R = mustin[i];
     vector<ui> Q = expandTo[i];
@@ -1550,8 +1036,8 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
   }
 }
 
-// Standard forward-neighbor clique enumeration, with the sibling-effect seeds
-// produced by rCall driving which branches are explored next.
+// adding candidates to Partial solution untill no candidates are left.
+// once maximal clique is found, reorder the remaining branches.
 void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
                            vector<vector<ui>> &mustin,
                            vector<vector<ui>> &expandTo,
@@ -1572,13 +1058,11 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     cout << "}" << endl;
   }
 
+  // is no candidate left to expand, R is maximal clique.
   if (Q.empty()) {
     if ((ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
-      { ScopedTimer _td(rsp.dedup_ms, rsp.dedup_n);
-        if (!seenCliques.insert(encodeClique(C)).second) return; }
-
       cliqueCount++;
       if (debug) {
         for (ui i = 0; i < level; i++)
@@ -1595,7 +1079,11 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
       for (ui v : C)
         cliquesByVertex[v].push_back(cliqueIdx);
 
+      // stops the DFS in enumeerate and tree expansion in rCall.
       done = true;
+
+      // Reorder Logic: use the new clique to reorder the remaining branches in
+      // this tree.
       vector<vector<ui>> newMustin;
       vector<vector<ui>> newExpandTo;
       vector<char> newFullSkipCheck;
@@ -1653,6 +1141,7 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     }
   }
 
+  // Enemerate candidates
   for (ui v : Q) {
     R.push_back(v);
     vector<ui> Qp = intersect(Q, adjList2[v]);
@@ -1674,7 +1163,10 @@ void ReorderSib::findAllMaximalCliques() {
   for (ui v = 0; v < n; v++)
     cliquesByVertex[v].clear();
 
+  // Tree Must-In and Expand-To sets for the initial call
+  // Mustin : already a part of the clique.
   vector<vector<ui>> mustin;
+  // ExpandTo : candidates that can be added to the clique.
   vector<vector<ui>> expandTo;
   for (ui v = 0; v < n; v++) {
     mustin.push_back({v});

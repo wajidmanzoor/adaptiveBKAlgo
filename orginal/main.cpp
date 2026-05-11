@@ -3,108 +3,67 @@
 #include "inc/helpers.h"
 
 int main(int argc, const char *argv[]) {
-  if (argc != 3) {
+  if (argc != 5) {
     cout << "Server wrong input parameters!" << endl;
     exit(1);
   }
 
   string filepath = argv[1];
   int mode = atoi(argv[2]);
+  int ord = atoi(argv[3]);
+  int meth = atoi(argv[4]);
 
   Graph g(filepath);
 
   if (mode == 0) {
-    cout << "Running Pivot BK (Original order)..." << endl;
-    PivotBK pivotBk(g, DegOrder::ORIGINAL);
+    cout << "Running Pivot BK ";
+    if (ord == 0)
+      cout << "(Original order)...";
+    else if (ord == 1)
+      cout << "(Ascending degeneracy)...";
+    else if (ord == 2)
+      cout << "(Descending degeneracy)...";
+    else {
+      cout << "Invalid order! Use 0..2." << endl;
+      exit(1);
+    }
+    cout << endl;
+    PivotBK pivotBk(g, static_cast<DegOrder>(ord));
     pivotBk.findAllMaximalCliques();
   } else if (mode == 1) {
-    cout << "Running Pivot BK (Ascending degeneracy)..." << endl;
-    PivotBK pivotBk(g, DegOrder::ASCENDING);
-    pivotBk.findAllMaximalCliques();
-  } else if (mode == 2) {
-    cout << "Running Pivot BK (Descending degeneracy)..." << endl;
-    PivotBK pivotBk(g, DegOrder::DESCENDING);
-    pivotBk.findAllMaximalCliques();
-  } else if (mode == 3) {
-    cout << "Running Reorder Bron-Kerbosch Algorithm..." << endl;
-    Reorder reorder(g, DegOrder::ORIGINAL);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 4) {
-    cout << "Running Reorder (Ascending Degeneracy) Bron-Kerbosch "
-            "Algorithm..."
-         << endl;
-    Reorder reorder(g, DegOrder::ASCENDING);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 5) {
-    cout << "Running Reorder (Descending Degeneracy) Bron-Kerbosch "
-            "Algorithm..."
-         << endl;
-    Reorder reorder(g, DegOrder::DESCENDING);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 6) {
-    cout << "Running ReorderSib (Brute Force By Size) Algorithm..." << endl;
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BRUTE_FORCE);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 7) {
-    cout << "Running ReorderSib (Backtracking Branch And Bound) Algorithm..."
-         << endl;
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BACKTRACKING);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 8) {
-    cout << "Running ReorderSib (Greedy Approximation) Algorithm..." << endl;
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::GREEDY);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 9) {
-    cout << "Running ReorderSib (Bitmask Exact Search) Algorithm..." << endl;
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::BITMASK);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 10) {
-    cout << "Running ReorderSib (Inclusion-Minimal Clique Hitting Set) "
-            "Algorithm..."
-         << endl;
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::MIN_HITTING_SET);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 11) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BRUTE_FORCE);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 12) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BACKTRACKING);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 13) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::GREEDY);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 14) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::BITMASK);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 15) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::MIN_HITTING_SET);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 16) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BRUTE_FORCE);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 17) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BACKTRACKING);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 18) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::GREEDY);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 19) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::BITMASK);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 20) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::MIN_HITTING_SET);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 21) {
-    ReorderSib reorder(g, DegOrder::ORIGINAL, SibMethod::OPTIMIZED);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 22) {
-    ReorderSib reorder(g, DegOrder::ASCENDING, SibMethod::OPTIMIZED);
-    reorder.findAllMaximalCliques();
-  } else if (mode == 23) {
-    ReorderSib reorder(g, DegOrder::DESCENDING, SibMethod::OPTIMIZED);
+    cout << "Running ReorderSib ";
+    if (ord == 0)
+      cout << "(Original order) ";
+    else if (ord == 1)
+      cout << "(Ascending degeneracy) ";
+    else if (ord == 2)
+      cout << "(Descending degeneracy) ";
+    else {
+      cout << "Invalid order! Use 0..2." << endl;
+      exit(1);
+    }
+    if (meth == 0)
+      cout << "(Brute Force By Size) Algorithm...";
+    else if (meth == 1)
+      cout << "(Backtracking Branch And Bound) Algorithm...";
+    else if (meth == 2)
+      cout << "(Greedy Approximation) Algorithm...";
+    else if (meth == 3)
+      cout << "(Bitmask Exact Search) Algorithm...";
+    else if (meth == 4)
+      cout << "(Inclusion-Minimal Clique Hitting Set) Algorithm...";
+    else if (meth == 5)
+      cout << "(Optimized Exact Search) Algorithm...";
+    else {
+      cout << "Invalid method! Use 0..5." << endl;
+      exit(1);
+    }
+    cout << endl;
+    ReorderSib reorder(g, static_cast<DegOrder>(ord),
+                       static_cast<SibMethod>(meth));
     reorder.findAllMaximalCliques();
   } else {
-    cout << "Invalid mode! Use 0..20." << endl;
+    cout << "Invalid mode! Use 0 or 1." << endl;
     exit(1);
   }
 

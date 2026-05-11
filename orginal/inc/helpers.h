@@ -13,42 +13,6 @@ enum class SibMethod {
   OPTIMIZED
 };
 
-// Adjacency Matrix based Bron-Kerbosch
-class AdjMatBK {
-private:
-  ui n;
-  vector<vector<bool>> adjMatrix;
-  ui cliqueCount;
-  void bronKerboschRecursive(vector<bool> &R, vector<bool> &P, vector<bool> &X);
-  vector<bool> intersect(const vector<bool> &set1, const vector<bool> &set2);
-  vector<bool> setUnion(const vector<bool> &set1, const vector<bool> &set2);
-  vector<bool> setDifference(const vector<bool> &set1,
-                             const vector<bool> &set2);
-  bool isEmpty(const vector<bool> &set);
-  void printSet(const vector<bool> &set, const string &name);
-
-public:
-  AdjMatBK(Graph &g);
-  void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
-};
-// Adjacency List based Bron-Kerbosch
-class AdjListBK {
-private:
-  ui n;
-  vector<vector<ui>> adjList; // adjacency lists
-  ui cliqueCount;
-
-  void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
-  vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
-  bool isEmpty(const vector<ui> &set);
-
-public:
-  AdjListBK(Graph &g);
-  void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
-};
-
 // Optimized Adjacency List based Bron-Kerbosch with Pivoting and Pruning
 class PivotBK {
 private:
@@ -75,35 +39,6 @@ public:
   PivotBK(Graph &g, DegOrder order = DegOrder::ASCENDING);
 
   void findAllMaximalCliques();
-};
-
-class Reorder {
-private:
-  ui n;
-  vector<vector<ui>> adjList;
-  vector<vector<ui>> adjList2;
-  ui cliqueCount;
-  size_t maxCliqueSize;
-  ui checksCount; // total vertex-set checks in enumerate
-  vector<vector<ui>> allCliques;
-  vector<ui> foundLevel;
-  vector<vector<ui>> cliquesByVertex;
-
-  vector<ui> intersect(vector<ui> A, vector<ui> B);
-  vector<ui> setDiff(vector<ui> A, vector<ui> B);
-  vector<ui> unionSet(vector<ui> A, vector<ui> B);
-  vector<ui> compliment(const vector<ui> &vector1);
-
-  void rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo, ui level);
-  void enumerate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
-                 vector<vector<ui>> &expandTo, ui treeIndex, ui level,
-                 bool &done);
-
-public:
-  Reorder(Graph &g, DegOrder order = DegOrder::ORIGINAL);
-  void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
-  ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
 
 class ReorderSib {
@@ -138,14 +73,14 @@ private:
                                  const vector<ui> &cliqueIds);
   vector<vector<ui>> bruteForceBySize(const vector<ui> &E,
                                       const vector<vector<ui>> &hitSets);
-  vector<vector<ui>> backtrackingBranchBound(
-      const vector<ui> &E, const vector<vector<ui>> &hitSets);
+  vector<vector<ui>> backtrackingBranchBound(const vector<ui> &E,
+                                             const vector<vector<ui>> &hitSets);
   vector<vector<ui>> greedyApproximation(const vector<ui> &E,
                                          const vector<vector<ui>> &hitSets);
   vector<vector<ui>> bitmaskExactSearch(const vector<ui> &E,
                                         const vector<vector<ui>> &hitSets);
-  vector<vector<ui>> minimumCliqueHittingSet(
-      const vector<ui> &E, const vector<vector<ui>> &hitSets);
+  vector<vector<ui>> minimumCliqueHittingSet(const vector<ui> &E,
+                                             const vector<vector<ui>> &hitSets);
   vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
                                          const vector<vector<ui>> &hitSets);
   bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
@@ -164,4 +99,3 @@ public:
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
 };
-
