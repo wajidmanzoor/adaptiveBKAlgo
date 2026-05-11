@@ -304,6 +304,7 @@ struct RSibProf {
 };
 static RSibProf rsp;
 
+#if PROFILING
 struct ScopedTimer {
   chrono::high_resolution_clock::time_point t0;
   double &acc;
@@ -317,6 +318,9 @@ struct ScopedTimer {
     ++cnt;
   }
 };
+#else
+struct ScopedTimer { ScopedTimer(double &, long &) {} };
+#endif
 
 // ReorderSib Implementation
 ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
@@ -1203,5 +1207,7 @@ void ReorderSib::findAllMaximalCliques() {
 
   cout << "ReorderSib: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
        << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
+#if PROFILING
   rsp.print(ms);
+#endif
 }
