@@ -319,7 +319,9 @@ struct ScopedTimer {
 };
 
 // ReorderSib Implementation
-ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method) {
+ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
+                       ui hitSetLimit)
+    : hitSetLimit(hitSetLimit) {
   n = g.n;
   cliqueCount = 0;
   maxCliqueSize = 0;
@@ -476,11 +478,28 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, ui level) {
 // Each covering clique C contributes the constraint "pick something from E
 // that is outside C", which is exactly E \ C.
 vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
-                                            const vector<ui> &cliqueIds) {
+                                            const vector<ui> &cliqueIds,
+                                            ui maxHitSets) {
   ScopedTimer _t(rsp.buildHit_ms, rsp.buildHit_n);
+
+  // When capping, keep the cliques with the most overlap with E — those produce
+  // the smallest hit sets (E \ C), which are the tightest constraints.
+  // Tighter constraints → solver has fewer candidates per constraint → runs faster.
+  const vector<ui> *ids = &cliqueIds;
+  vector<ui> sorted;
+  if (cliqueIds.size() > maxHitSets) {
+    sorted = cliqueIds;
+    // Sort by clique size descending: larger clique → smaller E\C → tighter constraint
+    sort(sorted.begin(), sorted.end(), [&](ui a, ui b) {
+      return allCliques[a].size() > allCliques[b].size();
+    });
+    sorted.resize(maxHitSets);
+    ids = &sorted;
+  }
+
   vector<vector<ui>> hitSets;
-  hitSets.reserve(cliqueIds.size());
-  for (ui cId : cliqueIds)
+  hitSets.reserve(ids->size());
+  for (ui cId : *ids)
     hitSets.push_back(setDiff(E, allCliques[cId]));
   return hitSets;
 }
@@ -533,7 +552,7 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
   if (cliqueIds.empty())
     return singletonBranches(E);
 
-  vector<vector<ui>> hitSets = buildHitSets(E, cliqueIds);
+  vector<vector<ui>> hitSets = buildHitSets(E, cliqueIds, hitSetLimit);
 
   // An empty hit set means some old clique fully contains E, so no sibling
   // choice can separate the current branch from that clique.
@@ -1064,6 +1083,8 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     if ((ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
+      { ScopedTimer _td(rsp.dedup_ms, rsp.dedup_n);
+        if (!seenCliques.insert(encodeClique(C)).second) return; }
       cliqueCount++;
       if (debug) {
         for (ui i = 0; i < level; i++)

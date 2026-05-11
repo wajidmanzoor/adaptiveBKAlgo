@@ -50,6 +50,7 @@ private:
   size_t maxCliqueSize;
   ui checksCount;
   SibMethod method;
+  ui hitSetLimit;
   vector<vector<ui>> allCliques;
   vector<ui> foundLevel;
   vector<vector<ui>> cliquesByVertex;
@@ -64,7 +65,8 @@ private:
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);
   vector<ui> collectCoveringCliques(const vector<ui> &M, ui level);
   vector<vector<ui>> buildHitSets(const vector<ui> &E,
-                                  const vector<ui> &cliqueIds);
+                                  const vector<ui> &cliqueIds,
+                                  ui maxHitSets = UINT_MAX);
   vector<vector<ui>> singletonBranches(const vector<ui> &E);
   vector<vector<ui>> minimalByInclusion(vector<vector<ui>> solutions);
 
@@ -94,7 +96,8 @@ private:
 
 public:
   ReorderSib(Graph &g, DegOrder order = DegOrder::ORIGINAL,
-             SibMethod method = SibMethod::BRUTE_FORCE);
+             SibMethod method = SibMethod::BRUTE_FORCE,
+             ui hitSetLimit = UINT_MAX);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }

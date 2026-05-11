@@ -3,8 +3,8 @@
 #include "inc/helpers.h"
 
 int main(int argc, const char *argv[]) {
-  if (argc != 5) {
-    cout << "Server wrong input parameters!" << endl;
+  if (argc < 5 || argc > 6) {
+    cout << "Usage: bk_algorithm <file> <mode> <ord> <meth> [hitSetLimit]" << endl;
     exit(1);
   }
 
@@ -12,6 +12,7 @@ int main(int argc, const char *argv[]) {
   int mode = atoi(argv[2]);
   int ord = atoi(argv[3]);
   int meth = atoi(argv[4]);
+  ui hitSetLimit = (argc == 6) ? (ui)atoi(argv[5]) : UINT_MAX;
 
   Graph g(filepath);
 
@@ -60,7 +61,7 @@ int main(int argc, const char *argv[]) {
     }
     cout << endl;
     ReorderSib reorder(g, static_cast<DegOrder>(ord),
-                       static_cast<SibMethod>(meth));
+                       static_cast<SibMethod>(meth), hitSetLimit);
     reorder.findAllMaximalCliques();
   } else {
     cout << "Invalid mode! Use 0 or 1." << endl;
