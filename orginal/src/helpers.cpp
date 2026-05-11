@@ -286,7 +286,7 @@ struct RSibProf {
            enumerate_ms, pct(enumerate_ms), enumerate_n);
     printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "rCall overhead", rCall_ms,
            pct(rCall_ms), rCall_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "backtrackingBranchBound",
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "solver",
            solver_ms, pct(solver_ms), solver_n);
     printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "collectCoveringCliques",
            collect_ms, pct(collect_ms), collect_n);
@@ -804,6 +804,7 @@ ReorderSib::minimumCliqueHittingSet(const vector<ui> &E,
 vector<vector<ui>>
 ReorderSib::efficientHittingSet(const vector<ui> &E,
                                 const vector<vector<ui>> &hitSets) {
+  ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
   const ui eSize = (ui)E.size();
   const ui hSize = (ui)hitSets.size();
 
