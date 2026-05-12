@@ -1,6 +1,7 @@
 #include "../inc/helpers.h"
 #include <chrono>
 #include <functional>
+#include <iomanip>
 #include <numeric>
 // Returns peelSeq index of verticies by core value
 // peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest.
@@ -252,7 +253,7 @@ void PivotBK::findAllMaximalCliques() {
   cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
   cout << "Total Vertex-Set Checks: " << checksCount << endl;
-  cout << "Time: " << ms << " ms" << endl;
+  cout << fixed << setprecision(3) << "Time: " << ms << " ms" << endl;
 
 #if debug
   cout << endl << "Redundancy Count: " << redundancy << endl;
@@ -1205,7 +1206,8 @@ void ReorderSib::findAllMaximalCliques() {
   auto t1 = chrono::high_resolution_clock::now();
   double ms = chrono::duration<double, milli>(t1 - t0).count();
 
-  cout << "ReorderSib: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
+  cout << fixed << setprecision(3)
+       << "ReorderSib: cliques=" << cliqueCount << "  maxSize=" << maxCliqueSize
        << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
 #if PROFILING
   rsp.print(ms);
