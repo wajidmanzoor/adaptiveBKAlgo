@@ -3,16 +3,24 @@
 #include "inc/helpers.h"
 
 int main(int argc, const char *argv[]) {
-  if (argc < 5 || argc > 6) {
-    cout << "Usage: bk_algorithm <file> <mode> <ord> <meth> [hitSetLimit]" << endl;
+  if (argc < 5 || argc > 14) {
+    cout << "Usage: bk_algorithm <file> <mode> <ord> <meth> [hitSetLimit] [prune1] [prune2] [sp1] [sp2] [sp3] [sp4] [sp5] [sp6]" << endl;
     exit(1);
   }
 
   string filepath = argv[1];
   int mode = atoi(argv[2]);
-  int ord = atoi(argv[3]);
+  int ord  = atoi(argv[3]);
   int meth = atoi(argv[4]);
-  ui hitSetLimit = (argc == 6) ? (ui)atoi(argv[5]) : UINT_MAX;
+  ui   hitSetLimit = (argc > 5)  ? (ui)atoi(argv[5])    : UINT_MAX;
+  bool prune1      = (argc > 6)  ? (bool)atoi(argv[6])  : true;
+  bool prune2      = (argc > 7)  ? (bool)atoi(argv[7])  : true;
+  bool sp1         = (argc > 8)  ? (bool)atoi(argv[8])  : true;
+  bool sp2         = (argc > 9)  ? (bool)atoi(argv[9])  : true;
+  bool sp3         = (argc > 10) ? (bool)atoi(argv[10]) : true;
+  bool sp4         = (argc > 11) ? (bool)atoi(argv[11]) : true;
+  bool sp5         = (argc > 12) ? (bool)atoi(argv[12]) : true;
+  bool sp6         = (argc > 13) ? (bool)atoi(argv[13]) : true;
 
   Graph g(filepath);
 
@@ -61,7 +69,8 @@ int main(int argc, const char *argv[]) {
     }
     cout << endl;
     ReorderSib reorder(g, static_cast<DegOrder>(ord),
-                       static_cast<SibMethod>(meth), hitSetLimit);
+                       static_cast<SibMethod>(meth), hitSetLimit,
+                       prune1, prune2, sp1, sp2, sp3, sp4, sp5, sp6);
     reorder.findAllMaximalCliques();
   } else {
     cout << "Invalid mode! Use 0 or 1." << endl;

@@ -51,6 +51,15 @@ private:
   ui checksCount;
   SibMethod method;
   ui hitSetLimit;
+  bool prune1; // dominance pruning: drop Ci when Ci ⊂ Cj among covering cliques
+  bool prune2; // level filter: skip covering cliques older than level-1
+  // prune3 is always ON: aggressive branch skip via branchSpaceInsideClique + fullSkipCheck
+  bool sp1;    // solver: unit propagation — force candidates that are the sole cover of a constraint
+  bool sp2;    // solver: constraint subsumption — drop constraints implied by tighter ones
+  bool sp3;    // solver: sort hitSets by ascending size so fail-first hits the hardest constraint first
+  bool sp4;    // collect: skip covering cliques whose intersection with E is exactly M (trivially weak)
+  bool sp5;    // rCall: skip branches where |mustin|+|expandTo| <= 2 (can't form clique of size > 2)
+  bool sp6;    // enumerate: skip reordered branches with empty expandTo and |mustin| <= 2
   vector<vector<ui>> allCliques;
   vector<ui> foundLevel;
   vector<vector<ui>> cliquesByVertex;
@@ -63,13 +72,14 @@ private:
 
   bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);
-  vector<ui> collectCoveringCliques(const vector<ui> &M, ui level);
+  vector<ui> collectCoveringCliques(const vector<ui> &M, const vector<ui> &E, ui level);
   vector<vector<ui>> buildHitSets(const vector<ui> &E,
                                   const vector<ui> &cliqueIds,
                                   ui maxHitSets = UINT_MAX);
   vector<vector<ui>> singletonBranches(const vector<ui> &E);
   vector<vector<ui>> minimalByInclusion(vector<vector<ui>> solutions);
 
+  vector<ui> pruneByDominance(const vector<ui> &cliqueIds);
   vector<vector<ui>>
   generateSiblingSetsFromCliques(const vector<ui> &E,
                                  const vector<ui> &cliqueIds);
@@ -97,7 +107,10 @@ private:
 public:
   ReorderSib(Graph &g, DegOrder order = DegOrder::ORIGINAL,
              SibMethod method = SibMethod::BRUTE_FORCE,
-             ui hitSetLimit = UINT_MAX);
+             ui hitSetLimit = UINT_MAX,
+             bool prune1 = true, bool prune2 = true,
+             bool sp1 = true, bool sp2 = true, bool sp3 = true,
+             bool sp4 = true, bool sp5 = true, bool sp6 = true);
   void findAllMaximalCliques();
   ui getCliqueCount() const { return cliqueCount; }
   ui getMaxCliqueSize() const { return maxCliqueSize; }
