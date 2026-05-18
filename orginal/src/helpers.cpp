@@ -327,11 +327,10 @@ struct ScopedTimer {
 
 // ReorderSib Implementation
 ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
-                       ui hitSetLimit, bool prune1, bool prune2,
-                       bool sp1, bool sp2, bool sp3, bool sp4, bool sp5,
-                       bool sp6)
-    : hitSetLimit(hitSetLimit), prune1(prune1), prune2(prune2),
-      sp1(sp1), sp2(sp2), sp3(sp3), sp4(sp4), sp5(sp5), sp6(sp6) {
+                       ui hitSetLimit, bool prune1, bool prune2, bool sp1,
+                       bool sp2, bool sp3, bool sp4, bool sp5, bool sp6)
+    : hitSetLimit(hitSetLimit), prune1(prune1), prune2(prune2), sp1(sp1),
+      sp2(sp2), sp3(sp3), sp4(sp4), sp5(sp5), sp6(sp6) {
   n = g.n;
   cliqueCount = 0;
   maxCliqueSize = 0;
@@ -457,20 +456,23 @@ vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
   return result;
 }
 
-// Find previously discovered cliques that already contain M. These are the
-// only cliques that matter for the sibling effect at this branch.
-vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, const vector<ui> &E, ui level) {
+// Find previously discovered cliques that already contain M.
+vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M,
+                                              const vector<ui> &E, ui level) {
   ScopedTimer _t(rsp.collect_ms, rsp.collect_n);
   vector<ui> result;
   if (M.empty())
     return result;
 
+  // find vertex in M with fewest cliques.
   ui seed = M[0];
   for (ui v : M) {
     if (cliquesByVertex[v].size() < cliquesByVertex[seed].size())
       seed = v;
   }
 
+  // check only the cliques containing that vertex to see if they cover all of
+  // M.
   for (ui cId : cliquesByVertex[seed]) {
     // Only keep cliques from the previous level or deeper; older levels have
     // already contributed their reorder/sibling information.
@@ -485,7 +487,8 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M, const vector<
       continue;
 
     // sp4: skip cliques whose intersection with E is exactly M — the hitSet
-    // would be E\M, which any sibling set satisfies trivially (no real constraint).
+    // would be E\M, which any sibling set satisfies trivially (no real
+    // constraint).
     if (sp4) {
       const auto &C = allCliques[cId];
       bool hasVertexBeyondM = false;
@@ -577,8 +580,9 @@ ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
 
 // Drop covering cliques that are proper subsets of another covering clique.
 // If Ci ⊂ Cj then E\Ci ⊃ E\Cj, so Cj's hit-set constraint implies Ci's.
-// Any solution that satisfies Cj automatically satisfies Ci, so Ci is redundant.
-// Cliques in allCliques are stored sorted, so std::includes works directly.
+// Any solution that satisfies Cj automatically satisfies Ci, so Ci is
+// redundant. Cliques in allCliques are stored sorted, so std::includes works
+// directly.
 vector<ui> ReorderSib::pruneByDominance(const vector<ui> &cliqueIds) {
   vector<ui> result;
   const ui k = (ui)cliqueIds.size();
@@ -586,7 +590,8 @@ vector<ui> ReorderSib::pruneByDominance(const vector<ui> &cliqueIds) {
     const auto &Ci = allCliques[cliqueIds[i]];
     bool dominated = false;
     for (ui j = 0; j < k && !dominated; j++) {
-      if (i == j) continue;
+      if (i == j)
+        continue;
       const auto &Cj = allCliques[cliqueIds[j]];
       if (Cj.size() > Ci.size() &&
           includes(Cj.begin(), Cj.end(), Ci.begin(), Ci.end()))
@@ -608,7 +613,8 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
     return singletonBranches(E);
 
   vector<ui> prunedVec;
-  if (prune1) prunedVec = pruneByDominance(cliqueIds);
+  if (prune1)
+    prunedVec = pruneByDominance(cliqueIds);
   const vector<ui> &pruned = prune1 ? prunedVec : cliqueIds;
 
   vector<vector<ui>> hitSets = buildHitSets(E, pruned, hitSetLimit);
@@ -624,16 +630,11 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
     return singletonBranches(hitSets[0]);
 
   switch (method) {
-  case SibMethod::BRUTE_FORCE:
-    return bruteForceBySize(E, hitSets);
+
   case SibMethod::BACKTRACKING:
     return backtrackingBranchBound(E, hitSets);
   case SibMethod::GREEDY:
     return greedyApproximation(E, hitSets);
-  case SibMethod::BITMASK:
-    return bitmaskExactSearch(E, hitSets);
-  case SibMethod::MIN_HITTING_SET:
-    return minimumCliqueHittingSet(E, hitSets);
   case SibMethod::OPTIMIZED:
     return efficientHittingSet(E, hitSets);
   }
@@ -939,7 +940,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // remaining candidates to be clique-compatible with them, and start the DFS
   // with the forced coverage already accumulated.
   vector<ui> forcedIdxs; // E-indices forced into every solution
-  ull         forcedCov = 0;
+  ull forcedCov = 0;
 
   if (sp1) {
     vector<ui> activeCands = initCands;
@@ -949,7 +950,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
     while (changed && !conflict) {
       changed = false;
       ull uncov = fullMask & ~forcedCov;
-      if (!uncov) break;
+      if (!uncov)
+        break;
 
       ull tmp = uncov;
       while (tmp && !conflict) {
@@ -961,17 +963,25 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
         for (ui ci : activeCands) {
           if (cov[ci] & (1ULL << h)) {
             sole = ci;
-            if (++cnt > 1) break;
+            if (++cnt > 1)
+              break;
           }
         }
 
-        if (cnt == 0) { conflict = true; break; }
+        if (cnt == 0) {
+          conflict = true;
+          break;
+        }
         if (cnt == 1) {
           // Check clique compatibility with already-forced vertices.
           for (ui fv : forcedIdxs) {
-            if (!compat[fv * eSize + sole]) { conflict = true; break; }
+            if (!compat[fv * eSize + sole]) {
+              conflict = true;
+              break;
+            }
           }
-          if (conflict) break;
+          if (conflict)
+            break;
 
           forcedIdxs.push_back(sole);
           forcedCov |= cov[sole];
@@ -988,7 +998,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
       }
     }
 
-    if (conflict) return {};
+    if (conflict)
+      return {};
 
     initCands = std::move(activeCands);
   }
@@ -1000,14 +1011,18 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // We work on the post-sp1 initCands so forced-vertex coverage is reflected.
   if (sp2) {
     for (ui h = 0; h < hSize; h++) {
-      if (!(fullMask & (1ULL << h))) continue;       // already dropped
-      if (forcedCov & (1ULL << h)) continue;         // h already covered by forced, DFS won't see it
+      if (!(fullMask & (1ULL << h)))
+        continue; // already dropped
+      if (forcedCov & (1ULL << h))
+        continue; // h already covered by forced, DFS won't see it
       for (ui g = 0; g < hSize; g++) {
-        if (g == h || !(fullMask & (1ULL << g))) continue;
+        if (g == h || !(fullMask & (1ULL << g)))
+          continue;
         // g must not be force-covered: if no initCand covers g (because a
         // forced vertex was the sole cover and sp1 removed it), the subsumption
         // check would pass vacuously and incorrectly drop h.
-        if (forcedCov & (1ULL << g)) continue;
+        if (forcedCov & (1ULL << g))
+          continue;
         // Check coverSet(g, initCands) ⊆ coverSet(h, initCands):
         // no remaining candidate covers g but not h.
         bool gSubsumesH = true;
@@ -1028,9 +1043,11 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // Early exit: if forced coverage (sp1) already satisfies all remaining
   // constraints (possibly reduced by sp2), return the forced solution directly.
   if ((forcedCov & fullMask) == fullMask) {
-    if (forcedIdxs.empty()) return {}; // nothing forced, nothing to cover
+    if (forcedIdxs.empty())
+      return {}; // nothing forced, nothing to cover
     vector<ui> sol;
-    for (ui idx : forcedIdxs) sol.push_back(E[idx]);
+    for (ui idx : forcedIdxs)
+      sol.push_back(E[idx]);
     sort(sol.begin(), sol.end());
     return {sol};
   }
@@ -1175,8 +1192,7 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     vector<ui> baseM = mustin[0];
     vector<ui> baseE = expandTo[0];
 
-    // Old cliques containing M are exactly the cliques that can force a
-    // sibling split at this branch.
+    // Old cliques containing M
     vector<ui> coveringCliques = collectCoveringCliques(baseM, baseE, level);
     bool hasCoveringCliques = !coveringCliques.empty();
     bool needsFullSkip = fullSkipCheck.empty() ? false : fullSkipCheck[0];
@@ -1298,10 +1314,12 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
         bool skipBranch = false;
         if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
-          // Full-skip mode means the whole seeded search space for this branch
-          // sits inside the clique we just found, so we can discard it.
+          // Full-skip mode: mustin[i] and expandTo[i] are fully inside C.
+          // branch produced by sibling effect.
           skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
         } else {
+          // check only last vertex of mustin[i] in C.
+          // normal branch.
           skipBranch = find(C.begin(), C.end(), mustin[i].back()) != C.end();
         }
         if (skipBranch)
@@ -1311,6 +1329,7 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
         vector<ui> reorderedExpand;
         if (usesFullSkip) {
           // Rebuild the entire branch space from M and the new clique C.
+          // sibling effect branch.
           reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
           for (ui mv : mustin[i])
             reorderedExpand = intersect(reorderedExpand, adjList[mv]);
@@ -1386,6 +1405,10 @@ void ReorderSib::findAllMaximalCliques() {
   }
 
   auto t0 = chrono::high_resolution_clock::now();
+  // how to check if current branch is fully inside a clique:
+  // fullSkipCheck[i] = flase we check using last vertex of mustin[i] in C,
+  // (normal branches),  true we check using whole mustin[i] and expandTo[i] in
+  // C. (sibling brnahces)
   vector<char> fullSkipCheck(n, 0);
   rCall(std::move(mustin), std::move(expandTo), 0, std::move(fullSkipCheck));
   auto t1 = chrono::high_resolution_clock::now();
