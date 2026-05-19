@@ -1,0 +1,128 @@
+n=11, m=25
+ofsset 0 5 8 13 17 21 27 33 39 45 47 50 
+degree 5 3 5 4 4 6 6 6 6 2 3 
+neighbors 2 3 6 8 10 5 8 10 0 6 7 8 9 0 4 7 8 3 5 6 7 1 4 6 7 8 10 0 2 4 5 7 9 2 3 4 5 6 8 0 1 2 3 5 7 2 6 0 1 5 
+Running ReorderSib (Original order) (Optimized Exact Search) Algorithm...
+Level 0: mustin and expandTo sets:
+Vertex 0: mustin={ 0 }  expandTo={ 2 3 6 8 10 }
+Vertex 1: mustin={ 1 }  expandTo={ 5 8 10 }
+Vertex 2: mustin={ 2 }  expandTo={ 6 7 8 9 }
+Vertex 3: mustin={ 3 }  expandTo={ 4 7 8 }
+Vertex 4: mustin={ 4 }  expandTo={ 5 6 7 }
+Vertex 5: mustin={ 5 }  expandTo={ 6 7 8 10 }
+Vertex 6: mustin={ 6 }  expandTo={ 7 9 }
+Vertex 7: mustin={ 7 }  expandTo={ 8 }
+Vertex 8: mustin={ 8 }  expandTo={ }
+Vertex 9: mustin={ 9 }  expandTo={ }
+Vertex 10: mustin={ 10 }  expandTo={ }
+Level 0: Checking R={ 0 }  Q={ 2 3 6 8 10 }
+Level 0: Checking R={ 0 2 }  Q={ 6 8 }
+Level 0: Checking R={ 0 2 6 }  Q={ }
+Maximal Clique Found: { 0 2 6 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 1 }  expandTo={ 5 8 10 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 1 }  expandTo={ 5 8 10 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 1 5 }  expandTo={ 8 10 }
+     Vertex 1: mustin={ 1 8 }  expandTo={ 5 }
+     Vertex 2: mustin={ 1 10 }  expandTo={ 5 }
+     Level 1: Checking R={ 1 5 }  Q={ 8 10 }
+     Level 1: Checking R={ 1 5 8 }  Q={ }
+   Maximal Clique Found: { 1 5 8 }
+     Level 1: After Reorder:
+     Vertex 0: mustin={ 1 10 }  expandTo={ 5 }
+          Level 2: mustin and expandTo sets:
+          Vertex 0: mustin={ 1 10 }  expandTo={ 5 }
+          Level 2: After Sibling Effect:
+          Vertex 0: mustin={ 1 5 10 }  expandTo={ }
+          Level 2: Checking R={ 1 5 10 }  Q={ }
+      Maximal Clique Found: { 1 5 10 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 3 }  expandTo={ 0 4 7 8 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 3 }  expandTo={ 0 4 7 8 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 0 3 }  expandTo={ 8 }
+     Vertex 1: mustin={ 3 4 }  expandTo={ 7 }
+     Vertex 2: mustin={ 3 7 }  expandTo={ 4 8 }
+     Vertex 3: mustin={ 3 8 }  expandTo={ 0 7 }
+     Level 1: Checking R={ 0 3 }  Q={ 8 }
+     Level 1: Checking R={ 0 3 8 }  Q={ }
+   Maximal Clique Found: { 0 3 8 }
+     Level 1: After Reorder:
+     Vertex 0: mustin={ 3 4 }  expandTo={ 7 }
+          Level 2: mustin and expandTo sets:
+          Vertex 0: mustin={ 3 4 }  expandTo={ 7 }
+          Level 2: After Sibling Effect:
+          Vertex 0: mustin={ 3 4 7 }  expandTo={ }
+          Level 2: Checking R={ 3 4 7 }  Q={ }
+      Maximal Clique Found: { 3 4 7 }
+     Level 1: After Reorder:
+     Vertex 0: mustin={ 3 7 }  expandTo={ 4 8 }
+          Level 2: mustin and expandTo sets:
+          Vertex 0: mustin={ 3 7 }  expandTo={ 4 8 }
+          Level 2: After Sibling Effect:
+          Vertex 0: mustin={ 3 7 8 }  expandTo={ }
+          Level 2: Checking R={ 3 7 8 }  Q={ }
+      Maximal Clique Found: { 3 7 8 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 4 }  expandTo={ 5 6 7 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 4 }  expandTo={ 5 6 7 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 4 5 6 }  expandTo={ 7 }
+     Vertex 1: mustin={ 4 5 7 }  expandTo={ 6 }
+     Vertex 2: mustin={ 4 5 6 }  expandTo={ 7 }
+     Vertex 3: mustin={ 4 6 7 }  expandTo={ 5 }
+     Level 1: Checking R={ 4 5 6 }  Q={ 7 }
+     Level 1: Checking R={ 4 5 6 7 }  Q={ }
+   Maximal Clique Found: { 4 5 6 7 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 5 }  expandTo={ 6 7 8 10 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 5 }  expandTo={ 6 7 8 10 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 5 7 8 }  expandTo={ }
+     Level 1: Checking R={ 5 7 8 }  Q={ }
+   Maximal Clique Found: { 5 7 8 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 7 }  expandTo={ 2 6 8 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 7 }  expandTo={ 2 6 8 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 2 6 7 }  expandTo={ }
+     Vertex 1: mustin={ 2 7 8 }  expandTo={ }
+     Level 1: Checking R={ 2 6 7 }  Q={ }
+   Maximal Clique Found: { 2 6 7 }
+     Level 1: After Reorder:
+     Vertex 0: mustin={ 2 7 8 }  expandTo={ }
+          Level 2: mustin and expandTo sets:
+          Vertex 0: mustin={ 2 7 8 }  expandTo={ }
+          Level 2: Checking R={ 2 7 8 }  Q={ }
+      Maximal Clique Found: { 2 7 8 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 8 }  expandTo={ 0 2 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 8 }  expandTo={ 0 2 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 0 2 8 }  expandTo={ }
+     Level 1: Checking R={ 0 2 8 }  Q={ }
+   Maximal Clique Found: { 0 2 8 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 9 }  expandTo={ 2 6 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 9 }  expandTo={ 2 6 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 2 9 }  expandTo={ 6 }
+     Vertex 1: mustin={ 6 9 }  expandTo={ 2 }
+     Level 1: Checking R={ 2 9 }  Q={ 6 }
+     Level 1: Checking R={ 2 9 6 }  Q={ }
+   Maximal Clique Found: { 2 6 9 }
+Level 0: After Reorder:
+Vertex 0: mustin={ 10 }  expandTo={ 0 }
+     Level 1: mustin and expandTo sets:
+     Vertex 0: mustin={ 10 }  expandTo={ 0 }
+     Level 1: After Sibling Effect:
+     Vertex 0: mustin={ 0 10 }  expandTo={ }
+ReorderSib: cliques=12  maxSize=4  checks=18  time=0.547 ms
