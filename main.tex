@@ -1,0 +1,830 @@
+
+% VLDB template version of 2020-08-03 enhances the ACM template, version 1.7.0:
+% https://www.acm.org/publications/proceedings-template
+
+\documentclass[sigconf, nonacm]{acmart}
+
+\newcommand\vldbdoi{XX.XX/XXX.XX}
+\newcommand\vldbpages{XXX-XXX}
+\newcommand\vldbvolume{14}
+\newcommand\vldbissue{1}
+\newcommand\vldbyear{2020}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{amsthm}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand\vldbauthors{\authors}
+\newcommand\vldbtitle{\shorttitle}
+\newcommand\vldbavailabilityurl{URL_TO_YOUR_ARTIFACTS}
+\newcommand\vldbpagestyle{plain}
+
+\begin{document}
+\title{Redundancy-Free Maximal Clique Enumeration via Search-Tree Reordering}
+
+\begin{comment}
+\author{Author Name}
+\affiliation{\institution{Institution}}
+\email{author@institution.edu}
+\end{comment}
+
+\begin{abstract}
+We study exact maximal clique enumeration in an undirected graph.  A naive
+search over all vertex subsets is infeasible, and Bron--Kerbosch--style search
+greatly improves on this by expanding only clique-consistent candidates.
+However, even after a maximal clique $C$ has been reported, the search still
+contains branches rooted at proper subsets of $C$.  Those branches are known
+not to terminate inside $C$, yet standard depth-first search and pivoting do
+not use that information to reorganize the remaining search space.
+
+We present \textsc{ReorderSib}, an exact algorithm based on recursive
+search-tree reordering.  The central observation is that once a branch state
+$M$ is known to lie inside a discovered maximal clique $C$, every undiscovered
+maximal clique extending $M$ must escape $C$ through a vertex in $Q \setminus
+C$.  For a single covering clique, this yields an explicit reordering rule:
+outside vertices must be explored before inside vertices.  For several
+covering cliques, the admissible escape choices become exactly the minimal
+clique-compatible hitting sets of the induced constraint family.  These sets
+seed a replacement family of branches that preserves completeness while
+avoiding redundant traversal of subsets of known cliques.
+
+We formalize this idea, prove soundness, completeness, and duplicate-freedom
+for the resulting core algorithm, and then describe how the implementation
+realizes the same principle using clique indexing, branch merging, and exact
+hitting-set solvers.
+\end{abstract}
+
+\maketitle
+
+%%% do not modify the following VLDB block %%
+%%% VLDB block start %%%
+\pagestyle{\vldbpagestyle}
+\begingroup\small\noindent\raggedright\textbf{PVLDB Reference Format:}\\
+\vldbauthors. \vldbtitle. PVLDB, \vldbvolume(\vldbissue): \vldbpages, \vldbyear.\\
+\href{https://doi.org/\vldbdoi}{doi:\vldbdoi}
+\endgroup
+\begingroup
+\renewcommand\thefootnote{}\footnote{\noindent
+This work is licensed under the Creative Commons BY-NC-ND 4.0 International
+License. Visit \url{https://creativecommons.org/licenses/by-nc-nd/4.0/} to
+view a copy of this license. For any use beyond those covered by this license,
+obtain permission by emailing \href{mailto:info@vldb.org}{info@vldb.org}.
+Copyright is held by the owner/author(s). Publication rights licensed to the
+VLDB Endowment.\\
+\raggedright Proceedings of the VLDB Endowment,
+Vol.~\vldbvolume, No.~\vldbissue\ ISSN 2150-8097.\\
+\href{https://doi.org/\vldbdoi}{doi:\vldbdoi}\\
+}\addtocounter{footnote}{-1}\endgroup
+%%% VLDB block end %%%
+
+\ifdefempty{\vldbavailabilityurl}{}{
+\vspace{.3cm}
+\begingroup\small\noindent\raggedright\textbf{PVLDB Artifact Availability:}\\
+The source code, data, and/or other artifacts have been made available at
+\url{\vldbavailabilityurl}.
+\endgroup
+}
+
+% ============================================================
+\section{Introduction}
+\label{sec:introduction}
+% ============================================================
+
+A \emph{maximal clique} in an undirected graph $G=(V,E)$ is a complete subgraph
+that cannot be extended by any additional vertex.  The problem of enumerating all
+maximal cliques is a fundamental primitive in graph mining, with applications in
+community detection~\cite{palla2005uncovering}, protein-complex
+identification~\cite{bader2003automated}, and network security analysis.
+
+A direct way to solve the problem is to examine subsets of vertices and test
+whether each subset is a maximal clique.  This view makes the combinatorial
+difficulty clear, but it is also hopeless in practice because there are
+$2^{|V|}$ subsets.  Exact algorithms therefore organize the search much more
+carefully.  The Bron--Kerbosch algorithm~\cite{bron1973algorithm} and its
+pivoting variant~\cite{tomita2006worst} provide the standard framework: they
+maintain a growing clique $R$, a set $P$ of candidate extensions, and a set
+$X$ of already processed vertices, and branch only on vertices that remain
+clique-consistent with the current partial solution.  Combined with the
+degeneracy ordering of Eppstein, L{\"o}ffler, and Strash~\cite{eppstein2010listing},
+this framework achieves the worst-case optimal bound
+$O(\delta \cdot n \cdot 3^{\delta/3})$, where $\delta$ is the degeneracy of
+$G$.
+
+\smallskip
+
+A structural redundancy nevertheless remains.  Suppose the search reports a
+maximal clique $C = \{a,b,c,d\}$.  At that moment the search tree may still
+contain branches rooted at $\{a\}$, $\{a,b\}$, and $\{a,b,c\}$, because those
+branches were created before $C$ was known.  None of these states can terminate
+inside $C$: any new maximal clique reachable from $\{a,b,c\}$ must contain a
+vertex outside $C$, or else it would be a subset of $C$ and therefore not
+maximal.  Standard pivoting can delay some branches, but it does not
+systematically re-route the search once such information becomes available.
+
+This paper is about exploiting that missing information.  Our goal is not to
+replace clique-consistent search, but to refine it: after a clique is found, we
+want the remaining search to focus first on the vertices that can lead to
+genuinely new maximal cliques and to postpone vertices that are already
+explained by the discovered clique.
+
+\smallskip
+
+\noindent\textbf{Our contribution.}\quad We present \textsc{ReorderSib}, an
+exact maximal-clique enumeration algorithm based on recursive search-tree
+reordering.  Its central mechanism is simple: once a discovered maximal clique
+$C$ covers a branch state $M$, the search below $M$ must leave $C$, so vertices
+from $Q \setminus C$ are promoted to the front of the search and vertices from
+$Q \cap C$ are pushed to the tail.  For one covering clique this gives an
+explicit reordering rule; for several covering cliques it leads to a minimal
+clique-compatible hitting-set problem whose solutions define a replacement
+family of branches.
+
+The paper develops this idea in three stages.  First, we formalize the
+structural facts that make reordering correct: canonical ownership of a clique
+by a unique root branch, the escape property induced by a discovered clique,
+and the sibling-set characterization of valid replacement branches.  Second, we
+turn these facts into a clean core algorithm and prove soundness
+(Theorem~\ref{thm:sound}), completeness (Theorem~\ref{thm:complete}), and
+duplicate-freedom (Theorem~\ref{thm:unique}).  Third, we explain how the actual
+implementation realizes the same idea using clique indexing, branch merging,
+and exact hitting-set solvers.
+
+The paper is organised as follows.  Section~\ref{sec:prelim} fixes notation.
+Section~\ref{sec:dfs} turns the redundancy observed above into precise
+structural lemmas.  Section~\ref{sec:algorithm} presents the core algorithm and
+its correctness proof.  Section~\ref{sec:implementation} then explains how the
+\textsc{ReorderSib} implementation realizes the same search principle in code.
+
+% ============================================================
+\section{Preliminaries}
+\label{sec:prelim}
+% ============================================================
+
+Let $G = (V, E)$ be a simple, undirected graph with $n = |V|$ vertices and
+$m = |E|$ edges.  For a vertex $v \in V$, write $N(v)$ for its open
+neighborhood.  For a set $S \subseteq V$, write $N(S) = (\bigcap_{v \in S}
+N(v)) \setminus S$ for the set of vertices adjacent to every member of $S$ but
+not in $S$ itself.  A \emph{clique} is a set $K \subseteq V$ in which every
+pair of vertices is adjacent.  A clique is \emph{maximal} if no vertex outside
+it is adjacent to all of its members.  We write $\mathcal{M}(G)$ for the family
+of all maximal cliques; the Moon--Moser bound gives $|\mathcal{M}(G)| \le
+3^{n/3}$~\cite{moon1965cliques}.
+
+\paragraph{Vertex ordering.}
+Fix a total order $\sigma \colon V \to [n]$ --- in practice, the degeneracy
+order~\cite{eppstein2010listing}, computed in $O(n+m)$ by iteratively removing a
+minimum-degree vertex.  Define the \emph{forward neighborhood} of $v$ as
+\[
+  N^+(v) \;=\; \bigl\{\, u \in N(v) : \sigma(u) > \sigma(v) \,\bigr\}.
+\]
+Under the degeneracy order, $|N^+(v)| \le \delta$ for every $v$, where $\delta$
+is the degeneracy of $G$.
+
+\paragraph{Branches.}
+The search state at any point in the algorithm is captured by a \emph{branch}.
+
+\begin{definition}[Branch]\label{def:branch}
+A \emph{branch} is a triple $(M, h, Q)$ where $M$ is a clique in $G$,
+$h \in M$ is the \emph{branch head}, and $Q \subseteq N(M) \setminus M$ is the
+\emph{candidate set}.  We call $M$ the \emph{must-in set}.  The head $h$ is an
+administrative label attached to the branch: root branches have $M=\{h\}$, and
+sibling-generated branches use as head the first post-sibling vertex when such a
+vertex exists.  The head records the distinguished vertex that generated the
+current ordered subproblem; it is not part of the clique predicate itself.  The
+\emph{coverage} of the branch is
+\[
+  \mathrm{Ext}(M, Q) \;=\;
+  \bigl\{\, K \in \mathcal{M}(G) : M \subseteq K
+  \text{ and } K \setminus M \subseteq Q \,\bigr\}.
+\]
+A collection of branches $\mathcal{F}$ is \emph{complete} for $S \subseteq
+\mathcal{M}(G)$ if $S \subseteq \bigcup_{(M_i, h_i, Q_i) \in \mathcal{F}}
+\mathrm{Ext}(M_i, Q_i)$.
+\end{definition}
+
+Intuitively, $\mathrm{Ext}(M, Q)$ is the set of maximal cliques that this
+branch is responsible for finding: those that contain every vertex of $M$ and
+draw their remaining members from $Q$.  The goal of the algorithm is to maintain
+a complete forest $\mathcal{F}$ at every step while progressively shrinking it
+by finding cliques and pruning the branches that covered them.  With this
+notation in place, we can now formalize the redundancy from the introduction
+and show how it leads to a principled reordering rule.
+
+% ============================================================
+\section{From Redundancy to Reordering}
+\label{sec:dfs}
+% ============================================================
+
+We now turn the informal redundancy from Section~\ref{sec:introduction} into a
+sequence of structural statements.  The progression is as follows.  We first
+fix how a clique is reached inside an ordered branch.  We then show that once a
+maximal clique has been discovered, any future clique extending one of its
+proper subsets must escape it.  This escape property yields the reordering rule
+for one covering clique and, in the general case, the sibling-set replacement
+used by \textsc{ReorderSib}.
+
+\subsection{Ordered DFS Within a Branch}
+
+The core search routine for a branch is an ordered DFS.  If
+$K \in \mathrm{Ext}(M,Q)$ and
+\[
+  K \setminus M = \{w_1,\ldots,w_t\}
+  \qquad\text{with}\qquad
+  \sigma(w_1) < \cdots < \sigma(w_t),
+\]
+then $(w_1,\ldots,w_t)$ is the \emph{canonical extension sequence} of $K$
+relative to $(M,Q)$.
+
+\begin{lemma}[Canonical reachability]\label{lem:canonical}
+Let $(M,h,Q)$ be a branch and let $K \in \mathrm{Ext}(M,Q)$.  If
+$K \setminus M = \{w_1,\ldots,w_t\}$ is written in increasing $\sigma$-order,
+then ordered DFS can reach $K$ by choosing $w_1,\ldots,w_t$ in that order and
+recursing with candidate sets
+\[
+  Q_j
+  \;=\;
+  Q \cap N^+(w_1) \cap \cdots \cap N^+(w_j),
+  \qquad 1 \le j \le t.
+\]
+\end{lemma}
+
+\begin{proof}
+Because $K \setminus M \subseteq Q$, the first vertex $w_1$ is available in
+$Q$.  Since $K$ is a clique, every $w_j$ with $j \ge 2$ is adjacent to $w_1$,
+and since the sequence is increasing in $\sigma$, each such $w_j$ lies in
+$N^+(w_1)$.  Hence $\{w_2,\ldots,w_t\} \subseteq Q_1$.
+
+Applying the same argument inductively, after choosing the prefix
+$w_1,\ldots,w_j$, every remaining vertex
+$w_{j+1},\ldots,w_t$ is adjacent to all previously chosen vertices and has
+larger $\sigma$-rank than $w_j$, so it belongs to $Q_j$.  Therefore the
+ordered DFS can follow the canonical extension sequence all the way to the
+state $(K,Q_t)$.  We claim that $Q_t = \emptyset$.  Indeed, if some
+$u \in Q_t$ existed, then $u \in Q \subseteq N(M)$, so $u$ is adjacent to every
+vertex of $M$.  Also, for each $j$, membership in $N^+(w_j)$ implies that $u$
+is adjacent to $w_j$.  Thus $u$ is adjacent to every vertex of
+$K = M \cup \{w_1,\ldots,w_t\}$, contradicting the maximality of $K$.
+Therefore $Q_t = \emptyset$, so ordered DFS reaches $K$ as a leaf.
+\end{proof}
+
+\subsection{Unique Root Ownership}
+
+Fix the total order $\sigma$ from Section~\ref{sec:prelim}.  The initial search
+starts from one root branch per vertex.
+
+\begin{definition}[Initial forest]\label{def:forest0}
+The \emph{initial forest} is
+\[
+  \mathcal{F}^0
+  \;=\;
+  \bigl\{\, (\{v\},\, v,\, N^+(v)) : v \in V \,\bigr\}.
+\]
+Branch $(\{v\}, v, N^+(v))$ is the unique root branch of vertex $v$.
+\end{definition}
+
+\begin{lemma}[Unique root ownership]\label{lem:partition}
+Every maximal clique $K \in \mathcal{M}(G)$ belongs to exactly one root branch
+of $\mathcal{F}^0$, namely the branch seeded at its minimum-rank vertex
+\[
+  v_* \;=\; \arg\min_{u \in K} \sigma(u).
+\]
+\end{lemma}
+
+\begin{proof}
+Let $v_*$ be the minimum-rank vertex of $K$.  Every vertex
+$u \in K \setminus \{v_*\}$ is adjacent to $v_*$ and satisfies
+$\sigma(u) > \sigma(v_*)$, so
+$K \setminus \{v_*\} \subseteq N^+(v_*)$.  Hence
+$K \in \mathrm{Ext}(\{v_*\}, N^+(v_*))$.
+
+Conversely, suppose
+$K \in \mathrm{Ext}(\{u\}, N^+(u))$ for some $u \ne v_*$.  Then every other
+vertex of $K$ has rank strictly greater than $\sigma(u)$, which implies
+$\sigma(v_*) > \sigma(u)$, contradicting the definition of $v_*$.  Thus $K$
+belongs to exactly one root branch.
+\end{proof}
+
+Lemma~\ref{lem:partition} is the source of duplicate-freedom at the root level:
+every maximal clique has exactly one initial owner.
+
+\subsection{Escape From a Known Clique}
+
+Suppose a branch $(M,h,Q)$ is being processed and a maximal clique
+$C \supseteq M$ has already been found.  The next lemma captures the structural
+fact that drives reordering.
+
+\begin{lemma}[Escape lemma]\label{lem:sibling}
+Let $(M,h,Q)$ be a branch and let $\mathcal{K}$ be the set of maximal cliques
+found so far.  For any
+$K \in \mathrm{Ext}(M,Q) \setminus \mathcal{K}$ and any covering clique
+\[
+  C \in \mathcal{C}(M,\mathcal{K})
+  \;:=\;
+  \{\, C' \in \mathcal{K} : M \subseteq C' \,\},
+\]
+we have
+\[
+  K \cap (Q \setminus C) \ne \emptyset.
+\]
+\end{lemma}
+
+\begin{proof}
+Since $K \notin \mathcal{K}$, we have $K \ne C$.  Because both $K$ and $C$ are
+maximal cliques, neither can properly contain the other.  Since both contain
+$M$, they must differ outside $M$.  Thus $K \setminus C \ne \emptyset$.
+For any vertex $v \in K \setminus C$, we also have
+$v \in K \setminus M \subseteq Q$ by the definition of $\mathrm{Ext}(M,Q)$.
+Hence $v \in Q \setminus C$, proving the claim.
+\end{proof}
+
+Lemma~\ref{lem:sibling} says that once $M \subseteq C$ is known, the search can
+never finish inside $C$ again.  Every future maximal clique extending $M$ must
+\emph{escape} $C$.
+
+\subsection{Re-ordering After One Covering Clique}
+
+The escape lemma immediately yields a re-ordering principle in the case of a
+single covering clique.
+
+\begin{lemma}[Single-clique re-ordering]\label{lem:reorder}
+Let $(M,h,Q)$ be a branch and let $C$ be a discovered maximal clique with
+$M \subseteq C$.  Write
+\[
+  Q_{\mathrm{out}} := Q \setminus C,
+  \qquad
+  Q_{\mathrm{in}} := Q \cap C.
+\]
+Then every clique
+$K \in \mathrm{Ext}(M,Q) \setminus \mathcal{K}$ can be written as
+\[
+  K = M \cup S \cup T,
+  \qquad
+  \emptyset \ne S \subseteq Q_{\mathrm{out}},
+  \qquad
+  T \subseteq Q_{\mathrm{in}},
+\]
+where $M \cup S \cup T$ is a clique.  Consequently, any exhaustive search may
+postpone all vertices of $Q_{\mathrm{in}}$ until after it has selected at least
+one vertex from $Q_{\mathrm{out}}$.
+\end{lemma}
+
+\begin{proof}
+Take any
+$K \in \mathrm{Ext}(M,Q) \setminus \mathcal{K}$.  By
+Lemma~\ref{lem:sibling}, $K$ contains at least one vertex in $Q \setminus C$.
+Let
+$S := K \cap (Q \setminus C)$ and $T := K \cap (Q \cap C)$.  Then
+$S \ne \emptyset$, $S \subseteq Q_{\mathrm{out}}$, and
+$T \subseteq Q_{\mathrm{in}}$.  Since $K$ is a clique and
+$K \setminus M \subseteq Q$, we obtain
+$K = M \cup S \cup T$ with the stated properties.  The search-order conclusion
+follows immediately: every valid continuation must pick from $Q_{\mathrm{out}}$
+before any clique completed only inside $Q_{\mathrm{in}}$ could be relevant.
+\end{proof}
+
+This is the formal version of the central design principle:
+once a clique is known, its reusable vertices are pushed to the tail of the
+search, while the outside vertices that enable genuinely new maximal cliques
+are moved to the front.
+
+In the motivating example, once clique $\{a,b,c\}$ is known, any later maximal
+clique extending $\{a,c\}$ must first use some outside vertex such as $d$.
+Re-ordering therefore means searching through $d$ before revisiting the
+already-explained vertices of $\{a,b,c\}$.
+
+\subsection{Sibling Sets Under Multiple Covering Cliques}
+
+If several previously found maximal cliques cover the same branch, a new clique
+must escape \emph{all} of them simultaneously.  This produces a natural
+hitting-set problem.
+
+\begin{definition}[Sibling set]\label{def:sibling}
+For a branch $(M,h,Q)$ and discovered-clique set $\mathcal{K}$, define the
+constraint family
+\[
+  \mathcal{H}(M,Q,\mathcal{K})
+  \;=\;
+  \bigl\{\, Q \setminus C : C \in \mathcal{C}(M,\mathcal{K}) \,\bigr\}.
+\]
+A set $S \subseteq Q$ is a \emph{sibling set} if it satisfies:
+\begin{enumerate}
+  \item \emph{Hitting:} $S \cap H \ne \emptyset$ for every
+        $H \in \mathcal{H}(M,Q,\mathcal{K})$.
+  \item \emph{Clique compatibility:} $S$ is a clique in $G$.
+  \item \emph{Minimality:} no proper subset of $S$ satisfies both (1) and (2).
+\end{enumerate}
+We write $\mathcal{S}(M,Q,\mathcal{K})$ for the family of all sibling sets.
+\end{definition}
+
+For a sibling set $S$, the remaining common expansion vertices are
+\[
+  \mathrm{CE}(Q,S)
+  \;=\;
+  (Q \setminus S) \cap \bigcap_{v \in S} N(v).
+\]
+
+\begin{lemma}[Sibling replacement is complete]\label{lem:sibling_branch}
+Let $(M,h,Q)$ be a branch and let $\mathcal{K}$ be the set of already
+discovered maximal cliques.  Define
+\[
+  \mathcal{F}^{S}_{0}
+  \;=\;
+  \left\{
+    (M \cup S,\, h,\, \emptyset)
+    : S \in \mathcal{S}(M,Q,\mathcal{K}),\;
+      \mathrm{CE}(Q,S)=\emptyset
+  \right\},
+\]
+\[
+  \mathcal{F}^{S}_{1}
+  \;=\;
+  \left\{
+    (M \cup S \cup \{v\},\, v,\, \mathrm{CE}(Q,S) \cap N^+(v))
+    : \substack{S \in \mathcal{S}(M,Q,\mathcal{K}),\\
+                v \in \mathrm{CE}(Q,S)}
+  \right\},
+\]
+and let $\mathcal{F}^{S} = \mathcal{F}^{S}_{0} \cup \mathcal{F}^{S}_{1}$.
+Then $\mathcal{F}^{S}$ is complete for
+$\mathrm{Ext}(M,Q) \setminus \mathcal{K}$.
+\end{lemma}
+
+\begin{proof}
+Let $K \in \mathrm{Ext}(M,Q) \setminus \mathcal{K}$.  By
+Lemma~\ref{lem:sibling}, $K \setminus M$ hits every set in
+$\mathcal{H}(M,Q,\mathcal{K})$.  Since $K$ is a clique, $K \setminus M$ is also
+clique-compatible.  Therefore $K \setminus M$ contains some inclusion-minimal
+clique-compatible hitting subset $S_K$, and by construction
+$S_K \in \mathcal{S}(M,Q,\mathcal{K})$.
+
+If $K = M \cup S_K$, then $\mathrm{CE}(Q,S_K)=\emptyset$.  Otherwise some
+vertex $u \in \mathrm{CE}(Q,S_K)$ would lie in $Q \setminus S_K$, would be
+adjacent to every vertex of $S_K$ by definition of $\mathrm{CE}$, and would be
+adjacent to every vertex of $M$ because $Q \subseteq N(M)$.  Hence $u$ would be
+adjacent to every vertex of the clique $K = M \cup S_K$, contradicting the
+maximality of $K$.  Therefore
+$K \in \mathrm{Ext}(M \cup S_K,\emptyset)$, which is represented by the leaf
+branch in $\mathcal{F}^{S}$.
+
+Otherwise let $w$ be the minimum-rank vertex of $K \setminus (M \cup S_K)$.
+Every vertex in $K \setminus (M \cup S_K \cup \{w\})$ lies in
+$\mathrm{CE}(Q,S_K)$ because it belongs to $Q \setminus S_K$ and is adjacent to
+every vertex of $S_K$.  By minimality of $w$, every such vertex also lies in
+$N^+(w)$.  Hence
+\[
+  K \in \mathrm{Ext}\bigl(M \cup S_K \cup \{w\},
+  \mathrm{CE}(Q,S_K) \cap N^+(w)\bigr),
+\]
+and the corresponding branch is present in $\mathcal{F}^{S}$.
+\end{proof}
+
+Lemma~\ref{lem:sibling_branch} is the formal sibling effect: instead of
+traversing all descendants of a non-maximal subset $M$, we replace that search
+space by the smaller family of branches generated from minimal escape sets.
+
+\begin{corollary}[No sibling set, no undiscovered clique]\label{cor:no-sibling}
+Let $(M,h,Q)$ be a branch.  If
+$\mathcal{S}(M,Q,\mathcal{K}) = \emptyset$, then
+$\mathrm{Ext}(M,Q) \setminus \mathcal{K} = \emptyset$.
+\end{corollary}
+
+\begin{proof}
+If some
+$K \in \mathrm{Ext}(M,Q) \setminus \mathcal{K}$ existed, then the proof of
+Lemma~\ref{lem:sibling_branch} would produce an inclusion-minimal
+clique-compatible hitting subset
+$S_K \in \mathcal{S}(M,Q,\mathcal{K})$.  This contradicts the assumption that
+$\mathcal{S}(M,Q,\mathcal{K}) = \emptyset$.
+\end{proof}
+
+% ============================================================
+\section{The Core \textsc{ReorderSib} Algorithm}
+\label{sec:algorithm}
+% ============================================================
+
+\subsection{Core Search Procedure}
+
+The previous section identified the mathematical structure behind the
+reordering idea.  We now package those facts into a clean core algorithm.  The
+algorithm maintains a global set $\mathcal{K}$ of discovered maximal cliques
+and a guard set $\mathcal{D}$ of already reported empty-candidate branches.
+It starts from the initial forest $\mathcal{F}^0$ and repeatedly alternates
+between two actions.
+
+For clarity, this section presents a forest-level core algorithm: a discovered
+clique reorders the residual forest in one step.  Section~\ref{sec:implementation}
+then explains how the code realizes the same transformations through a more
+local branch-by-branch recursion.
+
+\textbf{Sibling phase.}  Before a non-root branch is expanded, all already found
+maximal cliques covering its must-in set are collected.  The branch is then
+replaced by the sibling-generated family from
+Lemma~\ref{lem:sibling_branch}.  If several generated branches have the same
+must-in set, they are merged by taking the union of their candidate sets; the
+stored head label may then be chosen arbitrarily, since coverage depends only on
+the pair $(M,Q)$.
+
+\textbf{Enumeration phase.}  DFS is run on the current branches in order.  The
+DFS branches in increasing $\sigma$-order, always recursing with
+$Q \cap N^+(v)$ so that the next expansion is ordered by the new head vertex
+$v$.  As soon as one maximal clique $C$ is found, the current DFS stops, $C$ is
+added to $\mathcal{K}$, and the residual forest is rebuilt from the current
+branch together with all later branches by enlarging each candidate set with the
+vertices of $C$ that are compatible with its must-in set.  A leaf $R$ is
+reported only if it is globally maximal, i.e., $N(R)=\emptyset$.  The algorithm
+then recurses on the resulting residual forest, where the next sibling phase can
+use $C$ as a covering clique.
+
+This is the recursive re-ordering strategy: a discovered clique is used
+immediately to move already-explained vertices to the tail and to expose the
+outside vertices that can still produce new maximal cliques.
+
+\begin{algorithm}[t]
+\caption{\textsc{rCall}: sibling reduction and enumeration dispatch}
+\label{alg:rcall}
+\begin{algorithmic}[1]
+\Require Forest $\mathcal{F} = \{(M_i,h_i,Q_i)\}$, level $\ell \ge 0$,
+         global discovered set $\mathcal{K}$, guard set $\mathcal{D}$
+\If{$\ell > 0$ \textbf{and} $\mathcal{F} \ne \emptyset$}
+  \State $(M,h,Q) \gets (M_1,h_1,Q_1)$
+  \State $\mathcal{F}_{\mathrm{rest}} \gets \mathcal{F} \setminus \{(M,h,Q)\}$
+  \State $\mathcal{S} \gets \mathcal{S}(M,Q,\mathcal{K})$
+  \If{$\mathcal{S} = \emptyset$}
+    \State $\mathcal{F} \gets \mathcal{F}_{\mathrm{rest}}$
+  \Else
+    \State $\mathcal{F}_{\mathrm{new}} \gets \emptyset$
+    \ForAll{$S \in \mathcal{S}$}
+      \State $Q_S \gets \mathrm{CE}(Q,S)$
+      \If{$Q_S = \emptyset$}
+        \State $\mathcal{F}_{\mathrm{new}} \gets \mathcal{F}_{\mathrm{new}} \cup \{(M \cup S,\; h,\; \emptyset)\}$
+      \Else
+        \ForAll{$v \in Q_S$}
+          \State $\mathcal{F}_{\mathrm{new}} \gets \mathcal{F}_{\mathrm{new}} \cup
+                 \{(M \cup S \cup \{v\},\; v,\; Q_S \cap N^+(v))\}$
+        \EndFor
+      \EndIf
+    \EndFor
+    \State $\mathcal{F} \gets \mathcal{F}_{\mathrm{new}} \cup \mathcal{F}_{\mathrm{rest}}$
+  \EndIf
+  \State Merge branches with identical must-in sets by unioning their candidate sets and retaining an arbitrary head label
+\EndIf
+\ForAll{$(M_i,h_i,Q_i) \in \mathcal{F}$}
+  \State $\mathrm{done} \gets \mathrm{false}$
+  \State \Call{Enumerate}{$M_i,\; h_i,\; Q_i,\; \mathcal{F},\; i,\; \ell,\;
+         \mathrm{done}$}
+  \If{$\mathrm{done}$} \textbf{break} \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{\textsc{Enumerate}: ordered DFS with post-discovery reordering}
+\label{alg:enumerate}
+\begin{algorithmic}[1]
+\Procedure{Enumerate}{$R,\; h,\; Q,\; \mathcal{F},\; i,\; \ell,\; \mathrm{done}$}
+\If{$Q = \emptyset$}
+  \If{$N(R) = \emptyset$ \textbf{and} $R \notin \mathcal{D}$}
+    \State $\mathcal{D} \gets \mathcal{D} \cup \{R\}$
+    \State $\mathcal{K} \gets \mathcal{K} \cup \{R\}$;\quad
+           $\mathrm{done} \gets \mathrm{true}$
+    \State $\mathcal{F}' \gets \emptyset$
+    \ForAll{$(M_j,h_j,Q_j) \in \mathcal{F}$ with $j \ge i$}
+      \State $Q_j' \gets \bigl(Q_j \cup (R \cap N(M_j))\bigr) \setminus M_j$
+      \State $\mathcal{F}' \gets \mathcal{F}' \cup \{(M_j,h_j,Q_j')\}$
+    \EndFor
+    \State \Call{rCall}{$\mathcal{F}',\; \ell + 1$}
+  \EndIf
+  \State \Return
+\EndIf
+\ForAll{$v \in Q$ in increasing $\sigma$-order}
+  \State \Call{Enumerate}{$R \cup \{v\},\; v,\; Q \cap N^+(v),\;
+         \mathcal{F},\; i,\; \ell,\; \mathrm{done}$}
+  \If{$\mathrm{done}$} \Return \EndIf
+\EndFor
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Correctness}
+
+We now prove soundness, completeness, and duplicate-freedom for the core
+algorithm.
+
+\begin{theorem}[Soundness]\label{thm:sound}
+Every set reported by \textsc{ReorderSib} is a maximal clique of $G$.
+\end{theorem}
+
+\begin{proof}
+The algorithm reports a set $R$ only at a leaf with $Q=\emptyset$ and
+$N(R)=\emptyset$.  Since every recursive extension adds only vertices adjacent
+to all previously chosen vertices, the reported set $R$ is a clique.  The
+condition $N(R)=\emptyset$ is exactly the definition of global maximality.
+Hence every reported set is a maximal clique.
+\end{proof}
+
+\begin{theorem}[Completeness]\label{thm:complete}
+\textsc{ReorderSib} reports every maximal clique in $\mathcal{M}(G)$.
+\end{theorem}
+
+\begin{proof}
+We maintain the invariant that at the start of every call
+$\textsc{rCall}(\mathcal{F},\ell)$, the forest $\mathcal{F}$ is complete for
+$\mathcal{M}(G) \setminus \mathcal{K}$.
+
+\emph{Base case.}  Initially, $\mathcal{K}=\emptyset$ and
+$\mathcal{F}=\mathcal{F}^0$.  By Lemma~\ref{lem:partition},
+$\mathcal{F}^0$ is complete for $\mathcal{M}(G)$.
+
+\emph{Sibling phase.}  When $\ell>0$, the first branch $(M,h,Q)$ is replaced by
+the family from Lemma~\ref{lem:sibling_branch}.  If
+$\mathcal{S}(M,Q,\mathcal{K})=\emptyset$, then Corollary~\ref{cor:no-sibling}
+shows that no undiscovered maximal clique remains in $\mathrm{Ext}(M,Q)$, so
+the branch may be dropped.  Otherwise the
+replacement family is complete for $\mathrm{Ext}(M,Q) \setminus \mathcal{K}$,
+while every other branch is left unchanged.  Hence completeness of the whole
+forest is preserved.
+
+\emph{Existence of the next report.}  Since $\mathcal{F}$ is complete for
+$\mathcal{M}(G)\setminus\mathcal{K}$, if this set is non-empty then some branch
+$(M,h,Q)$ covers a maximal clique $K \in \mathcal{M}(G)\setminus\mathcal{K}$.
+By Lemma~\ref{lem:canonical}, ordered DFS on that branch can reach $K$ along
+its canonical extension sequence and reaches it as a leaf.  Since $K$ is a
+maximal clique, the reporting test $N(K)=\emptyset$ is satisfied at that leaf.
+Because the DFS is finite and exhaustive within each branch, the algorithm
+eventually reports some maximal clique $C \in
+\mathcal{M}(G)\setminus\mathcal{K}$.
+
+\emph{Forest update after a report.}  Suppose DFS reports a maximal clique $C$.
+Let $\mathcal{K}' = \mathcal{K} \cup \{C\}$.  Consider any
+$K \in \mathcal{M}(G) \setminus \mathcal{K}'$.
+Since branch $i$ is the first branch in the current call that reports a clique,
+every earlier branch $1,\ldots,i-1$ has already been searched exhaustively and
+contains no clique in $\mathcal{M}(G)\setminus\mathcal{K}'$.  It therefore
+suffices to consider branches $j \ge i$.
+
+By the induction hypothesis, $K$ was covered by some pre-update branch
+$(M_j,h_j,Q_j)$ with $j \ge i$.  In the residual forest, this branch is kept
+with updated candidate set
+\[
+  Q_j' = \bigl(Q_j \cup (C \cap N(M_j))\bigr) \setminus M_j.
+\]
+Since $Q_j \subseteq Q_j'$, every clique that was covered by $(M_j,h_j,Q_j)$ is
+still covered by $(M_j,h_j,Q_j')$.  In particular,
+$K \in \mathrm{Ext}(M_j,Q_j')$.  Hence the residual forest remains complete for
+$\mathcal{M}(G) \setminus \mathcal{K}'$.
+
+By induction, every maximal clique is eventually reported.
+\end{proof}
+
+\begin{theorem}[Duplicate-freedom]\label{thm:unique}
+\textsc{ReorderSib} reports each maximal clique at most once.
+\end{theorem}
+
+\begin{proof}
+There are three possible sources of duplication.
+
+\emph{Within one DFS branch.}  In \textsc{Enumerate}, once the DFS chooses a
+head vertex $v$, all later recursion is restricted to $N^+(v)$.  Hence the
+vertices added after the head are visited in strictly increasing $\sigma$-order,
+so a fixed branch cannot report the same maximal clique twice.
+
+\emph{Across sibling-generated branches with the same must-in set.}  The
+algorithm explicitly merges such branches before DFS begins, so they cannot lead
+to duplicate reports.
+
+\emph{Across different later branches in the same forest.}  Suppose a maximal
+clique $K$ could be reported again after it has already been discovered.  This
+cannot happen because every reported clique is inserted into the guard set
+$\mathcal{D}$ immediately.  Any later leaf equal to $K$ is therefore discarded
+without being reported.
+
+Hence no maximal clique is reported more than once.
+\end{proof}
+
+% ============================================================
+\section{Implementation Realization}
+\label{sec:implementation}
+% ============================================================
+
+The previous section described the theorem-level algorithm used for the
+correctness proof.  We now return to the concrete implementation in
+\texttt{helpers.cpp}.  The implementation realizes the same reordering idea,
+but with explicit branch-management data structures and more aggressive
+operational shortcuts.
+
+\paragraph{Branch representation.}
+The implementation stores each branch as a pair of arrays:
+\texttt{mustin[i]} for the must-in set $M$ and \texttt{expandTo[i]} for the
+candidate set $Q$.  The code does not store the abstract head $h$ explicitly.
+For ordinary ordered branches, the controlling vertex is recovered from
+\texttt{mustin[i].back()}, while sibling-generated branches are tracked through
+\texttt{fullSkipCheck} and whole-branch containment tests rather than through a
+separate head field.  The recursive driver \texttt{rCall} manages the current
+local branch family, while \texttt{enumerate} performs the DFS and triggers the
+next reordering step when it finds a clique.
+
+\paragraph{Covering-clique retrieval.}
+All discovered cliques are stored globally in \texttt{allCliques}.  To avoid
+scanning that list naively, the code maintains a two-tier index
+\[
+  \mathcal{I}[v][\ell']
+\]
+whose entries are clique IDs containing vertex $v$ and discovered at level
+$\ell'$.  The function \texttt{collectCoveringCliques} chooses the least
+frequent vertex of the must-in set as a seed, filters on that vertex, and then
+verifies containment of the whole must-in set.  This is the implementation
+counterpart of the set $\mathcal{C}(M,\mathcal{K})$.
+
+\paragraph{Sibling effect.}
+Given a branch $(M,Q)$ and its covering cliques, the implementation constructs
+the constraint family $\{Q \setminus C\}$ and solves the corresponding
+clique-compatible hitting-set problem in
+\texttt{generateSiblingSetsFromCliques}.  The function
+\texttt{commonExpand} computes the common expansion
+$\mathrm{CE}(Q,S)$.  The local forest created by \texttt{rCall} is exactly the
+branch family described in Lemma~\ref{lem:sibling_branch}, except that the code
+materializes the family one local subproblem at a time and then merges any two
+generated branches with the same must-in set by unioning their candidate sets.
+
+\paragraph{Ordered DFS and recursive reordering.}
+Inside \texttt{enumerate}, recursion on a chosen vertex $v$ uses
+\texttt{adjList2[v]}, which is the stored forward neighborhood $N^+(v)$ under
+the fixed vertex order.  When a clique is found, the implementation stops the
+current DFS immediately, inserts the clique into the global discovered set, and
+rebuilds the residual search space before making the next recursive
+\texttt{rCall}.  Unlike the forest-level presentation in
+Section~\ref{sec:algorithm}, the code launches one recursive call per surviving
+reordered branch.  This is an implementation choice, not a different search
+principle: known vertices are still pushed to the tail, and new escape vertices
+are still brought to the front.
+
+\paragraph{Eager branch subsumption in the implementation.}
+The clean core algorithm keeps the current branch and all later branches in the
+residual forest, then lets the next sibling phase use the newly reported clique
+as a covering clique.  The implementation is more aggressive: it may delete a
+branch immediately when cheaper operational tests indicate that the remaining
+branch space has already been explained.  Ordinary branches use the last
+mandatory vertex.  Sibling-generated branches additionally use
+\texttt{fullSkipCheck} together with
+\texttt{branchSpaceInsideClique}.  These are implementation-level accelerations
+of the same reordering idea.
+
+\paragraph{Conceptual maximality guard.}
+The core algorithm in Section~\ref{sec:algorithm} uses the explicit predicate
+$N(R)=\emptyset$ when a DFS leaf is reached.  The implementation does not
+perform that test as a separate subroutine.  Instead, it relies on the
+reordered frontier, branch deletion, and candidate pulling to ensure that
+non-maximal leaves are operationally suppressed before they would be reported.
+The explicit guard is part of the clean theorem-level specification.
+
+\paragraph{Duplicate guards and aggressive branch management.}
+The code keeps an explicit set \texttt{claimedEmptyBranches} to block repeated
+reports from empty-candidate branches, mirroring the guard set $\mathcal{D}$ in
+Algorithm~\ref{alg:enumerate}.  It also uses \texttt{fullSkipCheck} to mark
+branches produced by sibling replacement, allowing the implementation to decide
+whether a whole branch space is already contained in a newly found clique.
+These devices are part of the concrete implementation, not part of the abstract
+mathematical interface of a branch.
+
+\paragraph{Exact hitting-set solvers.}
+Two exact solvers are implemented.
+
+\textit{Backtracking branch-and-bound.}  A DFS grows a current set
+$S_{\mathrm{cur}} \subseteq Q$ in increasing order.  As soon as
+$S_{\mathrm{cur}}$ hits all constraints and remains a clique, the branch stops:
+no proper superset can be minimal.  A minimal-by-inclusion filter is applied to
+the resulting solutions.
+
+\textit{Bitmask exact solver.}  When the number of constraints is at most $63$,
+the coverage of a candidate vertex is stored as a bitmask.  The DFS then uses
+constant-time coverage updates and three exact reductions: unit propagation,
+constraint subsumption, and fail-first ordering of constraints by size.  A
+fourth pruning rule skips any candidate that contributes no uncovered
+constraint, since such a candidate cannot participate in a minimal hitting set
+at that point.  The solver maintains a live minimal-by-inclusion solution set,
+so no separate dominance pass is required after the search.
+
+\paragraph{Pruning reductions.}
+The implementation also applies additional structural reductions before the
+solver is invoked.  Dominance pruning is exact: it removes any covering clique
+$C_i$ that is a proper subset of another covering clique $C_j$, because the
+tighter constraint $Q \setminus C_j$ already implies $Q \setminus C_i$.  The
+implementation also uses a level filter to limit covering-clique retrieval to
+recent recursive levels.  This filter is an engineering device of the concrete
+implementation and is not part of the theorem-level core proof.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{sample}
+
+\end{document}
+\endinput

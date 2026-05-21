@@ -1,0 +1,39 @@
+════════════════════════════════════════
+Graph : ../data/gen_tiny_018.txt  (n=11)
+════════════════════════════════════════
+DUPLICATE CLIQUE: { 3 5 7 }
+  First occurrence:
+    level=2  treeIndex=0
+    mustin seed: { 3 5 7 }
+    R path     : { 3 5 7 }
+  Duplicate occurrence:
+    level=2  treeIndex=0
+    mustin seed: { 3 5 7 }
+    R path     : { 3 5 7 }
+
+════════════════════════════════════════
+Graph : ../data/gen_tiny_019.txt  (n=12)
+════════════════════════════════════════
+DUPLICATE CLIQUE: { 1 6 7 9 }
+  First occurrence:
+    level=3  treeIndex=0
+    mustin seed: { 1 6 7 9 }
+    R path     : { 1 6 7 9 }
+  Duplicate occurrence:
+    level=2  treeIndex=0
+    mustin seed: { 1 6 7 9 }
+    R path     : { 1 6 7 9 }
+
+════════════════════════════════════════
+Graph : ../data/gen_tiny_025.txt  (n=11)
+════════════════════════════════════════
+DUPLICATE CLIQUE: { 5 6 9 }
+  First occurrence:
+    level=2  treeIndex=0
+    mustin seed: { 5 6 9 }
+    R path     : { 5 6 9 }
+  Duplicate occurrence:
+    level=2  treeIndex=0
+    mustin seed: { 5 6 9 }
+    R path     : { 5 6 9 }
+

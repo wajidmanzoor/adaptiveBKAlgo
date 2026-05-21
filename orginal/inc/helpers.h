@@ -5,11 +5,7 @@
 
 enum class DegOrder { ORIGINAL, ASCENDING, DESCENDING };
 enum class SibMethod {
-  BRUTE_FORCE,
   BACKTRACKING,
-  GREEDY,
-  BITMASK,
-  MIN_HITTING_SET,
   OPTIMIZED
 };
 
@@ -17,23 +13,16 @@ enum class SibMethod {
 class PivotBK {
 private:
   ui n;
-  vector<vector<ui>> adjList; // adjacency lists
+  vector<vector<ui>> adjList;
   ui cliqueCount;
-  ui maxCliqueSize; // for neighborhood size pruning
-  ui checksCount;   // total vertex-set checks in bronKerboschRecursive
-  ui redundancy;
-
-  vector<vector<ui>> redendantChecks; // Track redundant vertices for pruning
-
-  vector<vector<ui>>
-      foundCliques; // Store found maximal cliques for output/debugging
+  ui maxCliqueSize;
+  ui checksCount;
 
   vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
   bool isEmpty(const vector<ui> &set);
   bool isConnected(ui u, ui v);
   ui choosePivot(const vector<ui> &P, const vector<ui> &X);
   void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
-  bool isPSubsetOfFoundClique(const vector<ui> &P);
 
 public:
   PivotBK(Graph &g, DegOrder order = DegOrder::ASCENDING);
@@ -47,6 +36,7 @@ private:
   vector<vector<ui>> adjList;
   vector<vector<ui>> adjList2;
   ui cliqueCount;
+  ui dupBlocked;
   size_t maxCliqueSize;
   ui checksCount;
   SibMethod method;
@@ -61,14 +51,16 @@ private:
   bool sp5;    // rCall: skip branches where |mustin|+|expandTo| <= 2 (can't form clique of size > 2)
   bool sp6;    // enumerate: skip reordered branches with empty expandTo and |mustin| <= 2
   vector<vector<ui>> allCliques;
-  vector<ui> foundLevel;
-  vector<vector<ui>> cliquesByVertex;
-  unordered_set<string> seenCliques;
+  // Two-tier clique index: [vertex][level] = list of clique IDs.
+  // Replaces the flat cliquesByVertex + foundLevel pair; with prune2 on we
+  // jump directly to the relevant level bucket instead of scanning all cliques.
+  vector<vector<vector<ui>>> cliquesByVertexByLevel;
+  vector<ui> cliqueCountByVertex; // total cliques per vertex — for seed selection
+  unordered_set<string> claimedEmptyBranches;
 
   vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
   vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
   vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
-  vector<ui> compliment(const vector<ui> &vector1);
 
   bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);
@@ -83,15 +75,7 @@ private:
   vector<vector<ui>>
   generateSiblingSetsFromCliques(const vector<ui> &E,
                                  const vector<ui> &cliqueIds);
-  vector<vector<ui>> bruteForceBySize(const vector<ui> &E,
-                                      const vector<vector<ui>> &hitSets);
   vector<vector<ui>> backtrackingBranchBound(const vector<ui> &E,
-                                             const vector<vector<ui>> &hitSets);
-  vector<vector<ui>> greedyApproximation(const vector<ui> &E,
-                                         const vector<vector<ui>> &hitSets);
-  vector<vector<ui>> bitmaskExactSearch(const vector<ui> &E,
-                                        const vector<vector<ui>> &hitSets);
-  vector<vector<ui>> minimumCliqueHittingSet(const vector<ui> &E,
                                              const vector<vector<ui>> &hitSets);
   vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
                                          const vector<vector<ui>> &hitSets);
@@ -106,7 +90,7 @@ private:
 
 public:
   ReorderSib(Graph &g, DegOrder order = DegOrder::ORIGINAL,
-             SibMethod method = SibMethod::BRUTE_FORCE,
+             SibMethod method = SibMethod::OPTIMIZED,
              ui hitSetLimit = UINT_MAX,
              bool prune1 = true, bool prune2 = true,
              bool sp1 = true, bool sp2 = true, bool sp3 = true,

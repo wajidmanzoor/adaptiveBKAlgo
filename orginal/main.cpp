@@ -5,6 +5,9 @@
 int main(int argc, const char *argv[]) {
   if (argc < 5 || argc > 14) {
     cout << "Usage: bk_algorithm <file> <mode> <ord> <meth> [hitSetLimit] [prune1] [prune2] [sp1] [sp2] [sp3] [sp4] [sp5] [sp6]" << endl;
+    cout << "  mode: 0=PivotBK  1=ReorderSib" << endl;
+    cout << "  ord:  0=Original  1=Ascending  2=Descending" << endl;
+    cout << "  meth: 0=Backtracking  1=Optimized  (ReorderSib only)" << endl;
     exit(1);
   }
 
@@ -52,19 +55,11 @@ int main(int argc, const char *argv[]) {
       exit(1);
     }
     if (meth == 0)
-      cout << "(Brute Force By Size) Algorithm...";
-    else if (meth == 1)
       cout << "(Backtracking Branch And Bound) Algorithm...";
-    else if (meth == 2)
-      cout << "(Greedy Approximation) Algorithm...";
-    else if (meth == 3)
-      cout << "(Bitmask Exact Search) Algorithm...";
-    else if (meth == 4)
-      cout << "(Inclusion-Minimal Clique Hitting Set) Algorithm...";
-    else if (meth == 5)
+    else if (meth == 1)
       cout << "(Optimized Exact Search) Algorithm...";
     else {
-      cout << "Invalid method! Use 0..5." << endl;
+      cout << "Invalid method! Use 0 (Backtracking) or 1 (Optimized)." << endl;
       exit(1);
     }
     cout << endl;

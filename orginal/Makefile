@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -g -O0
+CXXFLAGS = -std=c++17 -O3 -DNDEBUG
 SRCDIR = src
 INCDIR = inc
 OBJDIR = obj

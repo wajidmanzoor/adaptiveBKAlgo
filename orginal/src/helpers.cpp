@@ -151,23 +151,6 @@ ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
   }
   return bestPivot;
 }
-// Returns true if P is a subset of any already-found maximal clique
-bool PivotBK::isPSubsetOfFoundClique(const vector<ui> &P) {
-  for (const vector<ui> &clique : foundCliques) {
-    // Check if every vertex in P exists in this clique
-    bool allFound = true;
-    for (ui v : P) {
-      if (find(clique.begin(), clique.end(), v) == clique.end()) {
-        allFound = false;
-        break;
-      }
-    }
-    if (allFound)
-      return true;
-  }
-  return false;
-}
-
 void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
                                     vector<ui> &X) {
   checksCount++;
@@ -191,14 +174,6 @@ void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
   // Choose pivot from P ∪ X such that |P ∩ N(pivot)| is maximized to minimize
   // recursive calls
   ui pivot = choosePivot(P, X);
-
-  // Track redundent checks for profiling
-#if debug
-  if (isPSubsetOfFoundClique(P)) {
-    redendantChecks.push_back(P);
-    redundancy++;
-  }
-#endif
 
   // P = P \ N(pivot)
   vector<ui> candidates;
@@ -235,9 +210,6 @@ void PivotBK::findAllMaximalCliques() {
   vector<ui> X;
   vector<ui> P(n);
 
-  // keeps track of redunant checks (check that are subset of cliques arleady
-  // found) for profiling
-  redundancy = 0;
   for (ui i = 0; i < n; i++)
     P[i] = i;
 
@@ -254,28 +226,14 @@ void PivotBK::findAllMaximalCliques() {
   cout << "Maximum Clique Size: " << maxCliqueSize << endl;
   cout << "Total Vertex-Set Checks: " << checksCount << endl;
   cout << fixed << setprecision(3) << "Time: " << ms << " ms" << endl;
-
-#if debug
-  cout << endl << "Redundancy Count: " << redundancy << endl;
-
-  cout << "Redundant Checks: ";
-  for (const auto &check : redendantChecks) {
-    cout << "{ ";
-    for (ui v : check)
-      cout << v << " ";
-    cout << "} ";
-  }
-  cout << endl;
-#endif
 }
 
-// ── ReorderSib profiling
-// ──────────────────────────────────────────────────────
+// ReorderSib profiling
 struct RSibProf {
   double rCall_ms = 0, enumerate_ms = 0, collect_ms = 0, solver_ms = 0;
-  double minimal_ms = 0, commonExp_ms = 0, dedup_ms = 0, buildHit_ms = 0;
+  double minimal_ms = 0, commonExp_ms = 0, buildHit_ms = 0;
   long rCall_n = 0, enumerate_n = 0, collect_n = 0, solver_n = 0;
-  long minimal_n = 0, commonExp_n = 0, dedup_n = 0, buildHit_n = 0;
+  long minimal_n = 0, commonExp_n = 0, buildHit_n = 0;
   void reset() { *this = RSibProf{}; }
   void print(double total_ms) const {
     auto pct = [&](double v) {
@@ -297,8 +255,6 @@ struct RSibProf {
            minimal_ms, pct(minimal_ms), minimal_n);
     printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "commonExpand",
            commonExp_ms, pct(commonExp_ms), commonExp_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "seenCliques dedup",
-           dedup_ms, pct(dedup_ms), dedup_n);
     printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
     printf("──────────────────────────────────────────────────────────────\n");
   }
@@ -336,9 +292,9 @@ ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
   maxCliqueSize = 0;
   checksCount = 0;
 
-  // methods to get the sibling effect.
   this->method = method;
-  cliquesByVertex.resize(n);
+  cliquesByVertexByLevel.resize(n);
+  cliqueCountByVertex.resize(n, 0);
 
   vector<ui> perm(n);
 
@@ -419,17 +375,6 @@ vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
   return U;
 }
 
-vector<ui> ReorderSib::compliment(const vector<ui> &vector1) {
-  vector<char> seen(n, 0);
-  for (ui x : vector1)
-    seen[x] = 1;
-  vector<ui> C;
-  for (ui i = 0; i < n; i++)
-    if (!seen[i])
-      C.push_back(i);
-  return C;
-}
-
 bool ReorderSib::hitsAll(const vector<ui> &S,
                          const vector<vector<ui>> &hitSets) {
   for (const vector<ui> &hitSet : hitSets) {
@@ -451,8 +396,16 @@ bool ReorderSib::hitsAll(const vector<ui> &S,
 vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
   ScopedTimer _t(rsp.commonExp_ms, rsp.commonExp_n);
   vector<ui> result = setDiff(E, S);
-  for (ui v : S)
-    result = intersect(result, adjList[v]);
+  for (ui v : S) {
+    const auto &adj = adjList[v];
+    ui k = 0, j = 0;
+    for (ui i = 0; i < (ui)result.size(); i++) {
+      while (j < (ui)adj.size() && adj[j] < result[i]) j++;
+      if (j < (ui)adj.size() && adj[j] == result[i])
+        result[k++] = result[i];
+    }
+    result.resize(k);
+  }
   return result;
 }
 
@@ -464,46 +417,39 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M,
   if (M.empty())
     return result;
 
-  // find vertex in M with fewest cliques.
+  // Seed: vertex in M whose total clique count is smallest (tightest filter).
   ui seed = M[0];
-  for (ui v : M) {
-    if (cliquesByVertex[v].size() < cliquesByVertex[seed].size())
-      seed = v;
-  }
+  for (ui v : M)
+    if (cliqueCountByVertex[v] < cliqueCountByVertex[seed]) seed = v;
 
-  // check only the cliques containing that vertex to see if they cover all of
-  // M.
-  for (ui cId : cliquesByVertex[seed]) {
-    // Only keep cliques from the previous level or deeper; older levels have
-    // already contributed their reorder/sibling information.
-    if (cId >= allCliques.size())
-      continue;
-    if (prune2 && foundLevel[cId] < level - 1)
-      continue;
-
-    bool containsAllMustin = includes(
-        allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
-    if (!containsAllMustin)
-      continue;
-
-    // sp4: skip cliques whose intersection with E is exactly M — the hitSet
-    // would be E\M, which any sibling set satisfies trivially (no real
-    // constraint).
-    if (sp4) {
-      const auto &C = allCliques[cId];
-      bool hasVertexBeyondM = false;
-      for (ui v : C) {
-        if (!binary_search(M.begin(), M.end(), v) &&
-            binary_search(E.begin(), E.end(), v)) {
-          hasVertexBeyondM = true;
-          break;
-        }
-      }
-      if (!hasVertexBeyondM)
+  // With prune2: only look at levels >= level-1 in the two-tier index,
+  // skipping all older cliques without scanning them.
+  const ui startLevel = prune2 ? (level > 0 ? level - 1 : 0) : 0;
+  const auto &seedBuckets = cliquesByVertexByLevel[seed];
+  for (ui l = startLevel; l < (ui)seedBuckets.size(); l++) {
+    for (ui cId : seedBuckets[l]) {
+      bool containsAllMustin = includes(
+          allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
+      if (!containsAllMustin)
         continue;
-    }
 
-    result.push_back(cId);
+      // sp4: skip cliques whose intersection with E is exactly M.
+      if (sp4) {
+        const auto &C = allCliques[cId];
+        bool hasVertexBeyondM = false;
+        for (ui v : C) {
+          if (!binary_search(M.begin(), M.end(), v) &&
+              binary_search(E.begin(), E.end(), v)) {
+            hasVertexBeyondM = true;
+            break;
+          }
+        }
+        if (!hasVertexBeyondM)
+          continue;
+      }
+
+      result.push_back(cId);
+    }
   }
   return result;
 }
@@ -629,56 +575,10 @@ ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
   if (pruned.size() == 1)
     return singletonBranches(hitSets[0]);
 
-  switch (method) {
-
-  case SibMethod::BACKTRACKING:
+  if (method == SibMethod::BACKTRACKING)
     return backtrackingBranchBound(E, hitSets);
-  case SibMethod::GREEDY:
-    return greedyApproximation(E, hitSets);
-  case SibMethod::OPTIMIZED:
-    return efficientHittingSet(E, hitSets);
-  }
 
-  return bruteForceBySize(E, hitSets);
-}
-
-vector<vector<ui>>
-ReorderSib::bruteForceBySize(const vector<ui> &E,
-                             const vector<vector<ui>> &hitSets) {
-  vector<vector<ui>> solutions;
-  vector<ui> current;
-
-  // Enumerate clique-compatible subsets of E in increasing size.
-  function<void(ui, ui)> choose = [&](ui start, ui remaining) {
-    if (remaining == 0) {
-      if (hitsAll(current, hitSets))
-        solutions.push_back(current);
-      return;
-    }
-    if (E.size() - start < remaining)
-      return;
-
-    for (ui i = start; i < E.size(); i++) {
-      bool connected = true;
-      for (ui v : current) {
-        if (!binary_search(adjList[v].begin(), adjList[v].end(), E[i])) {
-          connected = false;
-          break;
-        }
-      }
-      if (!connected)
-        continue;
-
-      current.push_back(E[i]);
-      choose(i + 1, remaining - 1);
-      current.pop_back();
-    }
-  };
-
-  for (ui targetSize = 1; targetSize <= E.size(); targetSize++) {
-    choose(0, targetSize);
-  }
-  return minimalByInclusion(solutions);
+  return efficientHittingSet(E, hitSets);
 }
 
 vector<vector<ui>>
@@ -715,155 +615,6 @@ ReorderSib::backtrackingBranchBound(const vector<ui> &E,
 
   dfs(0);
   return minimalByInclusion(solutions);
-}
-
-vector<vector<ui>>
-ReorderSib::greedyApproximation(const vector<ui> &E,
-                                const vector<vector<ui>> &hitSets) {
-  vector<ui> S;
-  vector<char> inS(n, 0);
-  vector<char> covered(hitSets.size(), 0);
-  ui coveredCount = 0;
-
-  // Greedily add the clique-compatible vertex that hits the largest number of
-  // still-uncovered constraints.
-  while (coveredCount < hitSets.size()) {
-    ui bestVertex = numeric_limits<ui>::max();
-    ui bestGain = 0;
-
-    for (ui v : E) {
-      if (inS[v])
-        continue;
-
-      bool connected = true;
-      for (ui u : S) {
-        if (!binary_search(adjList[u].begin(), adjList[u].end(), v)) {
-          connected = false;
-          break;
-        }
-      }
-      if (!connected)
-        continue;
-
-      ui gain = 0;
-      for (ui i = 0; i < hitSets.size(); i++) {
-        if (!covered[i] &&
-            binary_search(hitSets[i].begin(), hitSets[i].end(), v))
-          gain++;
-      }
-      if (gain > bestGain || (gain == bestGain && gain > 0 && v < bestVertex)) {
-        bestGain = gain;
-        bestVertex = v;
-      }
-    }
-
-    if (bestGain == 0)
-      return {};
-
-    S.push_back(bestVertex);
-    inS[bestVertex] = 1;
-    for (ui i = 0; i < hitSets.size(); i++) {
-      if (!covered[i] &&
-          binary_search(hitSets[i].begin(), hitSets[i].end(), bestVertex)) {
-        covered[i] = 1;
-        coveredCount++;
-      }
-    }
-  }
-
-  sort(S.begin(), S.end());
-  return {S};
-}
-
-vector<vector<ui>>
-ReorderSib::bitmaskExactSearch(const vector<ui> &E,
-                               const vector<vector<ui>> &hitSets) {
-  if (hitSets.size() > 63)
-    return backtrackingBranchBound(E, hitSets);
-
-  // Encode "which hit sets does this vertex cover?" as a 64-bit mask so the
-  // exact search can update coverage with fast bitwise OR operations.
-  ull fullMask = 0;
-  for (ui i = 0; i < hitSets.size(); i++)
-    fullMask |= (1ULL << i);
-
-  vector<ull> masks(E.size(), 0);
-  vector<ui> eIndex(n, n);
-  for (ui i = 0; i < E.size(); i++)
-    eIndex[E[i]] = i;
-  for (ui j = 0; j < hitSets.size(); j++) {
-    for (ui v : hitSets[j]) {
-      ui idx = eIndex[v];
-      if (idx < E.size())
-        masks[idx] |= (1ULL << j);
-    }
-  }
-
-  vector<vector<ui>> solutions;
-  vector<ui> current;
-  vector<ui> currentIndices;
-  const size_t eSize = E.size();
-  const bool useCompatTable = eSize <= 4096;
-  vector<char> compatible;
-  if (useCompatTable) {
-    compatible.assign(eSize * eSize, 0);
-    for (ui i = 0; i < eSize; i++) {
-      for (ui j = 0; j < i; j++) {
-        if (binary_search(adjList[E[j]].begin(), adjList[E[j]].end(), E[i])) {
-          compatible[i * eSize + j] = 1;
-          compatible[j * eSize + i] = 1;
-        }
-      }
-    }
-  }
-
-  function<void(ui, ui, ull)> dfs = [&](ui start, ui remaining, ull mask) {
-    if (remaining == 0) {
-      if (mask == fullMask)
-        solutions.push_back(current);
-      return;
-    }
-    if (E.size() - start < remaining)
-      return;
-
-    for (ui i = start; i < E.size(); i++) {
-      bool connected = true;
-      if (useCompatTable) {
-        for (ui idx : currentIndices) {
-          if (!compatible[idx * eSize + i]) {
-            connected = false;
-            break;
-          }
-        }
-      } else {
-        for (ui v : current) {
-          if (!binary_search(adjList[v].begin(), adjList[v].end(), E[i])) {
-            connected = false;
-            break;
-          }
-        }
-      }
-      if (!connected)
-        continue;
-
-      current.push_back(E[i]);
-      currentIndices.push_back(i);
-      dfs(i + 1, remaining - 1, mask | masks[i]);
-      currentIndices.pop_back();
-      current.pop_back();
-    }
-  };
-
-  for (ui targetSize = 1; targetSize <= E.size(); targetSize++) {
-    dfs(0, targetSize, 0);
-  }
-  return minimalByInclusion(solutions);
-}
-
-vector<vector<ui>>
-ReorderSib::minimumCliqueHittingSet(const vector<ui> &E,
-                                    const vector<vector<ui>> &hitSets) {
-  return backtrackingBranchBound(E, hitSets);
 }
 
 // Optimized exact solver for all minimal clique-constrained hitting sets.
@@ -1147,13 +898,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
 }
 
 static string encodeClique(const vector<ui> &C) {
-  string key;
-  key.reserve(C.size() * 6);
-  for (ui v : C) {
-    key += to_string(v);
-    key.push_back(',');
-  }
-  return key;
+  return string(reinterpret_cast<const char *>(C.data()), C.size() * sizeof(ui));
 }
 
 bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
@@ -1214,12 +959,42 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
         fullSkipCheck.push_back(branchNeedsFullSkip);
       } else {
         for (ui v : baseExpand) {
-          vector<ui> childMustin = unionSet(baseMustin, {v});
-          mustin.push_back(childMustin);
+          // Direct sorted insert of v into baseMustin — avoids temporary {v}.
+          vector<ui> childMustin = baseMustin;
+          childMustin.insert(
+              lower_bound(childMustin.begin(), childMustin.end(), v), v);
+          mustin.push_back(std::move(childMustin));
           expandTo.push_back(intersect(baseExpand, adjList[v]));
           fullSkipCheck.push_back(branchNeedsFullSkip);
         }
       }
+    }
+
+    // Deduplicate branches: two sibling paths can reach the same mustin from
+    // different directions (e.g. hitSet {5,9} expands as "5 then 9" and
+    // "9 then 5").  Only possible when covering cliques exist; singleton
+    // branches always have distinct mustins so the dedup is skipped.
+    if (hasCoveringCliques) {
+      unordered_map<string, ui> mustinIndex;
+      vector<vector<ui>> dedupMustin;
+      vector<vector<ui>> dedupExpand;
+      vector<char> dedupSkip;
+      for (ui i = 0; i < (ui)mustin.size(); i++) {
+        string key = encodeClique(mustin[i]);
+        auto [it, inserted] = mustinIndex.emplace(key, (ui)dedupMustin.size());
+        if (inserted) {
+          dedupMustin.push_back(std::move(mustin[i]));
+          dedupExpand.push_back(std::move(expandTo[i]));
+          dedupSkip.push_back(fullSkipCheck[i]);
+        } else {
+          // merge expandTo so no candidate is dropped
+          dedupExpand[it->second] =
+              unionSet(dedupExpand[it->second], expandTo[i]);
+        }
+      }
+      mustin = std::move(dedupMustin);
+      expandTo = std::move(dedupExpand);
+      fullSkipCheck = std::move(dedupSkip);
     }
 
     if (debug) {
@@ -1245,6 +1020,16 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     // sp5: skip branches that can't possibly produce a clique of size > 2.
     if (sp5 && mustin[i].size() + expandTo[i].size() <= 2)
       continue;
+    // Empty-expandTo branches always produce exactly mustin[i] as the clique.
+    // If another rCall already claimed this mustin, the result is identical —
+    // skip to avoid a cross-invocation duplicate that branch-dedup can't catch.
+    if (expandTo[i].empty()) {
+      string key = encodeClique(mustin[i]);
+      if (!claimedEmptyBranches.insert(key).second) {
+        dupBlocked++;
+        continue;
+      }
+    }
     vector<ui> R = mustin[i];
     vector<ui> Q = expandTo[i];
     bool done = false;
@@ -1281,11 +1066,9 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     if ((ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
-      {
-        ScopedTimer _td(rsp.dedup_ms, rsp.dedup_n);
-        if (!seenCliques.insert(encodeClique(C)).second)
-          return;
-      }
+      // Block any future empty-expandTo branch whose mustin == C:
+      // such a branch would find exactly C again, so it's redundant.
+      claimedEmptyBranches.insert(encodeClique(C));
       cliqueCount++;
       if (debug) {
         for (ui i = 0; i < level; i++)
@@ -1298,9 +1081,12 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
       maxCliqueSize = max(maxCliqueSize, C.size());
       ui cliqueIdx = (ui)allCliques.size();
       allCliques.push_back(C);
-      foundLevel.push_back(level);
-      for (ui v : C)
-        cliquesByVertex[v].push_back(cliqueIdx);
+      for (ui v : C) {
+        if ((ui)cliquesByVertexByLevel[v].size() <= level)
+          cliquesByVertexByLevel[v].resize(level + 1);
+        cliquesByVertexByLevel[v][level].push_back(cliqueIdx);
+        cliqueCountByVertex[v]++;
+      }
 
       // stops the DFS in enumeerate and tree expansion in rCall.
       done = true;
@@ -1386,13 +1172,13 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
 void ReorderSib::findAllMaximalCliques() {
   rsp.reset();
   cliqueCount = 0;
+  dupBlocked = 0;
   maxCliqueSize = 0;
   checksCount = 0;
   allCliques.clear();
-  foundLevel.clear();
-  seenCliques.clear();
-  for (ui v = 0; v < n; v++)
-    cliquesByVertex[v].clear();
+  claimedEmptyBranches.clear();
+  cliquesByVertexByLevel.assign(n, {});
+  fill(cliqueCountByVertex.begin(), cliqueCountByVertex.end(), 0);
 
   // Tree Must-In and Expand-To sets for the initial call
   // Mustin : already a part of the clique.
@@ -1415,8 +1201,8 @@ void ReorderSib::findAllMaximalCliques() {
   double ms = chrono::duration<double, milli>(t1 - t0).count();
 
   cout << fixed << setprecision(3) << "ReorderSib: cliques=" << cliqueCount
-       << "  maxSize=" << maxCliqueSize << "  checks=" << checksCount
-       << "  time=" << ms << " ms" << endl;
+       << "  dups=" << dupBlocked << "  maxSize=" << maxCliqueSize
+       << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
 #if PROFILING
   rsp.print(ms);
 #endif
