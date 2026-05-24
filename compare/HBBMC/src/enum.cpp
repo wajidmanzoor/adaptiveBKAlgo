@@ -414,7 +414,7 @@ void Tomita_t::Tomita_opt_mat_rec(int l) {
 
 	if (p > 0 && cur_min >= P_size[l] - p && X_size[l] == 0) {
 
-		if (p == 1) maximal_clique++;
+		if (p == 1 && l + P_size[l] >= 3) maximal_clique++;
 
 		else if (p == 2) maximal_clique += (1 << (LR >> 1));
 
