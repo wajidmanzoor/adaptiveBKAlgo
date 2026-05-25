@@ -242,6 +242,11 @@ struct RSibProf {
   long pivot_n = 0, sibling_n = 0, dedup_n = 0;
   long reorderSkip_n = 0, reorderBuild_n = 0, cliqueRecord_n = 0;
   long dominance_n = 0, siblingPlan_n = 0, branchBuild_n = 0;
+  ull solver_hsize_sum = 0, solver_esize_sum = 0;
+  ull solver_compat_eligible = 0, solver_compat_survivors = 0;
+  long solver_h_gt63 = 0, solver_h_gt128 = 0;
+  long solver_h_le8 = 0, solver_h_le16 = 0, solver_h_le32 = 0;
+  long solver_h_le63 = 0, solver_h_le128 = 0, solver_h_gt128_bucket = 0;
   void reset() { *this = RSibProf{}; }
   void print(double total_ms) const {
     auto pct = [&](double v) {
@@ -285,6 +290,27 @@ struct RSibProf {
     printf("  %-30s %9.3f ms  %5.1f%%\n", "PROFILED subtotal", profiled_ms,
            pct(profiled_ms));
     printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
+    if (solver_n > 0) {
+      const double avgE = static_cast<double>(solver_esize_sum) / solver_n;
+      const double avgH = static_cast<double>(solver_hsize_sum) / solver_n;
+      const double compatPct =
+          solver_compat_eligible > 0
+              ? 100.0 * static_cast<double>(solver_compat_survivors) /
+                    solver_compat_eligible
+              : 0.0;
+      printf("\n  Solver stats\n");
+      printf("  %-30s %.2f\n", "avg |E|", avgE);
+      printf("  %-30s %.2f\n", "avg hSize", avgH);
+      printf("  %-30s %ld\n", "calls with hSize > 63", solver_h_gt63);
+      printf("  %-30s %ld\n", "calls with hSize > 128", solver_h_gt128);
+      printf("  %-30s %llu / %llu  (%4.1f%%)\n",
+             "compat survivors / eligible",
+             solver_compat_survivors, solver_compat_eligible, compatPct);
+      printf("  %-30s <=8:%ld  9-16:%ld  17-32:%ld\n", "hSize buckets",
+             solver_h_le8, solver_h_le16, solver_h_le32);
+      printf("  %-30s 33-63:%ld  64-128:%ld  >128:%ld\n", "",
+             solver_h_le63, solver_h_le128, solver_h_gt128_bucket);
+    }
     printf("──────────────────────────────────────────────────────────────\n");
   }
 };
@@ -529,6 +555,33 @@ void ReorderSib::unionInto(vector<ui> &out, const vector<ui> &A,
     out.push_back(B[j++]);
 }
 
+void ReorderSib::recordSolverCallStats(ui eSize, ui hSize) {
+  rsp.solver_esize_sum += eSize;
+  rsp.solver_hsize_sum += hSize;
+  if (hSize > 63)
+    rsp.solver_h_gt63++;
+  if (hSize > 128)
+    rsp.solver_h_gt128++;
+
+  if (hSize <= 8)
+    rsp.solver_h_le8++;
+  else if (hSize <= 16)
+    rsp.solver_h_le16++;
+  else if (hSize <= 32)
+    rsp.solver_h_le32++;
+  else if (hSize <= 63)
+    rsp.solver_h_le63++;
+  else if (hSize <= 128)
+    rsp.solver_h_le128++;
+  else
+    rsp.solver_h_gt128_bucket++;
+}
+
+void ReorderSib::recordSolverCompatStats(ull eligible, ull survivors) {
+  rsp.solver_compat_eligible += eligible;
+  rsp.solver_compat_survivors += survivors;
+}
+
 bool ReorderSib::hitsAll(const vector<ui> &S,
                          const vector<vector<ui>> &hitSets) {
   for (const vector<ui> &hitSet : hitSets) {
@@ -549,16 +602,21 @@ bool ReorderSib::hitsAll(const vector<ui> &S,
 // every vertex of S can continue to grow the branch.
 vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
   ScopedTimer _t(rsp.commonExp_ms, rsp.commonExp_n);
-  vector<ui> result = setDiff(E, S);
-  for (ui v : S) {
-    const auto &adj = adjList[v];
-    ui k = 0, j = 0;
-    for (ui i = 0; i < (ui)result.size(); i++) {
-      while (j < (ui)adj.size() && adj[j] < result[i]) j++;
-      if (j < (ui)adj.size() && adj[j] == result[i])
-        result[k++] = result[i];
-    }
-    result.resize(k);
+  if (S.empty())
+    return E;
+
+  vector<ui> order = S;
+  sort(order.begin(), order.end(), [&](ui a, ui b) {
+    return adjList[a].size() < adjList[b].size();
+  });
+
+  vector<ui> result;
+  intersectExcludingInto(result, E, adjList[order[0]], S);
+
+  vector<ui> scratch;
+  for (ui idx = 1; idx < (ui)order.size() && !result.empty(); idx++) {
+    intersectInto(scratch, result, adjList[order[idx]]);
+    result.swap(scratch);
   }
   return result;
 }
@@ -571,39 +629,84 @@ vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M,
   if (M.empty())
     return result;
 
-  // Seed: vertex in M whose total clique count is smallest (tightest filter).
-  ui seed = M[0];
-  for (ui v : M)
-    if (cliqueCountByVertex[v] < cliqueCountByVertex[seed]) seed = v;
-
   // With prune2: only look at levels >= level-1 in the two-tier index,
   // skipping all older cliques without scanning them.
   const ui startLevel = prune2 ? (level > 0 ? level - 1 : 0) : 0;
-  const auto &seedBuckets = cliquesByVertexByLevel[seed];
-  for (ui l = startLevel; l < (ui)seedBuckets.size(); l++) {
-    for (ui cId : seedBuckets[l]) {
-      bool containsAllMustin = includes(
-          allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
-      if (!containsAllMustin)
-        continue;
 
-      // sp4: skip cliques whose intersection with E is exactly M.
-      if (sp4) {
-        const auto &C = allCliques[cId];
-        bool hasVertexBeyondM = false;
-        for (ui v : C) {
-          if (!binary_search(M.begin(), M.end(), v) &&
-              binary_search(E.begin(), E.end(), v)) {
-            hasVertexBeyondM = true;
-            break;
-          }
-        }
-        if (!hasVertexBeyondM)
-          continue;
-      }
+  auto liveCliqueCount = [&](ui v) -> size_t {
+    size_t count = 0;
+    const auto &buckets = cliquesByVertexByLevel[v];
+    for (ui l = startLevel; l < (ui)buckets.size(); l++)
+      count += buckets[l].size();
+    return count;
+  };
 
-      result.push_back(cId);
+  auto appendSeedCandidates = [&](ui seed, vector<ui> &out) {
+    const auto &seedBuckets = cliquesByVertexByLevel[seed];
+    for (ui l = startLevel; l < (ui)seedBuckets.size(); l++)
+      out.insert(out.end(), seedBuckets[l].begin(), seedBuckets[l].end());
+  };
+
+  // Use the two rarest must-in vertices as the initial filter. We still verify
+  // full M containment below, but intersecting the rarest two seed lists first
+  // trims the expensive verification pass substantially on large branches.
+  ui seed1 = M[0], seed2 = M[0];
+  size_t seed1Count = liveCliqueCount(seed1);
+  size_t seed2Count = numeric_limits<size_t>::max();
+  for (ui v : M) {
+    const size_t count = liveCliqueCount(v);
+    if (count < seed1Count) {
+      seed2 = seed1;
+      seed2Count = seed1Count;
+      seed1 = v;
+      seed1Count = count;
+    } else if (v != seed1 && count < seed2Count) {
+      seed2 = v;
+      seed2Count = count;
     }
+  }
+
+  vector<ui> candidateIds;
+  candidateIds.reserve(seed1Count);
+  appendSeedCandidates(seed1, candidateIds);
+
+  if (M.size() >= 2 && seed2 != seed1) {
+    vector<ui> secondaryIds;
+    secondaryIds.reserve(seed2Count);
+    appendSeedCandidates(seed2, secondaryIds);
+    sort(secondaryIds.begin(), secondaryIds.end());
+
+    ui out = 0;
+    for (ui cId : candidateIds) {
+      if (binary_search(secondaryIds.begin(), secondaryIds.end(), cId))
+        candidateIds[out++] = cId;
+    }
+    candidateIds.resize(out);
+  }
+
+  result.reserve(candidateIds.size());
+  for (ui cId : candidateIds) {
+    bool containsAllMustin = includes(
+        allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
+    if (!containsAllMustin)
+      continue;
+
+    // sp4: skip cliques whose intersection with E is exactly M.
+    if (sp4) {
+      const auto &C = allCliques[cId];
+      bool hasVertexBeyondM = false;
+      for (ui v : C) {
+        if (!binary_search(M.begin(), M.end(), v) &&
+            binary_search(E.begin(), E.end(), v)) {
+          hasVertexBeyondM = true;
+          break;
+        }
+      }
+      if (!hasVertexBeyondM)
+        continue;
+    }
+
+    result.push_back(cId);
   }
   return result;
 }
@@ -678,30 +781,13 @@ ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
   return minimal;
 }
 
-// Drop covering cliques that are proper subsets of another covering clique.
-// If Ci ⊂ Cj then E\Ci ⊃ E\Cj, so Cj's hit-set constraint implies Ci's.
-// Any solution that satisfies Cj automatically satisfies Ci, so Ci is
-// redundant. Cliques in allCliques are stored sorted, so std::includes works
-// directly.
+// allCliques stores maximal cliques only, so no distinct covering clique can
+// be a proper subset of another. That means clique-level dominance pruning is
+// mathematically a no-op here; keep the hook but skip the quadratic subset
+// scan.
 vector<ui> ReorderSib::pruneByDominance(const vector<ui> &cliqueIds) {
   ScopedTimer _t(rsp.dominance_ms, rsp.dominance_n);
-  vector<ui> result;
-  const ui k = (ui)cliqueIds.size();
-  for (ui i = 0; i < k; i++) {
-    const auto &Ci = allCliques[cliqueIds[i]];
-    bool dominated = false;
-    for (ui j = 0; j < k && !dominated; j++) {
-      if (i == j)
-        continue;
-      const auto &Cj = allCliques[cliqueIds[j]];
-      if (Cj.size() > Ci.size() &&
-          includes(Cj.begin(), Cj.end(), Ci.begin(), Ci.end()))
-        dominated = true;
-    }
-    if (!dominated)
-      result.push_back(cliqueIds[i]);
-  }
-  return result;
+  return cliqueIds;
 }
 
 // Convert the sibling effect into a clique-constrained hitting-set problem
@@ -741,6 +827,7 @@ vector<vector<ui>>
 ReorderSib::backtrackingBranchBound(const vector<ui> &E,
                                     const vector<vector<ui>> &hitSets) {
   ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
+  recordSolverCallStats((ui)E.size(), (ui)hitSets.size());
   vector<vector<ui>> solutions;
   vector<ui> current;
 
@@ -813,10 +900,55 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
   const ui eSize = (ui)E.size();
   const ui hSize = (ui)hitSets.size();
+  recordSolverCallStats(eSize, hSize);
 
-  // Fall back if bitmask cannot cover all constraints.
-  if (hSize > 63)
+  // Fall back only once the two-word bitmask path can no longer represent all
+  // constraints efficiently.
+  if (hSize > 128)
     return backtrackingBranchBound(E, hitSets);
+
+  using Mask = array<ull, 2>;
+  auto zeroMask = []() -> Mask { return {0ULL, 0ULL}; };
+  auto setBit = [](Mask &m, ui bit) {
+    m[bit >> 6] |= (1ULL << (bit & 63));
+  };
+  auto clearBit = [](Mask &m, ui bit) {
+    m[bit >> 6] &= ~(1ULL << (bit & 63));
+  };
+  auto hasBit = [](const Mask &m, ui bit) -> bool {
+    return (m[bit >> 6] & (1ULL << (bit & 63))) != 0;
+  };
+  auto anyMask = [](const Mask &m) -> bool { return m[0] != 0 || m[1] != 0; };
+  auto orEq = [](Mask &dst, const Mask &src) {
+    dst[0] |= src[0];
+    dst[1] |= src[1];
+  };
+  auto andNot = [](const Mask &a, const Mask &b) -> Mask {
+    return {a[0] & ~b[0], a[1] & ~b[1]};
+  };
+  auto intersects = [](const Mask &a, const Mask &b) -> bool {
+    return ((a[0] & b[0]) != 0) || ((a[1] & b[1]) != 0);
+  };
+  auto coversAll = [](const Mask &covered, const Mask &need) -> bool {
+    return ((covered[0] & need[0]) == need[0]) &&
+           ((covered[1] & need[1]) == need[1]);
+  };
+  auto popcountMask = [](const Mask &m) -> int {
+    return __builtin_popcountll(m[0]) + __builtin_popcountll(m[1]);
+  };
+  auto popNextBit = [](Mask &m) -> int {
+    if (m[0]) {
+      const int bit = __builtin_ctzll(m[0]);
+      m[0] &= (m[0] - 1);
+      return bit;
+    }
+    if (m[1]) {
+      const int bit = __builtin_ctzll(m[1]);
+      m[1] &= (m[1] - 1);
+      return bit + 64;
+    }
+    return -1;
+  };
 
   // ── Pre-computation ───────────────────────────────────────────────────────
 
@@ -829,8 +961,10 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
 
   // cov[i] = bitmask of hitSets that E[i] covers.
   // Non-const so sp2 can reduce it by clearing subsumed constraint bits.
-  ull fullMask = (hSize == 64) ? ~0ULL : ((1ULL << hSize) - 1);
-  vector<ull> cov(eSize, 0);
+  Mask fullMask = zeroMask();
+  for (ui bit = 0; bit < hSize; bit++)
+    setBit(fullMask, bit);
+  vector<Mask> cov(eSize, zeroMask());
   {
     // ── sp3: Sort hitSets ascending by size before encoding into bitmasks. ──
     // Smaller hitSets are harder to satisfy (fewer candidates), so assigning
@@ -849,7 +983,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
       ui h = hOrder[bit];
       for (ui v : hitSets[h])
         if (eIdx[v] < eSize)
-          cov[eIdx[v]] |= (1ULL << bit);
+          setBit(cov[eIdx[v]], bit);
     }
   }
 
@@ -858,7 +992,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   vector<ui> initCands(eSize);
   iota(initCands.begin(), initCands.end(), 0);
   sort(initCands.begin(), initCands.end(), [&](ui a, ui b) {
-    return __builtin_popcountll(cov[a]) > __builtin_popcountll(cov[b]);
+    return popcountMask(cov[a]) > popcountMask(cov[b]);
   });
 
   // ── sp1: Unit Propagation ─────────────────────────────────────────────────
@@ -867,7 +1001,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // remaining candidates to be clique-compatible with them, and start the DFS
   // with the forced coverage already accumulated.
   vector<ui> forcedIdxs; // E-indices forced into every solution
-  ull forcedCov = 0;
+  Mask forcedCov = zeroMask();
 
   if (sp1) {
     vector<ui> activeCands = initCands;
@@ -876,19 +1010,20 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
 
     while (changed && !conflict) {
       changed = false;
-      ull uncov = fullMask & ~forcedCov;
-      if (!uncov)
+      Mask uncov = andNot(fullMask, forcedCov);
+      if (!anyMask(uncov))
         break;
 
-      ull tmp = uncov;
-      while (tmp && !conflict) {
-        int h = __builtin_ctzll(tmp);
-        tmp &= tmp - 1;
+      Mask tmp = uncov;
+      while (!conflict) {
+        const int h = popNextBit(tmp);
+        if (h < 0)
+          break;
 
         ui sole = eSize;
         int cnt = 0;
         for (ui ci : activeCands) {
-          if (cov[ci] & (1ULL << h)) {
+          if (hasBit(cov[ci], (ui)h)) {
             sole = ci;
             if (++cnt > 1)
               break;
@@ -911,7 +1046,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
             break;
 
           forcedIdxs.push_back(sole);
-          forcedCov |= cov[sole];
+          orEq(forcedCov, cov[sole]);
 
           vector<ui> next;
           next.reserve(activeCands.size());
@@ -938,29 +1073,29 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // We work on the post-sp1 initCands so forced-vertex coverage is reflected.
   if (sp2) {
     for (ui h = 0; h < hSize; h++) {
-      if (!(fullMask & (1ULL << h)))
+      if (!hasBit(fullMask, h))
         continue; // already dropped
-      if (forcedCov & (1ULL << h))
+      if (hasBit(forcedCov, h))
         continue; // h already covered by forced, DFS won't see it
       for (ui g = 0; g < hSize; g++) {
-        if (g == h || !(fullMask & (1ULL << g)))
+        if (g == h || !hasBit(fullMask, g))
           continue;
         // g must not be force-covered: if no initCand covers g (because a
         // forced vertex was the sole cover and sp1 removed it), the subsumption
         // check would pass vacuously and incorrectly drop h.
-        if (forcedCov & (1ULL << g))
+        if (hasBit(forcedCov, g))
           continue;
         // Check coverSet(g, initCands) ⊆ coverSet(h, initCands):
         // no remaining candidate covers g but not h.
         bool gSubsumesH = true;
         for (ui ci : initCands) {
-          if ((cov[ci] & (1ULL << g)) && !(cov[ci] & (1ULL << h))) {
+          if (hasBit(cov[ci], g) && !hasBit(cov[ci], h)) {
             gSubsumesH = false;
             break;
           }
         }
         if (gSubsumesH) {
-          fullMask &= ~(1ULL << h); // drop h — implied by g
+          clearBit(fullMask, h); // drop h — implied by g
           break;
         }
       }
@@ -969,7 +1104,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
 
   // Early exit: if forced coverage (sp1) already satisfies all remaining
   // constraints (possibly reduced by sp2), return the forced solution directly.
-  if ((forcedCov & fullMask) == fullMask) {
+  if (coversAll(forcedCov, fullMask)) {
     if (forcedIdxs.empty())
       return {}; // nothing forced, nothing to cover
     vector<ui> sol;
@@ -989,8 +1124,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
   // cands : E-indices still reachable (clique-compatible with cur, index >
   //         last element of cur). Passed by value so each level owns its copy.
   // covered: bitmask of constraints already satisfied by cur.
-  function<void(vector<ui>, ull)> dfs = [&](vector<ui> cands, ull covered) {
-    if ((covered & fullMask) == fullMask) {
+  function<void(vector<ui>, Mask)> dfs = [&](vector<ui> cands, Mask covered) {
+    if (coversAll(covered, fullMask)) {
       // Before recording, verify cur is not a superset of an existing solution.
       for (const auto &s : solutions)
         if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
@@ -1006,7 +1141,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
       return;
     }
 
-    const ull uncovered = fullMask & ~covered;
+    const Mask uncovered = andNot(fullMask, covered);
 
     // Superset pruning: cur already contains a known minimal solution so any
     // extension of cur cannot be minimal.
@@ -1017,15 +1152,16 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
     // Fail-first dead-branch check: for every uncovered constraint verify at
     // least one candidate can cover it. If any constraint is impossible, prune.
     {
-      ull tmp = uncovered;
-      while (tmp) {
-        const int h = __builtin_ctzll(tmp);
-        tmp &= tmp - 1;
+      Mask tmp = uncovered;
+      while (true) {
+        const int h = popNextBit(tmp);
+        if (h < 0)
+          break;
         bool found = false;
         for (ui ci : cands)
           // cov is the bitmask of constraints covered by ci; check if it
           // includes h-th constraint.
-          if (cov[ci] & (1ULL << h)) {
+          if (hasBit(cov[ci], (ui)h)) {
             found = true;
             break;
           }
@@ -1037,19 +1173,26 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
     for (ui ci : cands) {
       // Improvement 4: skip vertices that add no new coverage — they can
       // never appear in a minimal solution at this point.
-      if (!(cov[ci] & uncovered))
+      if (!intersects(cov[ci], uncovered))
         continue;
 
       // Build next-level candidates: those in cands with E-index > ci that
       // are adjacent to ci (enforces clique property and avoids duplicates).
       vector<ui> next;
       next.reserve(cands.size());
+      ull eligible = 0;
       for (ui cj : cands)
-        if (cj > ci && compat[ci * eSize + cj])
-          next.push_back(cj);
+        if (cj > ci) {
+          eligible++;
+          if (compat[ci * eSize + cj])
+            next.push_back(cj);
+        }
+      recordSolverCompatStats(eligible, (ull)next.size());
 
       cur.push_back(ci);
-      dfs(std::move(next), covered | cov[ci]);
+      Mask nextCovered = covered;
+      orEq(nextCovered, cov[ci]);
+      dfs(std::move(next), nextCovered);
       cur.pop_back();
     }
   };

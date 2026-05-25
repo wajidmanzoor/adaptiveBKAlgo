@@ -97,6 +97,8 @@ private:
                                              const vector<vector<ui>> &hitSets);
   vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
                                          const vector<vector<ui>> &hitSets);
+  void recordSolverCallStats(ui eSize, ui hSize);
+  void recordSolverCompatStats(ull eligible, ull survivors);
   bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
                                const vector<ui> &C);
   bool adj(ui u, ui v) const { return adjSet[u].count(v); }
