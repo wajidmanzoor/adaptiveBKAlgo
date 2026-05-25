@@ -31,7 +31,7 @@
 
 #define debug 0
 #ifndef PROFILING
-#define PROFILING 1
+#define PROFILING 0
 #endif
 using namespace std;
 

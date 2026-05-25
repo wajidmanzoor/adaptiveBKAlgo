@@ -46,9 +46,20 @@ build_bk_algorithm() {
 }
 
 build_bk_algorithm_profile() {
-    cmake -S "$BK_SRC_DIR" -B "$BK_PROFILE_BUILD_DIR" \
-      -DCMAKE_BUILD_TYPE=Release -DREORDERSIB_PROFILING=ON >/dev/null 2>&1 \
-      && cmake --build "$BK_PROFILE_BUILD_DIR" -j"$(job_count)" >/dev/null 2>&1
+    local log_file
+    log_file="$(mktemp /tmp/bk_profile_build.XXXXXX.log)"
+    if cmake -S "$BK_SRC_DIR" -B "$BK_PROFILE_BUILD_DIR" \
+         -DCMAKE_BUILD_TYPE=Release -DREORDERSIB_PROFILING=ON >"$log_file" 2>&1 \
+       && cmake --build "$BK_PROFILE_BUILD_DIR" -j"$(job_count)" >>"$log_file" 2>&1; then
+        rm -f "$log_file"
+        return 0
+    fi
+
+    echo "Profiling build failed. Build log: $log_file" >&2
+    echo "----- build log start -----" >&2
+    cat "$log_file" >&2
+    echo "----- build log end -----" >&2
+    return 1
 }
 
 build_hbbmc() {

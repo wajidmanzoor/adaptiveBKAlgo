@@ -233,48 +233,57 @@ struct RSibProf {
   double rCall_ms = 0, enumerate_ms = 0, collect_ms = 0, solver_ms = 0;
   double minimal_ms = 0, commonExp_ms = 0, buildHit_ms = 0;
   double intersect_ms = 0, setdiff_ms = 0, unionset_ms = 0, encode_ms = 0;
-  double pivot_ms = 0, sibling_ms = 0, dedup_ms = 0, reorderLocal_ms = 0;
+  double pivot_ms = 0, sibling_ms = 0, dedup_ms = 0;
+  double reorderSkip_ms = 0, reorderBuild_ms = 0, cliqueRecord_ms = 0;
+  double dominance_ms = 0, siblingPlan_ms = 0, branchBuild_ms = 0;
   long rCall_n = 0, enumerate_n = 0, collect_n = 0, solver_n = 0;
   long minimal_n = 0, commonExp_n = 0, buildHit_n = 0;
   long intersect_n = 0, setdiff_n = 0, unionset_n = 0, encode_n = 0;
-  long pivot_n = 0, sibling_n = 0, dedup_n = 0, reorderLocal_n = 0;
+  long pivot_n = 0, sibling_n = 0, dedup_n = 0;
+  long reorderSkip_n = 0, reorderBuild_n = 0, cliqueRecord_n = 0;
+  long dominance_n = 0, siblingPlan_n = 0, branchBuild_n = 0;
   void reset() { *this = RSibProf{}; }
   void print(double total_ms) const {
     auto pct = [&](double v) {
       return total_ms > 0 ? 100.0 * v / total_ms : 0.0;
     };
+    const vector<pair<const char *, pair<double, long>>> rows = {
+        {"rCall local logic", {rCall_ms, rCall_n}},
+        {"enumerate local logic", {enumerate_ms, enumerate_n}},
+        {"collectCoveringCliques", {collect_ms, collect_n}},
+        {"dominance pruning", {dominance_ms, dominance_n}},
+        {"buildHitSets", {buildHit_ms, buildHit_n}},
+        {"sibling planning", {siblingPlan_ms, siblingPlan_n}},
+        {"solver", {solver_ms, solver_n}},
+        {"minimalByInclusion", {minimal_ms, minimal_n}},
+        {"commonExpand", {commonExp_ms, commonExp_n}},
+        {"sibling branch build", {branchBuild_ms, branchBuild_n}},
+        {"branch dedup", {dedup_ms, dedup_n}},
+        {"reorder skip tests", {reorderSkip_ms, reorderSkip_n}},
+        {"reorder branch rebuild", {reorderBuild_ms, reorderBuild_n}},
+        {"leaf recording", {cliqueRecord_ms, cliqueRecord_n}},
+        {"pivot selection", {pivot_ms, pivot_n}},
+        {"intersect/intersectInto", {intersect_ms, intersect_n}},
+        {"setDiff", {setdiff_ms, setdiff_n}},
+        {"unionSet", {unionset_ms, unionset_n}},
+        {"encodeClique", {encode_ms, encode_n}},
+        {"sibling phase local", {sibling_ms, sibling_n}},
+    };
+    double profiled_ms = 0.0;
+    for (const auto &row : rows)
+      profiled_ms += row.second.first;
+    const double other_ms = max(0.0, total_ms - profiled_ms);
+
     printf(
         "\n── ReorderSib cost breakdown ─────────────────────────────────\n");
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "enumerate (core search)",
-           enumerate_ms, pct(enumerate_ms), enumerate_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "rCall overhead", rCall_ms,
-           pct(rCall_ms), rCall_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "solver", solver_ms,
-           pct(solver_ms), solver_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "collectCoveringCliques",
-           collect_ms, pct(collect_ms), collect_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "buildHitSets",
-           buildHit_ms, pct(buildHit_ms), buildHit_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "minimalByInclusion",
-           minimal_ms, pct(minimal_ms), minimal_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "commonExpand",
-           commonExp_ms, pct(commonExp_ms), commonExp_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "intersect/intersectInto",
-           intersect_ms, pct(intersect_ms), intersect_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "setDiff",
-           setdiff_ms, pct(setdiff_ms), setdiff_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "unionSet",
-           unionset_ms, pct(unionset_ms), unionset_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "encodeClique",
-           encode_ms, pct(encode_ms), encode_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "pivot selection",
-           pivot_ms, pct(pivot_ms), pivot_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "sibling generation",
-           sibling_ms, pct(sibling_ms), sibling_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "branch dedup",
-           dedup_ms, pct(dedup_ms), dedup_n);
-    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "reorder local work",
-           reorderLocal_ms, pct(reorderLocal_ms), reorderLocal_n);
+    for (const auto &row : rows) {
+      printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", row.first,
+             row.second.first, pct(row.second.first), row.second.second);
+    }
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "other / untimed", other_ms,
+           pct(other_ms));
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "PROFILED subtotal", profiled_ms,
+           pct(profiled_ms));
     printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
     printf("──────────────────────────────────────────────────────────────\n");
   }
@@ -283,18 +292,34 @@ static RSibProf rsp;
 
 #if PROFILING
 struct ScopedTimer {
+  using clock = chrono::high_resolution_clock;
+  using duration = clock::duration;
+  static thread_local ScopedTimer *current;
+
   chrono::high_resolution_clock::time_point t0;
+  duration child = duration::zero();
   double &acc;
   long &cnt;
+  ScopedTimer *parent;
+
   ScopedTimer(double &a, long &c)
-      : t0(chrono::high_resolution_clock::now()), acc(a), cnt(c) {}
+      : t0(clock::now()), acc(a), cnt(c), parent(current) {
+    current = this;
+  }
+
   ~ScopedTimer() {
-    acc += chrono::duration<double, milli>(
-               chrono::high_resolution_clock::now() - t0)
-               .count();
+    const duration elapsed = clock::now() - t0;
+    duration self = elapsed - child;
+    if (self < duration::zero())
+      self = duration::zero();
+    acc += chrono::duration<double, milli>(self).count();
     ++cnt;
+    current = parent;
+    if (parent != nullptr)
+      parent->child += elapsed;
   }
 };
+thread_local ScopedTimer *ScopedTimer::current = nullptr;
 #else
 struct ScopedTimer {
   ScopedTimer(double &, long &) {}
@@ -587,6 +612,7 @@ ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
 // redundant. Cliques in allCliques are stored sorted, so std::includes works
 // directly.
 vector<ui> ReorderSib::pruneByDominance(const vector<ui> &cliqueIds) {
+  ScopedTimer _t(rsp.dominance_ms, rsp.dominance_n);
   vector<ui> result;
   const ui k = (ui)cliqueIds.size();
   for (ui i = 0; i < k; i++) {
@@ -612,6 +638,7 @@ vector<ui> ReorderSib::pruneByDominance(const vector<ui> &cliqueIds) {
 vector<vector<ui>>
 ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &E,
                                            const vector<ui> &cliqueIds) {
+  ScopedTimer _t(rsp.siblingPlan_ms, rsp.siblingPlan_n);
   if (cliqueIds.empty())
     return singletonBranches(E);
 
@@ -1007,24 +1034,27 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     mustin.clear();
     expandTo.clear();
     fullSkipCheck.clear();
-    for (const vector<ui> &S : siblingSets) {
-      vector<ui> baseMustin = unionSet(baseM, S);
-      vector<ui> baseExpand = commonExpand(baseE, S);
-      bool branchNeedsFullSkip = needsFullSkip || hasCoveringCliques;
+    {
+      ScopedTimer _tBuild(rsp.branchBuild_ms, rsp.branchBuild_n);
+      for (const vector<ui> &S : siblingSets) {
+        vector<ui> baseMustin = unionSet(baseM, S);
+        vector<ui> baseExpand = commonExpand(baseE, S);
+        bool branchNeedsFullSkip = needsFullSkip || hasCoveringCliques;
 
-      if (!hasCoveringCliques || baseExpand.empty()) {
-        mustin.push_back(baseMustin);
-        expandTo.push_back(baseExpand);
-        fullSkipCheck.push_back(branchNeedsFullSkip);
-      } else {
-        for (ui v : baseExpand) {
-          // Direct sorted insert of v into baseMustin — avoids temporary {v}.
-          vector<ui> childMustin = baseMustin;
-          childMustin.insert(
-              lower_bound(childMustin.begin(), childMustin.end(), v), v);
-          mustin.push_back(std::move(childMustin));
-          expandTo.push_back(intersect(baseExpand, adjList[v]));
+        if (!hasCoveringCliques || baseExpand.empty()) {
+          mustin.push_back(baseMustin);
+          expandTo.push_back(baseExpand);
           fullSkipCheck.push_back(branchNeedsFullSkip);
+        } else {
+          for (ui v : baseExpand) {
+            // Direct sorted insert of v into baseMustin — avoids temporary {v}.
+            vector<ui> childMustin = baseMustin;
+            childMustin.insert(
+                lower_bound(childMustin.begin(), childMustin.end(), v), v);
+            mustin.push_back(std::move(childMustin));
+            expandTo.push_back(intersect(baseExpand, adjList[v]));
+            fullSkipCheck.push_back(branchNeedsFullSkip);
+          }
         }
       }
     }
@@ -1132,26 +1162,30 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
   // Report R as maximal only when X is also empty (nothing extends R).
   if (P.empty()) {
     if (X.empty() && (ui)R.size() > 2) {
-      vector<ui> C = R;
-      sort(C.begin(), C.end());
-      claimedEmptyBranches.insert(encodeClique(C));
-      cliqueCount++;
-      if (debug) {
-        for (ui i = 0; i < level; i++)
-          cout << "   ";
-        cout << "Maximal Clique Found: { ";
-        for (ui v : C)
-          cout << v << " ";
-        cout << "}" << endl;
-      }
-      maxCliqueSize = max(maxCliqueSize, C.size());
-      ui cliqueIdx = (ui)allCliques.size();
-      allCliques.push_back(C);
-      for (ui v : C) {
-        if ((ui)cliquesByVertexByLevel[v].size() <= level)
-          cliquesByVertexByLevel[v].resize(level + 1);
-        cliquesByVertexByLevel[v][level].push_back(cliqueIdx);
-        cliqueCountByVertex[v]++;
+      vector<ui> C;
+      {
+        ScopedTimer _tRecord(rsp.cliqueRecord_ms, rsp.cliqueRecord_n);
+        C = R;
+        sort(C.begin(), C.end());
+        claimedEmptyBranches.insert(encodeClique(C));
+        cliqueCount++;
+        if (debug) {
+          for (ui i = 0; i < level; i++)
+            cout << "   ";
+          cout << "Maximal Clique Found: { ";
+          for (ui v : C)
+            cout << v << " ";
+          cout << "}" << endl;
+        }
+        maxCliqueSize = max(maxCliqueSize, C.size());
+        ui cliqueIdx = (ui)allCliques.size();
+        allCliques.push_back(C);
+        for (ui v : C) {
+          if ((ui)cliquesByVertexByLevel[v].size() <= level)
+            cliquesByVertexByLevel[v].resize(level + 1);
+          cliquesByVertexByLevel[v][level].push_back(cliqueIdx);
+          cliqueCountByVertex[v]++;
+        }
       }
 
       done = true;
@@ -1162,34 +1196,41 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
       vector<char> newFullSkipCheck;
 
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
-        ScopedTimer _tReorder(rsp.reorderLocal_ms, rsp.reorderLocal_n);
         bool skipBranch = false;
-        if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
-          skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
-        } else {
-          skipBranch = find(C.begin(), C.end(), mustin[i].back()) != C.end();
+        {
+          ScopedTimer _tSkip(rsp.reorderSkip_ms, rsp.reorderSkip_n);
+          if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
+            skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
+          } else {
+            skipBranch =
+                find(C.begin(), C.end(), mustin[i].back()) != C.end();
+          }
         }
         if (skipBranch)
           continue;
 
-        bool usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
         vector<ui> reorderedExpand;
-        if (usesFullSkip) {
-          reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
-          for (ui mv : mustin[i])
-            reorderedExpand = intersect(reorderedExpand, adjList[mv]);
-        } else {
-          reorderedExpand =
-              intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
-                        unionSet(C, expandTo[i]));
+        bool usesFullSkip = false;
+        {
+          ScopedTimer _tBuild(rsp.reorderBuild_ms, rsp.reorderBuild_n);
+          usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
+          if (usesFullSkip) {
+            reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
+            for (ui mv : mustin[i])
+              reorderedExpand = intersect(reorderedExpand, adjList[mv]);
+          } else {
+            reorderedExpand =
+                intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
+                          unionSet(C, expandTo[i]));
+          }
+
+          if (sp6 && reorderedExpand.empty() && mustin[i].size() <= 2)
+            continue;
+
+          newMustin.push_back(mustin[i]);
+          newExpandTo.push_back(reorderedExpand);
+          newFullSkipCheck.push_back(usesFullSkip);
         }
-
-        if (sp6 && reorderedExpand.empty() && mustin[i].size() <= 2)
-          continue;
-
-        newMustin.push_back(mustin[i]);
-        newExpandTo.push_back(reorderedExpand);
-        newFullSkipCheck.push_back(usesFullSkip);
 
         if (debug) {
           for (ui j = 0; j < level; j++)
