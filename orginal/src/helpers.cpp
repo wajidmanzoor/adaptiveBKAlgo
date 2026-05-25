@@ -232,8 +232,12 @@ void PivotBK::findAllMaximalCliques() {
 struct RSibProf {
   double rCall_ms = 0, enumerate_ms = 0, collect_ms = 0, solver_ms = 0;
   double minimal_ms = 0, commonExp_ms = 0, buildHit_ms = 0;
+  double intersect_ms = 0, setdiff_ms = 0, unionset_ms = 0, encode_ms = 0;
+  double pivot_ms = 0, sibling_ms = 0, dedup_ms = 0, reorderLocal_ms = 0;
   long rCall_n = 0, enumerate_n = 0, collect_n = 0, solver_n = 0;
   long minimal_n = 0, commonExp_n = 0, buildHit_n = 0;
+  long intersect_n = 0, setdiff_n = 0, unionset_n = 0, encode_n = 0;
+  long pivot_n = 0, sibling_n = 0, dedup_n = 0, reorderLocal_n = 0;
   void reset() { *this = RSibProf{}; }
   void print(double total_ms) const {
     auto pct = [&](double v) {
@@ -255,6 +259,22 @@ struct RSibProf {
            minimal_ms, pct(minimal_ms), minimal_n);
     printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "commonExpand",
            commonExp_ms, pct(commonExp_ms), commonExp_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "intersect/intersectInto",
+           intersect_ms, pct(intersect_ms), intersect_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "setDiff",
+           setdiff_ms, pct(setdiff_ms), setdiff_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "unionSet",
+           unionset_ms, pct(unionset_ms), unionset_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "encodeClique",
+           encode_ms, pct(encode_ms), encode_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "pivot selection",
+           pivot_ms, pct(pivot_ms), pivot_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "sibling generation",
+           sibling_ms, pct(sibling_ms), sibling_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "branch dedup",
+           dedup_ms, pct(dedup_ms), dedup_n);
+    printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", "reorder local work",
+           reorderLocal_ms, pct(reorderLocal_ms), reorderLocal_n);
     printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
     printf("──────────────────────────────────────────────────────────────\n");
   }
@@ -331,6 +351,7 @@ ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
 }
 
 vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
   vector<ui> C;
   C.reserve(min(A.size(), B.size()));
   ui i = 0, j = 0;
@@ -349,6 +370,7 @@ vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
 
 void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
                                const vector<ui> &B) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
   out.clear();
   const size_t need = min(A.size(), B.size());
   if (out.capacity() < need)
@@ -368,6 +390,7 @@ void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
 }
 
 vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.setdiff_ms, rsp.setdiff_n);
   vector<ui> C;
   C.reserve(A.size());
   ui i = 0, j = 0;
@@ -385,6 +408,7 @@ vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
 }
 
 vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.unionset_ms, rsp.unionset_n);
   vector<ui> U;
   U.reserve(A.size() + B.size());
   ui i = 0, j = 0;
@@ -931,6 +955,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &E,
 }
 
 static string encodeClique(const vector<ui> &C) {
+  ScopedTimer _t(rsp.encode_ms, rsp.encode_n);
   return string(reinterpret_cast<const char *>(C.data()), C.size() * sizeof(ui));
 }
 
@@ -967,6 +992,7 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
   }
 
   if (level != 0 && !expandTo.empty() && !expandTo[0].empty()) {
+    ScopedTimer _tSibling(rsp.sibling_ms, rsp.sibling_n);
     vector<ui> baseM = mustin[0];
     vector<ui> baseE = expandTo[0];
 
@@ -1008,6 +1034,7 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     // "9 then 5").  Only possible when covering cliques exist; singleton
     // branches always have distinct mustins so the dedup is skipped.
     if (hasCoveringCliques) {
+      ScopedTimer _tDedup(rsp.dedup_ms, rsp.dedup_n);
       unordered_map<string, ui> mustinIndex;
       vector<vector<ui>> dedupMustin;
       vector<vector<ui>> dedupExpand;
@@ -1135,6 +1162,7 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
       vector<char> newFullSkipCheck;
 
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
+        ScopedTimer _tReorder(rsp.reorderLocal_ms, rsp.reorderLocal_n);
         bool skipBranch = false;
         if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
           skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
@@ -1190,25 +1218,28 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
   // Adaptive scoring: walk the shorter of adjList[u] (check lab) or P (check
   // adjSet) — always O(min(deg(u), |P|)) per candidate instead of O(deg(u)).
   // Mark and restore immediately so recursive children see a clean lab state.
-  for (ui v : P) lab[v] = 1;
-  for (ui v : X) lab[v] = 2;
   ui pivot = P[0];
-  int bestNb = -1;
-  const ui pSize = (ui)P.size();
-  auto pivotScore = [&](ui u) -> int {
-    int nb = 0;
-    if ((ui)adjList[u].size() <= pSize) {
-      for (ui w : adjList[u]) if (lab[w] == 1) nb++;  // walk adj, check lab
-    } else {
-      for (ui w : P) if (adjSet[u].count(w)) nb++;    // walk P, check adjSet
-    }
-    return nb;
-  };
-  for (ui u : P) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
-  for (ui u : X) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
-  // Restore lab before the main loop so recursive children see a clean state.
-  for (ui v : P) lab[v] = 0;
-  for (ui v : X) lab[v] = 0;
+  {
+    ScopedTimer _tPivot(rsp.pivot_ms, rsp.pivot_n);
+    for (ui v : P) lab[v] = 1;
+    for (ui v : X) lab[v] = 2;
+    int bestNb = -1;
+    const ui pSize = (ui)P.size();
+    auto pivotScore = [&](ui u) -> int {
+      int nb = 0;
+      if ((ui)adjList[u].size() <= pSize) {
+        for (ui w : adjList[u]) if (lab[w] == 1) nb++;  // walk adj, check lab
+      } else {
+        for (ui w : P) if (adjSet[u].count(w)) nb++;    // walk P, check adjSet
+      }
+      return nb;
+    };
+    for (ui u : P) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+    for (ui u : X) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+    // Restore lab before the main loop so recursive children see a clean state.
+    for (ui v : P) lab[v] = 0;
+    for (ui v : X) lab[v] = 0;
+  }
 
   // P_at_level and localX track the evolving candidate/exclusion sets.
   // intersect is used for P_new/X_new — this avoids any ancestor lab
