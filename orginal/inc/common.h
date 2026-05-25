@@ -30,7 +30,9 @@
 #include <utility>
 
 #define debug 0
+#ifndef PROFILING
 #define PROFILING 0
+#endif
 using namespace std;
 
 typedef unsigned int ui;

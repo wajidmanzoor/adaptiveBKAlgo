@@ -9,6 +9,8 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BK_SRC_DIR="$REPO_ROOT/orginal"
 BK_BUILD_DIR="$BK_SRC_DIR/build"
 BK_BIN="$BK_BUILD_DIR/bk_algorithm"
+BK_PROFILE_BUILD_DIR="$BK_SRC_DIR/build_profile"
+BK_PROFILE_BIN="$BK_PROFILE_BUILD_DIR/bk_algorithm"
 DEFAULT_DATA_DIR="$REPO_ROOT/data"
 
 HBBMC_ROOT="$REPO_ROOT/compare/HBBMC"
@@ -27,11 +29,12 @@ job_count() {
 }
 
 setup_timeout_runner() {
-    local seconds="${1:-120}"
+    RUN_TIMEOUT_SECONDS="${1:-120}"
+    export RUN_TIMEOUT_SECONDS
     if command -v gtimeout >/dev/null 2>&1; then
-        RUN() { gtimeout "$seconds" "$@"; }
+        RUN() { gtimeout "$RUN_TIMEOUT_SECONDS" "$@"; }
     elif command -v timeout >/dev/null 2>&1; then
-        RUN() { timeout "$seconds" "$@"; }
+        RUN() { timeout "$RUN_TIMEOUT_SECONDS" "$@"; }
     else
         RUN() { "$@"; }
     fi
@@ -40,6 +43,12 @@ setup_timeout_runner() {
 build_bk_algorithm() {
     cmake -S "$BK_SRC_DIR" -B "$BK_BUILD_DIR" -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 \
       && cmake --build "$BK_BUILD_DIR" -j"$(job_count)" >/dev/null 2>&1
+}
+
+build_bk_algorithm_profile() {
+    cmake -S "$BK_SRC_DIR" -B "$BK_PROFILE_BUILD_DIR" \
+      -DCMAKE_BUILD_TYPE=Release -DREORDERSIB_PROFILING=ON >/dev/null 2>&1 \
+      && cmake --build "$BK_PROFILE_BUILD_DIR" -j"$(job_count)" >/dev/null 2>&1
 }
 
 build_hbbmc() {

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.10)
 
 project(bk_algorithm LANGUAGES CXX)
 
+option(REORDERSIB_PROFILING "Enable ReorderSib profiling timers" OFF)
+
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,3 +27,7 @@ add_executable(bk_algorithm
     src/graph.cpp
     src/helpers.cpp
 )
+
+if(REORDERSIB_PROFILING)
+    target_compile_definitions(bk_algorithm PRIVATE PROFILING=1)
+endif()
