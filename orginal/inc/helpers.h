@@ -35,6 +35,7 @@ private:
   ui n;
   vector<vector<ui>> adjList;
   vector<vector<ui>> adjList2;
+  vector<unordered_set<ui>> adjSet; // O(1) adjacency lookup
   ui cliqueCount;
   ui dupBlocked;
   size_t maxCliqueSize;
@@ -58,7 +59,19 @@ private:
   vector<ui> cliqueCountByVertex; // total cliques per vertex — for seed selection
   unordered_set<string> claimedEmptyBranches;
 
+  vector<char> lab; // lab[v] = 1 iff v is in current P; 2 iff in X
+
+  // Pre-allocated per-depth workspace — avoids heap allocation inside enumerate.
+  // Each depth slot holds the working P, X, and scratch P_new/X_new buffers.
+  static constexpr ui MAX_ENUM_DEPTH = 200;
+  ui enumDepth;
+  vector<vector<ui>> depthPal;   // P_at_level per depth
+  vector<vector<ui>> depthLX;    // localX per depth
+  vector<vector<ui>> depthPnew;  // P_new scratch per depth
+  vector<vector<ui>> depthXnew;  // X_new scratch per depth
+
   vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
+  void intersectInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
   vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
   vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
 
@@ -81,12 +94,14 @@ private:
                                          const vector<vector<ui>> &hitSets);
   bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
                                const vector<ui> &C);
+  bool adj(ui u, ui v) const { return adjSet[u].count(v); }
 
   void rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo, ui level,
              vector<char> fullSkipCheck);
-  void enumerate(vector<ui> &R, vector<ui> &Q, vector<vector<ui>> &mustin,
-                 vector<vector<ui>> &expandTo, vector<char> &fullSkipCheck,
-                 ui treeIndex, ui level, bool &done);
+  void enumerate(vector<ui> &R, const vector<ui> &P, const vector<ui> &X,
+                 vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
+                 vector<char> &fullSkipCheck, ui treeIndex, ui level,
+                 bool &done);
 
 public:
   ReorderSib(Graph &g, DegOrder order = DegOrder::ORIGINAL,

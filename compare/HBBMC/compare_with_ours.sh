@@ -15,10 +15,9 @@
 # which outputs to ./edgeListCleaned/
 
 set -uo pipefail
-cd "$(dirname "$0")"
-
-MCE="$SCRIPT_DIR/src/build/MCE"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 MCE="$SCRIPT_DIR/src/build/MCE"
 
 usage() {
@@ -31,8 +30,8 @@ usage() {
 
 [[ $# -lt 2 ]] && usage
 
-EDIR="$1"
-OUR_BIN="$2"
+EDIR="$(cd "$1" && pwd)"
+OUR_BIN="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"
 
 if [[ ! -d "$EDIR" ]]; then
     echo "Error: '$EDIR' is not a directory." >&2; exit 1
@@ -83,7 +82,7 @@ for f in "${FILES[@]}"; do
 
     # Our algorithm needs the adjacency-list format; derive path by stripping .clean
     adj_name="${name%.clean}"
-    adj_file="$(dirname "$EDIR")/../../../data/$adj_name"
+    adj_file="$SCRIPT_DIR/../../data/$adj_name"
     if [[ ! -f "$adj_file" ]]; then
         printf "%-35s  %10s  %10s  %6s\n" "$name" "${hbbmc_c:-?}" "MISSING" "SKIP"
         continue

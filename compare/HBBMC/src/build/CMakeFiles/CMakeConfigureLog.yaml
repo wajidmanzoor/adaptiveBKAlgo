@@ -1915,3 +1915,299 @@ events:
         
       exitCode: 2
 ...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-DY2hc3"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-DY2hc3"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-DY2hc3'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_20529/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_20529.dir/build.make CMakeFiles/cmTC_20529.dir/build
+        Building C object CMakeFiles/cmTC_20529.dir/OpenMPTryFlag.c.o
+        /usr/bin/cc   -Xclang -fopenmp -arch arm64 -MD -MT CMakeFiles/cmTC_20529.dir/OpenMPTryFlag.c.o -MF CMakeFiles/cmTC_20529.dir/OpenMPTryFlag.c.o.d -o CMakeFiles/cmTC_20529.dir/OpenMPTryFlag.c.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-DY2hc3/OpenMPTryFlag.c
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-DY2hc3/OpenMPTryFlag.c:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_20529.dir/OpenMPTryFlag.c.o] Error 1
+        make: *** [cmTC_20529/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-fp5BaG"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-fp5BaG"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-fp5BaG'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_a564f/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_a564f.dir/build.make CMakeFiles/cmTC_a564f.dir/build
+        Building CXX object CMakeFiles/cmTC_a564f.dir/OpenMPTryFlag.cpp.o
+        /usr/bin/c++   -Xclang -fopenmp -std=gnu++14 -arch arm64 -MD -MT CMakeFiles/cmTC_a564f.dir/OpenMPTryFlag.cpp.o -MF CMakeFiles/cmTC_a564f.dir/OpenMPTryFlag.cpp.o.d -o CMakeFiles/cmTC_a564f.dir/OpenMPTryFlag.cpp.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-fp5BaG/OpenMPTryFlag.cpp
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-fp5BaG/OpenMPTryFlag.cpp:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_a564f.dir/OpenMPTryFlag.cpp.o] Error 1
+        make: *** [cmTC_a564f/fast] Error 2
+        
+      exitCode: 2
+...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-zJlvS2"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-zJlvS2"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-zJlvS2'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_495dc/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_495dc.dir/build.make CMakeFiles/cmTC_495dc.dir/build
+        Building C object CMakeFiles/cmTC_495dc.dir/OpenMPTryFlag.c.o
+        /usr/bin/cc   -Xclang -fopenmp -MD -MT CMakeFiles/cmTC_495dc.dir/OpenMPTryFlag.c.o -MF CMakeFiles/cmTC_495dc.dir/OpenMPTryFlag.c.o.d -o CMakeFiles/cmTC_495dc.dir/OpenMPTryFlag.c.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-zJlvS2/OpenMPTryFlag.c
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-zJlvS2/OpenMPTryFlag.c:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_495dc.dir/OpenMPTryFlag.c.o] Error 1
+        make: *** [cmTC_495dc/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-Ey7DcF"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-Ey7DcF"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-Ey7DcF'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_941eb/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_941eb.dir/build.make CMakeFiles/cmTC_941eb.dir/build
+        Building CXX object CMakeFiles/cmTC_941eb.dir/OpenMPTryFlag.cpp.o
+        /usr/bin/c++   -Xclang -fopenmp -std=gnu++14 -MD -MT CMakeFiles/cmTC_941eb.dir/OpenMPTryFlag.cpp.o -MF CMakeFiles/cmTC_941eb.dir/OpenMPTryFlag.cpp.o.d -o CMakeFiles/cmTC_941eb.dir/OpenMPTryFlag.cpp.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-Ey7DcF/OpenMPTryFlag.cpp
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-Ey7DcF/OpenMPTryFlag.cpp:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_941eb.dir/OpenMPTryFlag.cpp.o] Error 1
+        make: *** [cmTC_941eb/fast] Error 2
+        
+      exitCode: 2
+...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-7CEbsk"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-7CEbsk"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-7CEbsk'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_4333d/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_4333d.dir/build.make CMakeFiles/cmTC_4333d.dir/build
+        Building C object CMakeFiles/cmTC_4333d.dir/OpenMPTryFlag.c.o
+        /usr/bin/cc   -Xclang -fopenmp -MD -MT CMakeFiles/cmTC_4333d.dir/OpenMPTryFlag.c.o -MF CMakeFiles/cmTC_4333d.dir/OpenMPTryFlag.c.o.d -o CMakeFiles/cmTC_4333d.dir/OpenMPTryFlag.c.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-7CEbsk/OpenMPTryFlag.c
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-7CEbsk/OpenMPTryFlag.c:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_4333d.dir/OpenMPTryFlag.c.o] Error 1
+        make: *** [cmTC_4333d/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-mZTBaa"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-mZTBaa"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-mZTBaa'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_ce44c/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_ce44c.dir/build.make CMakeFiles/cmTC_ce44c.dir/build
+        Building CXX object CMakeFiles/cmTC_ce44c.dir/OpenMPTryFlag.cpp.o
+        /usr/bin/c++   -Xclang -fopenmp -std=gnu++14 -MD -MT CMakeFiles/cmTC_ce44c.dir/OpenMPTryFlag.cpp.o -MF CMakeFiles/cmTC_ce44c.dir/OpenMPTryFlag.cpp.o.d -o CMakeFiles/cmTC_ce44c.dir/OpenMPTryFlag.cpp.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-mZTBaa/OpenMPTryFlag.cpp
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-mZTBaa/OpenMPTryFlag.cpp:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_ce44c.dir/OpenMPTryFlag.cpp.o] Error 1
+        make: *** [cmTC_ce44c/fast] Error 2
+        
+      exitCode: 2
+...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting C OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-pfZKmT"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-pfZKmT"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_C_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-pfZKmT'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_631d1/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_631d1.dir/build.make CMakeFiles/cmTC_631d1.dir/build
+        Building C object CMakeFiles/cmTC_631d1.dir/OpenMPTryFlag.c.o
+        /usr/bin/cc   -Xclang -fopenmp -MD -MT CMakeFiles/cmTC_631d1.dir/OpenMPTryFlag.c.o -MF CMakeFiles/cmTC_631d1.dir/OpenMPTryFlag.c.o.d -o CMakeFiles/cmTC_631d1.dir/OpenMPTryFlag.c.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-pfZKmT/OpenMPTryFlag.c
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-pfZKmT/OpenMPTryFlag.c:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_631d1.dir/OpenMPTryFlag.c.o] Error 1
+        make: *** [cmTC_631d1/fast] Error 2
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:333 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/FindOpenMP.cmake:640 (_OPENMP_GET_FLAGS)"
+      - "CMakeLists.txt:6 (find_package)"
+    description: "Detecting CXX OpenMP compiler info"
+    directories:
+      source: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-LFYlX9"
+      binary: "/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-LFYlX9"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "OpenMP_COMPILE_RESULT_CXX_Xclang fopenmp"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-LFYlX9'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_df2fa/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_df2fa.dir/build.make CMakeFiles/cmTC_df2fa.dir/build
+        Building CXX object CMakeFiles/cmTC_df2fa.dir/OpenMPTryFlag.cpp.o
+        /usr/bin/c++   -Xclang -fopenmp -std=gnu++14 -MD -MT CMakeFiles/cmTC_df2fa.dir/OpenMPTryFlag.cpp.o -MF CMakeFiles/cmTC_df2fa.dir/OpenMPTryFlag.cpp.o.d -o CMakeFiles/cmTC_df2fa.dir/OpenMPTryFlag.cpp.o -c /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-LFYlX9/OpenMPTryFlag.cpp
+        /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/compare/HBBMC/src/build/CMakeFiles/CMakeScratch/TryCompile-LFYlX9/OpenMPTryFlag.cpp:2:10: fatal error: 'omp.h' file not found
+            2 | #include <omp.h>
+              |          ^~~~~~~
+        1 error generated.
+        make[1]: *** [CMakeFiles/cmTC_df2fa.dir/OpenMPTryFlag.cpp.o] Error 1
+        make: *** [cmTC_df2fa/fast] Error 2
+        
+      exitCode: 2
+...

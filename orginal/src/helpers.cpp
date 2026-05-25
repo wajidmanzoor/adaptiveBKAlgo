@@ -315,6 +315,19 @@ ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
   }
 
   buildAdjLists(g, perm, adjList, adjList2);
+
+  adjSet.resize(n);
+  for (ui u = 0; u < n; u++)
+    for (ui v : adjList[u])
+      adjSet[u].insert(v);
+
+  lab.assign(n, 0);
+  enumDepth = 0;
+  const ui depthCap = max<ui>(MAX_ENUM_DEPTH, n + 1);
+  depthPal.resize(depthCap);
+  depthLX.resize(depthCap);
+  depthPnew.resize(depthCap);
+  depthXnew.resize(depthCap);
 }
 
 vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
@@ -332,6 +345,26 @@ vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
       j++;
   }
   return C;
+}
+
+void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
+                               const vector<ui> &B) {
+  out.clear();
+  const size_t need = min(A.size(), B.size());
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] == B[j]) {
+      out.push_back(A[i]);
+      i++;
+      j++;
+    } else if (A[i] < B[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
 }
 
 vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
@@ -1033,20 +1066,27 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     vector<ui> R = mustin[i];
     vector<ui> Q = expandTo[i];
     bool done = false;
-    enumerate(R, Q, mustin, expandTo, fullSkipCheck, i, level, done);
+    enumerate(R, Q, {}, mustin, expandTo, fullSkipCheck, i, level, done);
     if (done)
       break;
   }
 }
 
-// adding candidates to Partial solution untill no candidates are left.
+// adding candidates to Partial solution until no candidates are left.
 // once maximal clique is found, reorder the remaining branches.
-void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
+// X: already-processed vertices adjacent to all of R (exclusion set for maximality).
+void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
+                           const vector<ui> &X,
                            vector<vector<ui>> &mustin,
                            vector<vector<ui>> &expandTo,
                            vector<char> &fullSkipCheck, ui treeIndex, ui level,
                            bool &done) {
   ScopedTimer _t(rsp.enumerate_ms, rsp.enumerate_n);
+  const ui depth = enumDepth++;
+  struct DepthGuard {
+    ui &d;
+    ~DepthGuard() { d--; }
+  } depthGuard{enumDepth};
   checksCount++;
 
   if (debug) {
@@ -1055,19 +1095,18 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
     cout << "Level " << level << ": Checking R={ ";
     for (ui v : R)
       cout << v << " ";
-    cout << "}  Q={ ";
-    for (ui v : Q)
+    cout << "}  P={ ";
+    for (ui v : P)
       cout << v << " ";
     cout << "}" << endl;
   }
 
-  // is no candidate left to expand, R is maximal clique.
-  if (Q.empty()) {
-    if ((ui)R.size() > 2) {
+  // Base case: no candidates left.
+  // Report R as maximal only when X is also empty (nothing extends R).
+  if (P.empty()) {
+    if (X.empty() && (ui)R.size() > 2) {
       vector<ui> C = R;
       sort(C.begin(), C.end());
-      // Block any future empty-expandTo branch whose mustin == C:
-      // such a branch would find exactly C again, so it's redundant.
       claimedEmptyBranches.insert(encodeClique(C));
       cliqueCount++;
       if (debug) {
@@ -1088,11 +1127,9 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
         cliqueCountByVertex[v]++;
       }
 
-      // stops the DFS in enumeerate and tree expansion in rCall.
       done = true;
 
-      // Reorder Logic: use the new clique to reorder the remaining branches in
-      // this tree.
+      // Reorder Logic: use the new clique to reorder the remaining branches.
       vector<vector<ui>> newMustin;
       vector<vector<ui>> newExpandTo;
       vector<char> newFullSkipCheck;
@@ -1100,12 +1137,8 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
         bool skipBranch = false;
         if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
-          // Full-skip mode: mustin[i] and expandTo[i] are fully inside C.
-          // branch produced by sibling effect.
           skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
         } else {
-          // check only last vertex of mustin[i] in C.
-          // normal branch.
           skipBranch = find(C.begin(), C.end(), mustin[i].back()) != C.end();
         }
         if (skipBranch)
@@ -1114,20 +1147,15 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
         bool usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
         vector<ui> reorderedExpand;
         if (usesFullSkip) {
-          // Rebuild the entire branch space from M and the new clique C.
-          // sibling effect branch.
           reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
           for (ui mv : mustin[i])
             reorderedExpand = intersect(reorderedExpand, adjList[mv]);
         } else {
-          // Base reorder update: branch from the last mandatory vertex only.
           reorderedExpand =
               intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
                         unionSet(C, expandTo[i]));
         }
 
-        // sp6: a branch with empty expandTo and |mustin| <= 2 can never form
-        // a clique of size > 2 — enumerate would discard it immediately.
         if (sp6 && reorderedExpand.empty() && mustin[i].size() <= 2)
           continue;
 
@@ -1154,16 +1182,64 @@ void ReorderSib::enumerate(vector<ui> &R, vector<ui> &Q,
         rCall(std::move(newMustin), std::move(newExpandTo), level + 1,
               std::move(newFullSkipCheck));
       }
-      return;
     }
+    return;
   }
 
-  // Enumerate candidates
-  for (ui v : Q) {
+  // Tomita pivot from P ∪ X.
+  // Adaptive scoring: walk the shorter of adjList[u] (check lab) or P (check
+  // adjSet) — always O(min(deg(u), |P|)) per candidate instead of O(deg(u)).
+  // Mark and restore immediately so recursive children see a clean lab state.
+  for (ui v : P) lab[v] = 1;
+  for (ui v : X) lab[v] = 2;
+  ui pivot = P[0];
+  int bestNb = -1;
+  const ui pSize = (ui)P.size();
+  auto pivotScore = [&](ui u) -> int {
+    int nb = 0;
+    if ((ui)adjList[u].size() <= pSize) {
+      for (ui w : adjList[u]) if (lab[w] == 1) nb++;  // walk adj, check lab
+    } else {
+      for (ui w : P) if (adjSet[u].count(w)) nb++;    // walk P, check adjSet
+    }
+    return nb;
+  };
+  for (ui u : P) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+  for (ui u : X) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+  // Restore lab before the main loop so recursive children see a clean state.
+  for (ui v : P) lab[v] = 0;
+  for (ui v : X) lab[v] = 0;
+
+  // P_at_level and localX track the evolving candidate/exclusion sets.
+  // intersect is used for P_new/X_new — this avoids any ancestor lab
+  // interference that would arise if we used lab inside the recursive loop.
+  vector<ui> &P_at_level = depthPal[depth];
+  vector<ui> &localX = depthLX[depth];
+  vector<ui> &P_new = depthPnew[depth];
+  vector<ui> &X_new = depthXnew[depth];
+  P_at_level = P;
+  localX = X;
+  if (localX.capacity() < X.size() + 1)
+    localX.reserve(X.size() + 1);
+
+  // Iterate exactly the branching vertices P \ N(pivot) via one merge over the
+  // two sorted lists, instead of an O(1)-hash lookup for every v in P.
+  const vector<ui> &pivotNbrs = adjList[pivot];
+  ui nbrIdx = 0;
+  for (ui v : P) {
+    while (nbrIdx < pivotNbrs.size() && pivotNbrs[nbrIdx] < v)
+      nbrIdx++;
+    if (nbrIdx < pivotNbrs.size() && pivotNbrs[nbrIdx] == v)
+      continue;
+
+    intersectInto(P_new, P_at_level, adjList[v]);
+    intersectInto(X_new, localX, adjList[v]);
     R.push_back(v);
-    vector<ui> Qp = intersect(Q, adjList2[v]);
-    enumerate(R, Qp, mustin, expandTo, fullSkipCheck, treeIndex, level, done);
+    enumerate(R, P_new, X_new, mustin, expandTo, fullSkipCheck, treeIndex,
+              level, done);
     R.pop_back();
+    P_at_level.erase(lower_bound(P_at_level.begin(), P_at_level.end(), v));
+    localX.insert(lower_bound(localX.begin(), localX.end(), v), v);
     if (done)
       return;
   }
@@ -1179,6 +1255,7 @@ void ReorderSib::findAllMaximalCliques() {
   claimedEmptyBranches.clear();
   cliquesByVertexByLevel.assign(n, {});
   fill(cliqueCountByVertex.begin(), cliqueCountByVertex.end(), 0);
+  enumDepth = 0;
 
   // Tree Must-In and Expand-To sets for the initial call
   // Mustin : already a part of the clique.

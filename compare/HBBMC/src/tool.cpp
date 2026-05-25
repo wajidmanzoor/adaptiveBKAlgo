@@ -341,7 +341,7 @@ void Stack_t::make_stack(int size) {
     this->n = size;
     this->v_list = (int*) malloc(size * sizeof(int));
     this->top = 0;
-    p = 2;
+    p = 0;
 }
 
 bool Stack_t::empty() {
