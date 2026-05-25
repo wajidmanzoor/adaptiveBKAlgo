@@ -72,8 +72,13 @@ private:
 
   vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
   void intersectInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
+  void intersectExcludingInto(vector<ui> &out, const vector<ui> &A,
+                              const vector<ui> &B,
+                              const vector<ui> &exclude);
   vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
+  void setDiffInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
   vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
+  void unionInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
 
   bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);

@@ -414,6 +414,31 @@ void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
   }
 }
 
+void ReorderSib::intersectExcludingInto(vector<ui> &out, const vector<ui> &A,
+                                        const vector<ui> &B,
+                                        const vector<ui> &exclude) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
+  out.clear();
+  const size_t need = min(A.size(), B.size());
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0, k = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] == B[j]) {
+      while (k < exclude.size() && exclude[k] < A[i])
+        k++;
+      if (k == exclude.size() || exclude[k] != A[i])
+        out.push_back(A[i]);
+      i++;
+      j++;
+    } else if (A[i] < B[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+}
+
 vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
   ScopedTimer _t(rsp.setdiff_ms, rsp.setdiff_n);
   vector<ui> C;
@@ -430,6 +455,26 @@ vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
       j++;
   }
   return C;
+}
+
+void ReorderSib::setDiffInto(vector<ui> &out, const vector<ui> &A,
+                             const vector<ui> &B) {
+  ScopedTimer _t(rsp.setdiff_ms, rsp.setdiff_n);
+  out.clear();
+  if (out.capacity() < A.size())
+    out.reserve(A.size());
+  ui i = 0, j = 0;
+  while (i < A.size()) {
+    if (j == (ui)B.size() || A[i] < B[j]) {
+      out.push_back(A[i]);
+      i++;
+    } else if (A[i] == B[j]) {
+      i++;
+      j++;
+    } else {
+      j++;
+    }
+  }
 }
 
 vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
@@ -455,6 +500,33 @@ vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
   while (j < B.size())
     U.push_back(B[j++]);
   return U;
+}
+
+void ReorderSib::unionInto(vector<ui> &out, const vector<ui> &A,
+                           const vector<ui> &B) {
+  ScopedTimer _t(rsp.unionset_ms, rsp.unionset_n);
+  out.clear();
+  const size_t need = A.size() + B.size();
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] < B[j]) {
+      out.push_back(A[i]);
+      i++;
+    } else if (A[i] > B[j]) {
+      out.push_back(B[j]);
+      j++;
+    } else {
+      out.push_back(A[i]);
+      i++;
+      j++;
+    }
+  }
+  while (i < A.size())
+    out.push_back(A[i++]);
+  while (j < B.size())
+    out.push_back(B[j++]);
 }
 
 bool ReorderSib::hitsAll(const vector<ui> &S,
@@ -673,12 +745,32 @@ ReorderSib::backtrackingBranchBound(const vector<ui> &E,
   vector<ui> current;
 
   // DFS over clique-compatible subsets of E. Once the current set already hits
-  // every constraint, record it and stop descending that branch.
+  // every constraint, maintain the minimal solution family online and stop
+  // descending that branch.
   function<void(ui)> dfs = [&](ui start) {
     if (hitsAll(current, hitSets)) {
+      // current is already sorted because DFS only appends E[i] in increasing
+      // index order, and E itself is sorted.
+      for (const auto &s : solutions)
+        if (includes(current.begin(), current.end(), s.begin(), s.end()))
+          return;
+
+      solutions.erase(remove_if(solutions.begin(), solutions.end(),
+                                [&](const vector<ui> &s) {
+                                  return includes(s.begin(), s.end(),
+                                                  current.begin(),
+                                                  current.end());
+                                }),
+                      solutions.end());
       solutions.push_back(current);
       return;
     }
+
+    // If current already contains a known minimal solution, any extension is a
+    // non-minimal superset and can be pruned immediately.
+    for (const auto &s : solutions)
+      if (includes(current.begin(), current.end(), s.begin(), s.end()))
+        return;
 
     for (ui i = start; i < E.size(); i++) {
       bool connected = true;
@@ -698,7 +790,7 @@ ReorderSib::backtrackingBranchBound(const vector<ui> &E,
   };
 
   dfs(0);
-  return minimalByInclusion(solutions);
+  return solutions;
 }
 
 // Optimized exact solver for all minimal clique-constrained hitting sets.
@@ -986,6 +1078,15 @@ static string encodeClique(const vector<ui> &C) {
   return string(reinterpret_cast<const char *>(C.data()), C.size() * sizeof(ui));
 }
 
+static ull hashClique64(const vector<ui> &C) {
+  ull h = 1469598103934665603ULL;
+  for (ui v : C) {
+    h ^= static_cast<ull>(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h *= 1099511628211ULL;
+  }
+  return h;
+}
+
 bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
                                          const vector<ui> &E,
                                          const vector<ui> &C) {
@@ -1034,6 +1135,9 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     mustin.clear();
     expandTo.clear();
     fullSkipCheck.clear();
+    mustin.reserve(siblingSets.size());
+    expandTo.reserve(siblingSets.size());
+    fullSkipCheck.reserve(siblingSets.size());
     {
       ScopedTimer _tBuild(rsp.branchBuild_ms, rsp.branchBuild_n);
       for (const vector<ui> &S : siblingSets) {
@@ -1046,13 +1150,27 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
           expandTo.push_back(baseExpand);
           fullSkipCheck.push_back(branchNeedsFullSkip);
         } else {
+          vector<ui> childMustin;
+          vector<ui> childExpand;
+          childMustin.reserve(baseMustin.size() + 1);
           for (ui v : baseExpand) {
-            // Direct sorted insert of v into baseMustin — avoids temporary {v}.
-            vector<ui> childMustin = baseMustin;
-            childMustin.insert(
-                lower_bound(childMustin.begin(), childMustin.end(), v), v);
-            mustin.push_back(std::move(childMustin));
-            expandTo.push_back(intersect(baseExpand, adjList[v]));
+            childMustin.clear();
+            bool inserted = false;
+            for (ui mv : baseMustin) {
+              if (!inserted && v < mv) {
+                childMustin.push_back(v);
+                inserted = true;
+              }
+              childMustin.push_back(mv);
+            }
+            if (!inserted)
+              childMustin.push_back(v);
+
+            intersectInto(childExpand, baseExpand, adjList[v]);
+            mustin.emplace_back();
+            mustin.back().swap(childMustin);
+            expandTo.emplace_back();
+            expandTo.back().swap(childExpand);
             fullSkipCheck.push_back(branchNeedsFullSkip);
           }
         }
@@ -1065,21 +1183,29 @@ void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
     // branches always have distinct mustins so the dedup is skipped.
     if (hasCoveringCliques) {
       ScopedTimer _tDedup(rsp.dedup_ms, rsp.dedup_n);
-      unordered_map<string, ui> mustinIndex;
+      unordered_map<ull, vector<ui>> mustinIndex;
       vector<vector<ui>> dedupMustin;
       vector<vector<ui>> dedupExpand;
       vector<char> dedupSkip;
       for (ui i = 0; i < (ui)mustin.size(); i++) {
-        string key = encodeClique(mustin[i]);
-        auto [it, inserted] = mustinIndex.emplace(key, (ui)dedupMustin.size());
-        if (inserted) {
+        ull key = hashClique64(mustin[i]);
+        auto &bucket = mustinIndex[key];
+        ui match = UINT_MAX;
+        for (ui idx : bucket) {
+          if (dedupMustin[idx] == mustin[i]) {
+            match = idx;
+            break;
+          }
+        }
+
+        if (match == UINT_MAX) {
+          bucket.push_back((ui)dedupMustin.size());
           dedupMustin.push_back(std::move(mustin[i]));
           dedupExpand.push_back(std::move(expandTo[i]));
           dedupSkip.push_back(fullSkipCheck[i]);
         } else {
           // merge expandTo so no candidate is dropped
-          dedupExpand[it->second] =
-              unionSet(dedupExpand[it->second], expandTo[i]);
+          dedupExpand[match] = unionSet(dedupExpand[match], expandTo[i]);
         }
       }
       mustin = std::move(dedupMustin);
@@ -1194,6 +1320,9 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
       vector<vector<ui>> newMustin;
       vector<vector<ui>> newExpandTo;
       vector<char> newFullSkipCheck;
+      vector<ui> scratchMerged;
+      vector<ui> scratchA;
+      vector<ui> scratchB;
 
       for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
         bool skipBranch = false;
@@ -1215,13 +1344,18 @@ void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
           ScopedTimer _tBuild(rsp.reorderBuild_ms, rsp.reorderBuild_n);
           usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
           if (usesFullSkip) {
-            reorderedExpand = setDiff(unionSet(C, expandTo[i]), mustin[i]);
+            unionInto(scratchMerged, C, expandTo[i]);
+            setDiffInto(scratchA, scratchMerged, mustin[i]);
             for (ui mv : mustin[i])
-              reorderedExpand = intersect(reorderedExpand, adjList[mv]);
+            {
+              intersectInto(scratchB, scratchA, adjList[mv]);
+              scratchA.swap(scratchB);
+            }
+            reorderedExpand.swap(scratchA);
           } else {
-            reorderedExpand =
-                intersect(setDiff(adjList[mustin[i].back()], mustin[i]),
-                          unionSet(C, expandTo[i]));
+            unionInto(scratchMerged, C, expandTo[i]);
+            intersectExcludingInto(reorderedExpand, adjList[mustin[i].back()],
+                                   scratchMerged, mustin[i]);
           }
 
           if (sp6 && reorderedExpand.empty() && mustin[i].size() <= 2)

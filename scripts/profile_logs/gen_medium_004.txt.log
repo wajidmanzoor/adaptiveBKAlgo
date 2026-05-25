@@ -1,0 +1,31 @@
+Graph: /Users/wajid/Desktop/Research/Projects/BK/adaptiveBKAlgo/data/gen_medium_004.txt
+Exit code: 0
+
+Running ReorderSib (Ascending degeneracy) (Optimized Exact Search) Algorithm...
+ReorderSib: cliques=84  dups=0  maxSize=4  checks=102  time=0.192 ms
+
+── ReorderSib cost breakdown ─────────────────────────────────
+  rCall local logic                  0.010 ms    5.0%  calls=93
+  enumerate local logic              0.019 ms   10.1%  calls=102
+  collectCoveringCliques             0.006 ms    3.1%  calls=57
+  dominance pruning                  0.003 ms    1.6%  calls=38
+  buildHitSets                       0.003 ms    1.6%  calls=38
+  sibling planning                   0.006 ms    2.9%  calls=57
+  solver                             0.028 ms   14.5%  calls=25
+  minimalByInclusion                 0.000 ms    0.0%  calls=0
+  commonExpand                       0.006 ms    3.4%  calls=145
+  sibling branch build               0.016 ms    8.4%  calls=57
+  branch dedup                       0.021 ms   11.1%  calls=38
+  reorder skip tests                 0.003 ms    1.6%  calls=211
+  reorder branch rebuild             0.014 ms    7.2%  calls=104
+  leaf recording                     0.016 ms    8.3%  calls=84
+  pivot selection                    0.001 ms    0.3%  calls=17
+  intersect/intersectInto            0.009 ms    4.7%  calls=292
+  setDiff                            0.007 ms    3.6%  calls=277
+  unionSet                           0.006 ms    3.2%  calls=273
+  encodeClique                       0.002 ms    1.1%  calls=152
+  sibling phase local                0.014 ms    7.2%  calls=57
+  other / untimed                    0.002 ms    1.1%
+  PROFILED subtotal                  0.190 ms   98.9%
+  TOTAL (wall)                       0.192 ms  100.0%
+──────────────────────────────────────────────────────────────
