@@ -39,3 +39,6 @@
 
 # debug information files
 *.dwo
+data/real/usa_road_sort_q
+data/real/cit-patents.txt
+data/real/patent_q

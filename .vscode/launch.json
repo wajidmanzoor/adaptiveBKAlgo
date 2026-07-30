@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug bk_algorithm",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/orginal/build/bk_algorithm",
+      "args": ["${workspaceFolder}/orginal/data/test.txt", "4"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "lldb",
+      "stopAtEntry": false
+    }
+  ]
+}

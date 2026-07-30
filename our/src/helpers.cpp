@@ -1,0 +1,1933 @@
+#include "../inc/helpers.h"
+#include <chrono>
+#include <functional>
+#include <iomanip>
+#include <numeric>
+// Returns peelSeq index of verticies by core value
+// peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest.
+static vector<ui> computePeelSeq(const Graph &g) {
+  ui n = g.n;
+  vector<ui> deg(g.degree.begin(), g.degree.end());
+  ui maxDeg = *max_element(deg.begin(), deg.end());
+
+  vector<ui> bins(maxDeg + 1, 0);
+  for (ui d : deg)
+    bins[d]++;
+  vector<ui> binStart(maxDeg + 1, 0);
+  partial_sum(bins.begin(), bins.end() - 1, binStart.begin() + 1);
+
+  vector<ui> pos(n), sorted(n);
+  for (ui v = 0; v < n; v++) {
+    pos[v] = binStart[deg[v]]++;
+    sorted[pos[v]] = v;
+  }
+  for (ui d = 0; d <= maxDeg; d++)
+    binStart[d] -= bins[d]; // reset to start of each bin
+
+  vector<ui> peelSeq(n);
+  for (ui i = 0; i < n; i++) {
+    ui v = sorted[i];
+    peelSeq[n - 1 - i] = v; // ascending peel order → descending in array
+    for (ui j = g.offset[v]; j < g.offset[v + 1]; j++) {
+      ui u = g.neighbors[j];
+      if (deg[u] > deg[v]) {
+        ui du = deg[u];
+        ui pu = pos[u];
+        ui pw = binStart[du];
+        ui w = sorted[pw];
+        if (u != w) {
+          pos[u] = pw;
+          sorted[pu] = w;
+          pos[w] = pu;
+          sorted[pw] = u;
+        }
+        binStart[du]++;
+        deg[u]--;
+      }
+    }
+  }
+  return peelSeq;
+}
+
+// Build adjList (all neighbors) and adjList2 (only neighbors with higher index
+// in the permuted order).
+static void buildAdjLists(const Graph &g, const vector<ui> &perm,
+                          vector<vector<ui>> &adjList,
+                          vector<vector<ui>> &adjList2) {
+  ui n = g.n;
+  adjList.assign(n, {});
+  adjList2.assign(n, {});
+  for (ui u = 0; u < n; u++) {
+    ui nu = perm[u];
+    for (ui j = g.offset[u]; j < g.offset[u + 1]; j++) {
+      ui nv = perm[g.neighbors[j]];
+      adjList[nu].push_back(nv);
+      if (nv > nu)
+        adjList2[nu].push_back(nv);
+    }
+    sort(adjList[nu].begin(), adjList[nu].end());
+    sort(adjList2[nu].begin(), adjList2[nu].end());
+  }
+}
+
+// PivotBK Implementation
+PivotBK::PivotBK(Graph &g, DegOrder order) {
+  n = g.n;
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  checksCount = 0;
+
+  vector<ui> perm(n);
+
+  // Canonical order
+  if (order == DegOrder::ORIGINAL) {
+    for (ui i = 0; i < n; i++)
+      perm[i] = i;
+  } else {
+    vector<ui> peelSeq = computePeelSeq(g);
+
+    // Ascending degeneracy order
+    if (order == DegOrder::ASCENDING) {
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[n - 1 - i]] = i; // low-core → low index
+    } else {
+      // Descending degeneracy order
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[i]] = i; // high-core → low index
+    }
+  }
+
+  adjList.resize(n);
+  vector<vector<ui>> dummy;
+  buildAdjLists(g, perm, adjList, dummy);
+}
+
+vector<ui> PivotBK::intersect(const vector<ui> &set1,
+                              const vector<ui> &neighbors) {
+  vector<ui> result;
+  result.reserve(min(set1.size(), neighbors.size()));
+  ui i = 0, j = 0;
+  while (i < set1.size() && j < neighbors.size()) {
+    if (set1[i] == neighbors[j]) {
+      result.push_back(set1[i]);
+      i++;
+      j++;
+    } else if (set1[i] < neighbors[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return result;
+}
+bool PivotBK::isEmpty(const vector<ui> &set) { return set.empty(); }
+
+bool PivotBK::isConnected(ui u, ui v) {
+  // Binary search in sorted adjacency list
+  // if v and u are connected.
+  return binary_search(adjList[u].begin(), adjList[u].end(), v);
+}
+
+ui PivotBK::choosePivot(const vector<ui> &P, const vector<ui> &X) {
+  ui bestPivot = P.empty() ? (X.empty() ? 0 : X[0]) : P[0];
+  ui maxElimination = 0;
+
+  // Check vertices in P to find the one that maximizes |P ∩ N(u)|
+  for (ui u : P) {
+    ui elimination = (ui)intersect(P, adjList[u]).size();
+    if (elimination > maxElimination) {
+      maxElimination = elimination;
+      bestPivot = u;
+    }
+  }
+
+  // check vertices in X as well, since pivot can be from P ∪ X
+  for (ui u : X) {
+    ui elimination = (ui)intersect(P, adjList[u]).size();
+    if (elimination > maxElimination) {
+      maxElimination = elimination;
+      bestPivot = u;
+    }
+  }
+  return bestPivot;
+}
+void PivotBK::bronKerboschRecursive(vector<ui> &R, vector<ui> &P,
+                                    vector<ui> &X) {
+  checksCount++;
+
+  // Basic pruning: check if P and X are empty
+  // Clique found
+  if (isEmpty(P) && isEmpty(X)) {
+    if (R.size() <= 2)
+      return;
+
+    // Found a maximal clique
+    cliqueCount++;
+    maxCliqueSize = max(maxCliqueSize, (ui)R.size());
+    return;
+  }
+
+  // P empty but X non-empty: R is NOT maximal, prune
+  if (isEmpty(P))
+    return;
+
+  // Choose pivot from P ∪ X such that |P ∩ N(pivot)| is maximized to minimize
+  // recursive calls
+  ui pivot = choosePivot(P, X);
+
+  // P = P \ N(pivot)
+  vector<ui> candidates;
+  candidates.reserve(P.size());
+  for (ui v : P) {
+    if (!isConnected(v, pivot))
+      candidates.push_back(v);
+  }
+
+  // For each candidate vertex v, we add it to the growing clique R and
+  // recursively explore.
+  for (ui v : candidates) {
+    // add v to partial clique R
+    R.push_back(v);
+
+    // new P =  P ∩ N(v), new X = X ∩ N(v)
+    vector<ui> new_P = intersect(P, adjList[v]);
+    vector<ui> new_X = intersect(X, adjList[v]);
+
+    // recurse with new sets
+    bronKerboschRecursive(R, new_P, new_X);
+
+    R.pop_back(); // backtrack
+
+    // Move v from P to X, keeping X sorted
+    auto it = find(P.begin(), P.end(), v);
+    if (it != P.end())
+      P.erase(it);
+    X.insert(lower_bound(X.begin(), X.end(), v), v);
+  }
+}
+void PivotBK::findAllMaximalCliques() {
+  vector<ui> R;
+  vector<ui> X;
+  vector<ui> P(n);
+
+  for (ui i = 0; i < n; i++)
+    P[i] = i;
+
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  checksCount = 0;
+
+  auto t0 = chrono::high_resolution_clock::now();
+  bronKerboschRecursive(R, P, X);
+  auto t1 = chrono::high_resolution_clock::now();
+  double ms = chrono::duration<double, milli>(t1 - t0).count();
+
+  cout << "Total Maximal Cliques Found: " << cliqueCount << endl;
+  cout << "Maximum Clique Size: " << maxCliqueSize << endl;
+  cout << "Total Vertex-Set Checks: " << checksCount << endl;
+  cout << fixed << setprecision(3) << "Time: " << ms << " ms" << endl;
+}
+
+// ReorderSib profiling
+struct RSibProf {
+  double rCall_ms = 0, enumerate_ms = 0, collect_ms = 0, solver_ms = 0;
+  double minimal_ms = 0, commonExp_ms = 0, buildHit_ms = 0;
+  double intersect_ms = 0, setdiff_ms = 0, unionset_ms = 0, encode_ms = 0;
+  double pivot_ms = 0, sibling_ms = 0, dedup_ms = 0;
+  double reorderSkip_ms = 0, reorderBuild_ms = 0, cliqueRecord_ms = 0;
+  double siblingPlan_ms = 0, branchBuild_ms = 0;
+  long rCall_n = 0, enumerate_n = 0, collect_n = 0, solver_n = 0;
+  long minimal_n = 0, commonExp_n = 0, buildHit_n = 0;
+  long intersect_n = 0, setdiff_n = 0, unionset_n = 0, encode_n = 0;
+  long pivot_n = 0, sibling_n = 0, dedup_n = 0;
+  long reorderSkip_n = 0, reorderBuild_n = 0, cliqueRecord_n = 0;
+  long siblingPlan_n = 0, branchBuild_n = 0;
+  ull solver_hsize_sum = 0, solver_esize_sum = 0;
+  ull solver_compat_eligible = 0, solver_compat_survivors = 0;
+  long solver_h_gt63 = 0, solver_h_gt128 = 0;
+  long solver_h_le8 = 0, solver_h_le16 = 0, solver_h_le32 = 0;
+  long solver_h_le63 = 0, solver_h_le128 = 0, solver_h_gt128_bucket = 0;
+  void reset() { *this = RSibProf{}; }
+  void print(double total_ms) const {
+    auto pct = [&](double v) {
+      return total_ms > 0 ? 100.0 * v / total_ms : 0.0;
+    };
+    const vector<pair<const char *, pair<double, long>>> rows = {
+        {"rCall local logic", {rCall_ms, rCall_n}},
+        {"enumerate local logic", {enumerate_ms, enumerate_n}},
+        {"collectCoveringCliques", {collect_ms, collect_n}},
+        {"buildHitSets", {buildHit_ms, buildHit_n}},
+        {"sibling planning", {siblingPlan_ms, siblingPlan_n}},
+        {"solver", {solver_ms, solver_n}},
+        {"minimalByInclusion", {minimal_ms, minimal_n}},
+        {"commonExpand", {commonExp_ms, commonExp_n}},
+        {"sibling branch build", {branchBuild_ms, branchBuild_n}},
+        {"branch dedup", {dedup_ms, dedup_n}},
+        {"reorder skip tests", {reorderSkip_ms, reorderSkip_n}},
+        {"reorder branch rebuild", {reorderBuild_ms, reorderBuild_n}},
+        {"leaf recording", {cliqueRecord_ms, cliqueRecord_n}},
+        {"pivot selection", {pivot_ms, pivot_n}},
+        {"intersect/intersectInto", {intersect_ms, intersect_n}},
+        {"setDiff", {setdiff_ms, setdiff_n}},
+        {"unionSet", {unionset_ms, unionset_n}},
+        {"encodeClique", {encode_ms, encode_n}},
+        {"sibling phase local", {sibling_ms, sibling_n}},
+    };
+    double profiled_ms = 0.0;
+    for (const auto &row : rows)
+      profiled_ms += row.second.first;
+    const double other_ms = max(0.0, total_ms - profiled_ms);
+
+    printf(
+        "\n── ReorderSib cost breakdown ─────────────────────────────────\n");
+    for (const auto &row : rows) {
+      printf("  %-30s %9.3f ms  %5.1f%%  calls=%ld\n", row.first,
+             row.second.first, pct(row.second.first), row.second.second);
+    }
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "other / untimed", other_ms,
+           pct(other_ms));
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "PROFILED subtotal", profiled_ms,
+           pct(profiled_ms));
+    printf("  %-30s %9.3f ms  %5.1f%%\n", "TOTAL (wall)", total_ms, 100.0);
+    if (solver_n > 0) {
+      const double avgE = static_cast<double>(solver_esize_sum) / solver_n;
+      const double avgH = static_cast<double>(solver_hsize_sum) / solver_n;
+      const double compatPct =
+          solver_compat_eligible > 0
+              ? 100.0 * static_cast<double>(solver_compat_survivors) /
+                    solver_compat_eligible
+              : 0.0;
+      printf("\n  Solver stats\n");
+      printf("  %-30s %.2f\n", "avg |E|", avgE);
+      printf("  %-30s %.2f\n", "avg hSize", avgH);
+      printf("  %-30s %ld\n", "calls with hSize > 63", solver_h_gt63);
+      printf("  %-30s %ld\n", "calls with hSize > 128", solver_h_gt128);
+      printf("  %-30s %llu / %llu  (%4.1f%%)\n",
+             "compat survivors / eligible",
+             solver_compat_survivors, solver_compat_eligible, compatPct);
+      printf("  %-30s <=8:%ld  9-16:%ld  17-32:%ld\n", "hSize buckets",
+             solver_h_le8, solver_h_le16, solver_h_le32);
+      printf("  %-30s 33-63:%ld  64-128:%ld  >128:%ld\n", "",
+             solver_h_le63, solver_h_le128, solver_h_gt128_bucket);
+    }
+    printf("──────────────────────────────────────────────────────────────\n");
+  }
+};
+static RSibProf rsp;
+
+#if SOLVER_TRACE
+namespace {
+struct SolverTraceCallCompat {
+  ull eligible = 0;
+  ull survivors = 0;
+};
+
+thread_local SolverTraceCallCompat *activeSolverTraceCompat = nullptr;
+
+struct SolverTraceSink {
+  bool enabled = false;
+  string graphLabel;
+  string filePath;
+  ull nextCallId = 0;
+  ofstream out;
+
+  static string csvEscape(const string &s) {
+    if (s.find_first_of(",\"\n\r") == string::npos)
+      return s;
+    string escaped = "\"";
+    for (char ch : s) {
+      if (ch == '"')
+        escaped += "\"\"";
+      else
+        escaped += ch;
+    }
+    escaped += '"';
+    return escaped;
+  }
+
+  void beginRun() {
+    endRun();
+    const char *path = getenv("REORDERSIB_SOLVER_TRACE_FILE");
+    if (path == nullptr || *path == '\0')
+      return;
+
+    filePath = path;
+    const char *graph = getenv("REORDERSIB_SOLVER_TRACE_GRAPH");
+    graphLabel = (graph != nullptr && *graph != '\0') ? graph : "unknown";
+
+    bool writeHeader = true;
+    struct stat st;
+    if (stat(filePath.c_str(), &st) == 0 && st.st_size > 0)
+      writeHeader = false;
+
+    out.open(filePath, ios::out | ios::app);
+    if (!out.is_open()) {
+      filePath.clear();
+      graphLabel.clear();
+      return;
+    }
+
+    enabled = true;
+    nextCallId = 0;
+    if (writeHeader) {
+      out << "graph,call_id,level,m_size,e_size,covering_cliques,hitset_count,"
+             "avg_hitset_size,min_hitset_size,max_hitset_size,build_hitsets_ms,"
+             "empty_hitset,solver_kind,solve_ms,total_plan_ms,sibling_set_count,"
+             "avg_sibling_set_size,min_sibling_set_size,max_sibling_set_size,"
+             "compat_eligible,compat_survivors,compat_survival_pct\n";
+    }
+  }
+
+  void endRun() {
+    if (out.is_open()) {
+      out.flush();
+      out.close();
+    }
+    enabled = false;
+    graphLabel.clear();
+    filePath.clear();
+    nextCallId = 0;
+  }
+
+  void emit(ui level, ui mSize, ui eSize, ui coveringCliques, ui hitsetCount,
+            double avgHitsetSize, ui minHitsetSize, ui maxHitsetSize,
+            double buildHitsetsMs, bool emptyHitset, const char *solverKind,
+            double solveMs, double totalPlanMs, ui siblingSetCount,
+            double avgSiblingSetSize, ui minSiblingSetSize,
+            ui maxSiblingSetSize, ull compatEligible, ull compatSurvivors) {
+    if (!enabled || !out.is_open())
+      return;
+    const double compatPct =
+        compatEligible > 0
+            ? (100.0 * static_cast<double>(compatSurvivors) / compatEligible)
+            : 0.0;
+    out << csvEscape(graphLabel) << ',' << nextCallId++ << ',' << level << ','
+        << mSize << ',' << eSize << ',' << coveringCliques << ','
+        << hitsetCount << ',' << fixed << setprecision(3) << avgHitsetSize
+        << ',' << minHitsetSize << ',' << maxHitsetSize << ','
+        << buildHitsetsMs << ',' << (emptyHitset ? 1 : 0) << ','
+        << solverKind << ',' << solveMs << ',' << totalPlanMs << ','
+        << siblingSetCount << ',' << avgSiblingSetSize << ','
+        << minSiblingSetSize << ',' << maxSiblingSetSize << ','
+        << compatEligible << ',' << compatSurvivors << ',' << compatPct
+        << '\n';
+  }
+};
+
+SolverTraceSink solverTraceSink;
+} // namespace
+#endif
+
+#if PROFILING
+struct ScopedTimer {
+  using clock = chrono::high_resolution_clock;
+  using duration = clock::duration;
+  static thread_local ScopedTimer *current;
+
+  chrono::high_resolution_clock::time_point t0;
+  duration child = duration::zero();
+  double &acc;
+  long &cnt;
+  ScopedTimer *parent;
+
+  ScopedTimer(double &a, long &c)
+      : t0(clock::now()), acc(a), cnt(c), parent(current) {
+    current = this;
+  }
+
+  ~ScopedTimer() {
+    const duration elapsed = clock::now() - t0;
+    duration self = elapsed - child;
+    if (self < duration::zero())
+      self = duration::zero();
+    acc += chrono::duration<double, milli>(self).count();
+    ++cnt;
+    current = parent;
+    if (parent != nullptr)
+      parent->child += elapsed;
+  }
+};
+thread_local ScopedTimer *ScopedTimer::current = nullptr;
+#else
+struct ScopedTimer {
+  ScopedTimer(double &, long &) {}
+};
+#endif
+
+// ReorderSib Implementation
+ReorderSib::ReorderSib(Graph &g, DegOrder order, SibMethod method,
+                       ui hitSetLimit, bool prune2, bool sp1,
+                       bool sp2, bool sp3, bool sp4, bool sp5, bool sp6)
+    : hitSetLimit(hitSetLimit), prune2(prune2), sp1(sp1),
+      sp2(sp2), sp3(sp3), sp4(sp4), sp5(sp5), sp6(sp6) {
+  n = g.n;
+  cliqueCount = 0;
+  maxCliqueSize = 0;
+  checksCount = 0;
+
+  this->method = method;
+  cliquesByVertexByLevel.resize(n);
+  cliqueCountByVertex.resize(n, 0);
+
+  vector<ui> perm(n);
+
+  // Canonical order
+  if (order == DegOrder::ORIGINAL) {
+    for (ui i = 0; i < n; i++)
+      perm[i] = i;
+  } else {
+    // Degeneracy order Ascending or Descending
+    vector<ui> peelSeq = computePeelSeq(g);
+    if (order == DegOrder::ASCENDING) {
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[n - 1 - i]] = i;
+    } else {
+      for (ui i = 0; i < n; i++)
+        perm[peelSeq[i]] = i;
+    }
+  }
+
+  buildAdjLists(g, perm, adjList, adjList2);
+
+  adjSet.resize(n);
+  for (ui u = 0; u < n; u++)
+    for (ui v : adjList[u])
+      adjSet[u].insert(v);
+
+  lab.assign(n, 0);
+  enumDepth = 0;
+  const ui depthCap = max<ui>(MAX_ENUM_DEPTH, n + 1);
+  depthPal.resize(depthCap);
+  depthLX.resize(depthCap);
+  depthPnew.resize(depthCap);
+  depthXnew.resize(depthCap);
+}
+
+vector<ui> ReorderSib::intersect(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
+  vector<ui> C;
+  C.reserve(min(A.size(), B.size()));
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] == B[j]) {
+      C.push_back(A[i]);
+      i++;
+      j++;
+    } else if (A[i] < B[j])
+      i++;
+    else
+      j++;
+  }
+  return C;
+}
+
+void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
+                               const vector<ui> &B) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
+  out.clear();
+  const size_t need = min(A.size(), B.size());
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] == B[j]) {
+      out.push_back(A[i]);
+      i++;
+      j++;
+    } else if (A[i] < B[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+}
+
+void ReorderSib::intersectExcludingInto(vector<ui> &out, const vector<ui> &A,
+                                        const vector<ui> &B,
+                                        const vector<ui> &exclude) {
+  ScopedTimer _t(rsp.intersect_ms, rsp.intersect_n);
+  out.clear();
+  const size_t need = min(A.size(), B.size());
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0, k = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] == B[j]) {
+      while (k < exclude.size() && exclude[k] < A[i])
+        k++;
+      if (k == exclude.size() || exclude[k] != A[i])
+        out.push_back(A[i]);
+      i++;
+      j++;
+    } else if (A[i] < B[j]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+}
+
+vector<ui> ReorderSib::setDiff(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.setdiff_ms, rsp.setdiff_n);
+  vector<ui> C;
+  C.reserve(A.size());
+  ui i = 0, j = 0;
+  while (i < A.size()) {
+    if (j == (ui)B.size() || A[i] < B[j]) {
+      C.push_back(A[i]);
+      i++;
+    } else if (A[i] == B[j]) {
+      i++;
+      j++;
+    } else
+      j++;
+  }
+  return C;
+}
+
+void ReorderSib::setDiffInto(vector<ui> &out, const vector<ui> &A,
+                             const vector<ui> &B) {
+  ScopedTimer _t(rsp.setdiff_ms, rsp.setdiff_n);
+  out.clear();
+  if (out.capacity() < A.size())
+    out.reserve(A.size());
+  ui i = 0, j = 0;
+  while (i < A.size()) {
+    if (j == (ui)B.size() || A[i] < B[j]) {
+      out.push_back(A[i]);
+      i++;
+    } else if (A[i] == B[j]) {
+      i++;
+      j++;
+    } else {
+      j++;
+    }
+  }
+}
+
+vector<ui> ReorderSib::unionSet(const vector<ui> &A, const vector<ui> &B) {
+  ScopedTimer _t(rsp.unionset_ms, rsp.unionset_n);
+  vector<ui> U;
+  U.reserve(A.size() + B.size());
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] < B[j]) {
+      U.push_back(A[i]);
+      i++;
+    } else if (A[i] > B[j]) {
+      U.push_back(B[j]);
+      j++;
+    } else {
+      U.push_back(A[i]);
+      i++;
+      j++;
+    }
+  }
+  while (i < A.size())
+    U.push_back(A[i++]);
+  while (j < B.size())
+    U.push_back(B[j++]);
+  return U;
+}
+
+void ReorderSib::unionInto(vector<ui> &out, const vector<ui> &A,
+                           const vector<ui> &B) {
+  ScopedTimer _t(rsp.unionset_ms, rsp.unionset_n);
+  out.clear();
+  const size_t need = A.size() + B.size();
+  if (out.capacity() < need)
+    out.reserve(need);
+  ui i = 0, j = 0;
+  while (i < A.size() && j < B.size()) {
+    if (A[i] < B[j]) {
+      out.push_back(A[i]);
+      i++;
+    } else if (A[i] > B[j]) {
+      out.push_back(B[j]);
+      j++;
+    } else {
+      out.push_back(A[i]);
+      i++;
+      j++;
+    }
+  }
+  while (i < A.size())
+    out.push_back(A[i++]);
+  while (j < B.size())
+    out.push_back(B[j++]);
+}
+
+void ReorderSib::recordSolverCallStats(ui eSize, ui hSize) {
+  rsp.solver_esize_sum += eSize;
+  rsp.solver_hsize_sum += hSize;
+  if (hSize > 63)
+    rsp.solver_h_gt63++;
+  if (hSize > 128)
+    rsp.solver_h_gt128++;
+
+  if (hSize <= 8)
+    rsp.solver_h_le8++;
+  else if (hSize <= 16)
+    rsp.solver_h_le16++;
+  else if (hSize <= 32)
+    rsp.solver_h_le32++;
+  else if (hSize <= 63)
+    rsp.solver_h_le63++;
+  else if (hSize <= 128)
+    rsp.solver_h_le128++;
+  else
+    rsp.solver_h_gt128_bucket++;
+}
+
+void ReorderSib::recordSolverCompatStats(ull eligible, ull survivors) {
+  rsp.solver_compat_eligible += eligible;
+  rsp.solver_compat_survivors += survivors;
+#if SOLVER_TRACE
+  if (activeSolverTraceCompat != nullptr) {
+    activeSolverTraceCompat->eligible += eligible;
+    activeSolverTraceCompat->survivors += survivors;
+  }
+#endif
+}
+
+bool ReorderSib::hitsAll(const vector<ui> &S,
+                         const vector<vector<ui>> &hitSets) {
+  for (const vector<ui> &hitSet : hitSets) {
+    bool hit = false;
+    for (ui v : S) {
+      if (binary_search(hitSet.begin(), hitSet.end(), v)) {
+        hit = true;
+        break;
+      }
+    }
+    if (!hit)
+      return false;
+  }
+  return true;
+}
+
+// After choosing a sibling set S, only vertices still in E and adjacent to
+// every vertex of S can continue to grow the branch.
+vector<ui> ReorderSib::commonExpand(const vector<ui> &E, const vector<ui> &S) {
+  ScopedTimer _t(rsp.commonExp_ms, rsp.commonExp_n);
+  vector<ui> result = setDiff(E, S);
+  for (ui v : S) {
+    const auto &adj = adjList[v];
+    ui k = 0, j = 0;
+    for (ui i = 0; i < (ui)result.size(); i++) {
+      while (j < (ui)adj.size() && adj[j] < result[i]) j++;
+      if (j < (ui)adj.size() && adj[j] == result[i])
+        result[k++] = result[i];
+    }
+    result.resize(k);
+  }
+  return result;
+}
+
+// Find previously discovered cliques that already contain M.
+vector<ui> ReorderSib::collectCoveringCliques(const vector<ui> &M,
+                                              const vector<ui> &E, ui level) {
+  ScopedTimer _t(rsp.collect_ms, rsp.collect_n);
+  vector<ui> result;
+  if (M.empty())
+    return result;
+
+  // Seed: vertex in M whose total clique count is smallest (tightest filter).
+  ui seed = M[0];
+  for (ui v : M)
+    if (cliqueCountByVertex[v] < cliqueCountByVertex[seed]) seed = v;
+
+  // With prune2: only look at levels >= level-1 in the two-tier index,
+  // skipping all older cliques without scanning them.
+  const ui startLevel = prune2 ? (level > 0 ? level - 1 : 0) : 0;
+  const auto &seedBuckets = cliquesByVertexByLevel[seed];
+  for (ui l = startLevel; l < (ui)seedBuckets.size(); l++) {
+    for (ui cId : seedBuckets[l]) {
+    bool containsAllMustin = includes(
+        allCliques[cId].begin(), allCliques[cId].end(), M.begin(), M.end());
+    if (!containsAllMustin)
+      continue;
+
+    // sp4: skip cliques whose intersection with E is exactly M.
+    if (sp4) {
+      const auto &C = allCliques[cId];
+      bool hasVertexBeyondM = false;
+      for (ui v : C) {
+        if (!binary_search(M.begin(), M.end(), v) &&
+            binary_search(E.begin(), E.end(), v)) {
+          hasVertexBeyondM = true;
+          break;
+        }
+      }
+      if (!hasVertexBeyondM)
+        continue;
+    }
+
+    result.push_back(cId);
+  }
+  }
+  return result;
+}
+
+// Each covering clique C contributes the constraint "pick something from E
+// that is outside C", which is exactly E \ C.
+vector<vector<ui>> ReorderSib::buildHitSets(const vector<ui> &E,
+                                            const vector<ui> &cliqueIds,
+                                            ui maxHitSets) {
+  ScopedTimer _t(rsp.buildHit_ms, rsp.buildHit_n);
+
+  // When capping, keep the cliques with the most overlap with E — those produce
+  // the smallest hit sets (E \ C), which are the tightest constraints.
+  // Tighter constraints → solver has fewer candidates per constraint → runs
+  // faster.
+  const vector<ui> *ids = &cliqueIds;
+  vector<ui> sorted;
+  if (cliqueIds.size() > maxHitSets) {
+    sorted = cliqueIds;
+    // Sort by clique size descending: larger clique → smaller E\C → tighter
+    // constraint
+    sort(sorted.begin(), sorted.end(), [&](ui a, ui b) {
+      return allCliques[a].size() > allCliques[b].size();
+    });
+    sorted.resize(maxHitSets);
+    ids = &sorted;
+  }
+
+  vector<vector<ui>> hitSets;
+  hitSets.reserve(ids->size());
+  for (ui cId : *ids)
+    hitSets.push_back(setDiff(E, allCliques[cId]));
+  return hitSets;
+}
+
+// If M is not covered by any old clique, the sibling effect does nothing and
+// we branch on one vertex at a time exactly like the base reorder search.
+vector<vector<ui>> ReorderSib::singletonBranches(const vector<ui> &E) {
+  vector<vector<ui>> branches;
+  branches.reserve(E.size());
+  for (ui v : E)
+    branches.push_back({v});
+  return branches;
+}
+
+// Remove duplicate sibling sets, then keep only the ones that are minimal by
+// inclusion. If S1 contains S2, S1 is unnecessary because S2 already enforces
+// the same sibling split with a smaller branch seed.
+vector<vector<ui>>
+ReorderSib::minimalByInclusion(vector<vector<ui>> solutions) {
+  ScopedTimer _t(rsp.minimal_ms, rsp.minimal_n);
+  for (vector<ui> &S : solutions)
+    sort(S.begin(), S.end());
+  sort(solutions.begin(), solutions.end());
+  solutions.erase(unique(solutions.begin(), solutions.end()), solutions.end());
+
+  vector<vector<ui>> minimal;
+  for (ui i = 0; i < solutions.size(); i++) {
+    bool hasSmallerCover = false;
+    for (ui j = 0; j < solutions.size(); j++) {
+      if (i == j || solutions[j].size() >= solutions[i].size())
+        continue;
+      if (includes(solutions[i].begin(), solutions[i].end(),
+                   solutions[j].begin(), solutions[j].end())) {
+        hasSmallerCover = true;
+        break;
+      }
+    }
+    if (!hasSmallerCover)
+      minimal.push_back(solutions[i]);
+  }
+  return minimal;
+}
+
+// Convert the sibling effect into a clique-constrained hitting-set problem
+// over the already discovered covering cliques, then solve it with the
+// requested strategy.
+vector<vector<ui>>
+ReorderSib::generateSiblingSetsFromCliques(const vector<ui> &M,
+                                           const vector<ui> &E,
+                                           const vector<ui> &cliqueIds,
+                                           ui level) {
+  ScopedTimer _t(rsp.siblingPlan_ms, rsp.siblingPlan_n);
+#if SOLVER_TRACE
+  using trace_clock = chrono::high_resolution_clock;
+  const auto traceStart = trace_clock::now();
+  auto emitTrace = [&](const vector<vector<ui>> &siblingSets,
+                       ui hitsetCount, double avgHitsetSize,
+                       ui minHitsetSize, ui maxHitsetSize,
+                       double buildHitsetsMs, bool emptyHitset,
+                       const char *solverKind, double solveMs,
+                       ull compatEligible, ull compatSurvivors) {
+    double avgSiblingSetSize = 0.0;
+    ui minSiblingSetSize = 0;
+    ui maxSiblingSetSize = 0;
+    if (!siblingSets.empty()) {
+      ull siblingSizeSum = 0;
+      minSiblingSetSize = UINT_MAX;
+      for (const auto &S : siblingSets) {
+        const ui sz = (ui)S.size();
+        siblingSizeSum += sz;
+        minSiblingSetSize = min(minSiblingSetSize, sz);
+        maxSiblingSetSize = max(maxSiblingSetSize, sz);
+      }
+      avgSiblingSetSize =
+          static_cast<double>(siblingSizeSum) / siblingSets.size();
+    }
+    const double totalPlanMs =
+        chrono::duration<double, milli>(trace_clock::now() - traceStart)
+            .count();
+    solverTraceSink.emit(level, (ui)M.size(), (ui)E.size(),
+                         (ui)cliqueIds.size(), hitsetCount, avgHitsetSize,
+                         minHitsetSize, maxHitsetSize, buildHitsetsMs,
+                         emptyHitset, solverKind, solveMs,
+                         totalPlanMs, (ui)siblingSets.size(),
+                         avgSiblingSetSize, minSiblingSetSize,
+                         maxSiblingSetSize, compatEligible, compatSurvivors);
+  };
+#endif
+  if (cliqueIds.empty())
+  {
+    vector<vector<ui>> branches = singletonBranches(E);
+#if SOLVER_TRACE
+    emitTrace(branches, 0, 0.0, 0, 0, 0.0, false, "no_covering_cliques", 0.0,
+              0, 0);
+#endif
+    return branches;
+  }
+
+#if SOLVER_TRACE
+  const auto buildStart = trace_clock::now();
+#endif
+  vector<vector<ui>> hitSets = buildHitSets(E, cliqueIds, hitSetLimit);
+#if SOLVER_TRACE
+  const double buildHitsetsMs =
+      chrono::duration<double, milli>(trace_clock::now() - buildStart).count();
+  double avgHitsetSize = 0.0;
+  ui minHitsetSize = 0;
+  ui maxHitsetSize = 0;
+  if (!hitSets.empty()) {
+    ull hitsetSizeSum = 0;
+    minHitsetSize = UINT_MAX;
+    for (const auto &hitSet : hitSets) {
+      const ui sz = (ui)hitSet.size();
+      hitsetSizeSum += sz;
+      minHitsetSize = min(minHitsetSize, sz);
+      maxHitsetSize = max(maxHitsetSize, sz);
+    }
+    avgHitsetSize = static_cast<double>(hitsetSizeSum) / hitSets.size();
+  }
+#endif
+
+  // An empty hit set means some old clique fully contains E, so no sibling
+  // choice can separate the current branch from that clique.
+  for (const vector<ui> &hitSet : hitSets) {
+    if (hitSet.empty()) {
+#if SOLVER_TRACE
+      vector<vector<ui>> noBranches;
+      emitTrace(noBranches, (ui)hitSets.size(), avgHitsetSize, minHitsetSize,
+                maxHitsetSize, buildHitsetsMs, true,
+                "covered_by_discovered_clique", 0.0, 0, 0);
+#endif
+      return {};
+    }
+  }
+
+  if (cliqueIds.size() == 1) {
+    vector<vector<ui>> branches = singletonBranches(hitSets[0]);
+#if SOLVER_TRACE
+    emitTrace(branches, (ui)hitSets.size(), avgHitsetSize, minHitsetSize,
+              maxHitsetSize, buildHitsetsMs, false,
+              "single_covering_clique", 0.0, 0, 0);
+#endif
+    return branches;
+  }
+
+  const char *solverKind =
+      (method == SibMethod::BACKTRACKING)
+          ? "backtracking"
+          : ((ui)hitSets.size() > 128 ? "fallback_gt128"
+                                      : (((ui)hitSets.size() <= 63)
+                                             ? "optimized_le63"
+                                             : "optimized_64_128"));
+#if SOLVER_TRACE
+  SolverTraceCallCompat localCompat;
+  SolverTraceCallCompat *prevCompat = activeSolverTraceCompat;
+  activeSolverTraceCompat = &localCompat;
+  const auto solveStart = trace_clock::now();
+#endif
+  vector<vector<ui>> siblingSets;
+  if (method == SibMethod::BACKTRACKING)
+    siblingSets = backtrackingBranchBound(E, hitSets);
+  else
+    siblingSets = efficientHittingSet(E, hitSets);
+#if SOLVER_TRACE
+  const double solveMs =
+      chrono::duration<double, milli>(trace_clock::now() - solveStart).count();
+  activeSolverTraceCompat = prevCompat;
+  emitTrace(siblingSets, (ui)hitSets.size(), avgHitsetSize, minHitsetSize,
+            maxHitsetSize, buildHitsetsMs, false, solverKind, solveMs,
+            localCompat.eligible, localCompat.survivors);
+#endif
+
+  return siblingSets;
+}
+
+vector<vector<ui>>
+ReorderSib::backtrackingBranchBound(const vector<ui> &E,
+                                    const vector<vector<ui>> &hitSets) {
+  ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
+  recordSolverCallStats((ui)E.size(), (ui)hitSets.size());
+  vector<vector<ui>> solutions;
+  vector<ui> current;
+
+  // DFS over clique-compatible subsets of E. Once the current set already hits
+  // every constraint, maintain the minimal solution family online and stop
+  // descending that branch.
+  function<void(ui)> dfs = [&](ui start) {
+    if (hitsAll(current, hitSets)) {
+      // current is already sorted because DFS only appends E[i] in increasing
+      // index order, and E itself is sorted.
+      for (const auto &s : solutions)
+        if (includes(current.begin(), current.end(), s.begin(), s.end()))
+          return;
+
+      solutions.erase(remove_if(solutions.begin(), solutions.end(),
+                                [&](const vector<ui> &s) {
+                                  return includes(s.begin(), s.end(),
+                                                  current.begin(),
+                                                  current.end());
+                                }),
+                      solutions.end());
+      solutions.push_back(current);
+      return;
+    }
+
+    // If current already contains a known minimal solution, any extension is a
+    // non-minimal superset and can be pruned immediately.
+    for (const auto &s : solutions)
+      if (includes(current.begin(), current.end(), s.begin(), s.end()))
+        return;
+
+    for (ui i = start; i < E.size(); i++) {
+      bool connected = true;
+      for (ui v : current) {
+        if (!binary_search(adjList[v].begin(), adjList[v].end(), E[i])) {
+          connected = false;
+          break;
+        }
+      }
+      if (!connected)
+        continue;
+
+      current.push_back(E[i]);
+      dfs(i + 1);
+      current.pop_back();
+    }
+  };
+
+  dfs(0);
+  return solutions;
+}
+
+// Optimized exact solver for all minimal clique-constrained hitting sets.
+//
+// Improvements over backtrackingBranchBound:
+//   1. Bitmask coverage  — done-check and update are O(1) bitwise ops.
+//   2. Incremental candidate list — compat-filtered frontier passed down,
+//      no per-step binary_search into adjList.
+//   3. Fail-first dead-branch  — prune as soon as any uncovered constraint
+//      has zero candidates left.
+//   4. "Covers nothing new" skip — a vertex that adds no new coverage can
+//      never be part of a minimal solution; skip it unconditionally.
+//   5. Live minimal-set maintenance — dominated solutions are removed the
+//      moment a smaller one is found; no post-pass minimalByInclusion needed.
+//   6. Coverage-descending candidate order — high-utility vertices tried
+//      first, producing solutions earlier and enabling more pruning.
+vector<vector<ui>>
+ReorderSib::efficientHittingSet(const vector<ui> &E,
+                                const vector<vector<ui>> &hitSets) {
+  ScopedTimer _t(rsp.solver_ms, rsp.solver_n);
+  const ui eSize = (ui)E.size();
+  const ui hSize = (ui)hitSets.size();
+  recordSolverCallStats(eSize, hSize);
+
+  // Fall back only once the extended bitmask path can no longer represent all
+  // constraints efficiently.
+  if (hSize > 128)
+    return backtrackingBranchBound(E, hitSets);
+
+  // ── Pre-computation shared by both optimized paths ───────────────────────
+
+  // compat[i*eSize+j] = 1 iff E[i] and E[j] are adjacent in the graph.
+  vector<char> compat(eSize * eSize, 0);
+  for (ui i = 0; i < eSize; i++)
+    for (ui j = i + 1; j < eSize; j++)
+      if (binary_search(adjList[E[i]].begin(), adjList[E[i]].end(), E[j]))
+        compat[i * eSize + j] = compat[j * eSize + i] = 1;
+
+  vector<ui> hOrder(hSize);
+  iota(hOrder.begin(), hOrder.end(), 0);
+  if (sp3)
+    sort(hOrder.begin(), hOrder.end(),
+         [&](ui a, ui b) { return hitSets[a].size() < hitSets[b].size(); });
+
+  vector<ui> eIdx(n, eSize);
+  for (ui i = 0; i < eSize; i++)
+    eIdx[E[i]] = i;
+
+  if (hSize <= 63) {
+    ull fullMask = (hSize == 0) ? 0ULL : ((1ULL << hSize) - 1);
+    vector<ull> cov(eSize, 0);
+    for (ui bit = 0; bit < hSize; bit++) {
+      ui h = hOrder[bit];
+      for (ui v : hitSets[h])
+        if (eIdx[v] < eSize)
+          cov[eIdx[v]] |= (1ULL << bit);
+    }
+
+    vector<ui> initCands(eSize);
+    iota(initCands.begin(), initCands.end(), 0);
+    sort(initCands.begin(), initCands.end(), [&](ui a, ui b) {
+      return __builtin_popcountll(cov[a]) > __builtin_popcountll(cov[b]);
+    });
+
+    vector<ui> forcedIdxs;
+    ull forcedCov = 0;
+
+    if (sp1) {
+      vector<ui> activeCands = initCands;
+      bool changed = true;
+      bool conflict = false;
+
+      while (changed && !conflict) {
+        changed = false;
+        ull uncov = fullMask & ~forcedCov;
+        if (!uncov)
+          break;
+
+        ull tmp = uncov;
+        while (tmp && !conflict) {
+          int h = __builtin_ctzll(tmp);
+          tmp &= tmp - 1;
+
+          ui sole = eSize;
+          int cnt = 0;
+          for (ui ci : activeCands) {
+            if (cov[ci] & (1ULL << h)) {
+              sole = ci;
+              if (++cnt > 1)
+                break;
+            }
+          }
+
+          if (cnt == 0) {
+            conflict = true;
+            break;
+          }
+          if (cnt == 1) {
+            for (ui fv : forcedIdxs) {
+              if (!compat[fv * eSize + sole]) {
+                conflict = true;
+                break;
+              }
+            }
+            if (conflict)
+              break;
+
+            forcedIdxs.push_back(sole);
+            forcedCov |= cov[sole];
+
+            vector<ui> next;
+            next.reserve(activeCands.size());
+            for (ui ci : activeCands)
+              if (ci != sole && compat[sole * eSize + ci])
+                next.push_back(ci);
+            activeCands = std::move(next);
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      if (conflict)
+        return {};
+
+      initCands = std::move(activeCands);
+    }
+
+    if (sp2) {
+      for (ui h = 0; h < hSize; h++) {
+        if (!(fullMask & (1ULL << h)))
+          continue;
+        if (forcedCov & (1ULL << h))
+          continue;
+        for (ui g = 0; g < hSize; g++) {
+          if (g == h || !(fullMask & (1ULL << g)))
+            continue;
+          if (forcedCov & (1ULL << g))
+            continue;
+          bool gSubsumesH = true;
+          for (ui ci : initCands) {
+            if ((cov[ci] & (1ULL << g)) && !(cov[ci] & (1ULL << h))) {
+              gSubsumesH = false;
+              break;
+            }
+          }
+          if (gSubsumesH) {
+            fullMask &= ~(1ULL << h);
+            break;
+          }
+        }
+      }
+    }
+
+    if ((forcedCov & fullMask) == fullMask) {
+      if (forcedIdxs.empty())
+        return {};
+      vector<ui> sol;
+      for (ui idx : forcedIdxs)
+        sol.push_back(E[idx]);
+      sort(sol.begin(), sol.end());
+      return {sol};
+    }
+
+    vector<vector<ui>> solutions;
+    vector<ui> cur;
+    function<void(vector<ui>, ull)> dfs = [&](vector<ui> cands, ull covered) {
+      if ((covered & fullMask) == fullMask) {
+        for (const auto &s : solutions)
+          if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+            return;
+        solutions.erase(remove_if(solutions.begin(), solutions.end(),
+                                  [&](const vector<ui> &s) {
+                                    return includes(s.begin(), s.end(),
+                                                    cur.begin(), cur.end());
+                                  }),
+                        solutions.end());
+        solutions.push_back(cur);
+        return;
+      }
+
+      const ull uncovered = fullMask & ~covered;
+
+      for (const auto &s : solutions)
+        if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+          return;
+
+      {
+        ull tmp = uncovered;
+        while (tmp) {
+          const int h = __builtin_ctzll(tmp);
+          tmp &= tmp - 1;
+          bool found = false;
+          for (ui ci : cands)
+            if (cov[ci] & (1ULL << h)) {
+              found = true;
+              break;
+            }
+          if (!found)
+            return;
+        }
+      }
+
+      for (ui ci : cands) {
+        if (!(cov[ci] & uncovered))
+          continue;
+
+        vector<ui> next;
+        next.reserve(cands.size());
+        ull eligible = 0;
+        for (ui cj : cands)
+          if (cj > ci) {
+            eligible++;
+            if (compat[ci * eSize + cj])
+              next.push_back(cj);
+          }
+        recordSolverCompatStats(eligible, (ull)next.size());
+
+        cur.push_back(ci);
+        dfs(std::move(next), covered | cov[ci]);
+        cur.pop_back();
+      }
+    };
+
+    dfs(std::move(initCands), forcedCov);
+
+    vector<vector<ui>> result;
+    result.reserve(solutions.size());
+    for (const auto &sol : solutions) {
+      vector<ui> vsol;
+      vsol.reserve(sol.size() + forcedIdxs.size());
+      for (ui idx : sol)
+        vsol.push_back(E[idx]);
+      for (ui idx : forcedIdxs)
+        vsol.push_back(E[idx]);
+      sort(vsol.begin(), vsol.end());
+      result.push_back(std::move(vsol));
+    }
+    return result;
+  }
+
+  using Mask = array<ull, 2>;
+  auto zeroMask = []() -> Mask { return {0ULL, 0ULL}; };
+  auto setBit = [](Mask &m, ui bit) {
+    m[bit >> 6] |= (1ULL << (bit & 63));
+  };
+  auto clearBit = [](Mask &m, ui bit) {
+    m[bit >> 6] &= ~(1ULL << (bit & 63));
+  };
+  auto hasBit = [](const Mask &m, ui bit) -> bool {
+    return (m[bit >> 6] & (1ULL << (bit & 63))) != 0;
+  };
+  auto anyMask = [](const Mask &m) -> bool { return m[0] != 0 || m[1] != 0; };
+  auto orEq = [](Mask &dst, const Mask &src) {
+    dst[0] |= src[0];
+    dst[1] |= src[1];
+  };
+  auto andNot = [](const Mask &a, const Mask &b) -> Mask {
+    return {a[0] & ~b[0], a[1] & ~b[1]};
+  };
+  auto intersects = [](const Mask &a, const Mask &b) -> bool {
+    return ((a[0] & b[0]) != 0) || ((a[1] & b[1]) != 0);
+  };
+  auto coversAll = [](const Mask &covered, const Mask &need) -> bool {
+    return ((covered[0] & need[0]) == need[0]) &&
+           ((covered[1] & need[1]) == need[1]);
+  };
+  auto popcountMask = [](const Mask &m) -> int {
+    return __builtin_popcountll(m[0]) + __builtin_popcountll(m[1]);
+  };
+  auto popNextBit = [](Mask &m) -> int {
+    if (m[0]) {
+      const int bit = __builtin_ctzll(m[0]);
+      m[0] &= (m[0] - 1);
+      return bit;
+    }
+    if (m[1]) {
+      const int bit = __builtin_ctzll(m[1]);
+      m[1] &= (m[1] - 1);
+      return bit + 64;
+    }
+    return -1;
+  };
+
+  Mask fullMask = zeroMask();
+  for (ui bit = 0; bit < hSize; bit++)
+    setBit(fullMask, bit);
+  vector<Mask> cov(eSize, zeroMask());
+  for (ui bit = 0; bit < hSize; bit++) {
+    ui h = hOrder[bit];
+    for (ui v : hitSets[h])
+      if (eIdx[v] < eSize)
+        setBit(cov[eIdx[v]], bit);
+  }
+
+  vector<ui> initCands(eSize);
+  iota(initCands.begin(), initCands.end(), 0);
+  sort(initCands.begin(), initCands.end(), [&](ui a, ui b) {
+    return popcountMask(cov[a]) > popcountMask(cov[b]);
+  });
+
+  vector<ui> forcedIdxs;
+  Mask forcedCov = zeroMask();
+
+  if (sp1) {
+    vector<ui> activeCands = initCands;
+    bool changed = true;
+    bool conflict = false;
+
+    while (changed && !conflict) {
+      changed = false;
+      Mask uncov = andNot(fullMask, forcedCov);
+      if (!anyMask(uncov))
+        break;
+
+      Mask tmp = uncov;
+      while (!conflict) {
+        const int h = popNextBit(tmp);
+        if (h < 0)
+          break;
+
+        ui sole = eSize;
+        int cnt = 0;
+        for (ui ci : activeCands) {
+          if (hasBit(cov[ci], (ui)h)) {
+            sole = ci;
+            if (++cnt > 1)
+              break;
+          }
+        }
+
+        if (cnt == 0) {
+          conflict = true;
+          break;
+        }
+        if (cnt == 1) {
+          for (ui fv : forcedIdxs) {
+            if (!compat[fv * eSize + sole]) {
+              conflict = true;
+              break;
+            }
+          }
+          if (conflict)
+            break;
+
+          forcedIdxs.push_back(sole);
+          orEq(forcedCov, cov[sole]);
+
+          vector<ui> next;
+          next.reserve(activeCands.size());
+          for (ui ci : activeCands)
+            if (ci != sole && compat[sole * eSize + ci])
+              next.push_back(ci);
+          activeCands = std::move(next);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    if (conflict)
+      return {};
+
+    initCands = std::move(activeCands);
+  }
+
+  if (sp2) {
+    for (ui h = 0; h < hSize; h++) {
+      if (!hasBit(fullMask, h))
+        continue;
+      if (hasBit(forcedCov, h))
+        continue;
+      for (ui g = 0; g < hSize; g++) {
+        if (g == h || !hasBit(fullMask, g))
+          continue;
+        if (hasBit(forcedCov, g))
+          continue;
+        bool gSubsumesH = true;
+        for (ui ci : initCands) {
+          if (hasBit(cov[ci], g) && !hasBit(cov[ci], h)) {
+            gSubsumesH = false;
+            break;
+          }
+        }
+        if (gSubsumesH) {
+          clearBit(fullMask, h);
+          break;
+        }
+      }
+    }
+  }
+
+  if (coversAll(forcedCov, fullMask)) {
+    if (forcedIdxs.empty())
+      return {};
+    vector<ui> sol;
+    for (ui idx : forcedIdxs)
+      sol.push_back(E[idx]);
+    sort(sol.begin(), sol.end());
+    return {sol};
+  }
+
+  vector<vector<ui>> solutions;
+  vector<ui> cur;
+  function<void(vector<ui>, Mask)> dfs = [&](vector<ui> cands, Mask covered) {
+    if (coversAll(covered, fullMask)) {
+      for (const auto &s : solutions)
+        if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+          return;
+      solutions.erase(remove_if(solutions.begin(), solutions.end(),
+                                [&](const vector<ui> &s) {
+                                  return includes(s.begin(), s.end(),
+                                                  cur.begin(), cur.end());
+                                }),
+                      solutions.end());
+      solutions.push_back(cur);
+      return;
+    }
+
+    const Mask uncovered = andNot(fullMask, covered);
+
+    for (const auto &s : solutions)
+      if (includes(cur.begin(), cur.end(), s.begin(), s.end()))
+        return;
+
+    {
+      Mask tmp = uncovered;
+      while (true) {
+        const int h = popNextBit(tmp);
+        if (h < 0)
+          break;
+        bool found = false;
+        for (ui ci : cands)
+          if (hasBit(cov[ci], (ui)h)) {
+            found = true;
+            break;
+          }
+        if (!found)
+          return;
+      }
+    }
+
+    for (ui ci : cands) {
+      if (!intersects(cov[ci], uncovered))
+        continue;
+
+      vector<ui> next;
+      next.reserve(cands.size());
+      ull eligible = 0;
+      for (ui cj : cands)
+        if (cj > ci) {
+          eligible++;
+          if (compat[ci * eSize + cj])
+            next.push_back(cj);
+        }
+      recordSolverCompatStats(eligible, (ull)next.size());
+
+      cur.push_back(ci);
+      Mask nextCovered = covered;
+      orEq(nextCovered, cov[ci]);
+      dfs(std::move(next), nextCovered);
+      cur.pop_back();
+    }
+  };
+
+  dfs(std::move(initCands), forcedCov);
+
+  vector<vector<ui>> result;
+  result.reserve(solutions.size());
+  for (const auto &sol : solutions) {
+    vector<ui> vsol;
+    vsol.reserve(sol.size() + forcedIdxs.size());
+    for (ui idx : sol)
+      vsol.push_back(E[idx]);
+    for (ui idx : forcedIdxs)
+      vsol.push_back(E[idx]);
+    sort(vsol.begin(), vsol.end());
+    result.push_back(std::move(vsol));
+  }
+  return result;
+}
+
+static string encodeClique(const vector<ui> &C) {
+  ScopedTimer _t(rsp.encode_ms, rsp.encode_n);
+  return string(reinterpret_cast<const char *>(C.data()), C.size() * sizeof(ui));
+}
+
+static ull hashClique64(const vector<ui> &C) {
+  ull h = 1469598103934665603ULL;
+  for (ui v : C) {
+    h ^= static_cast<ull>(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    h *= 1099511628211ULL;
+  }
+  return h;
+}
+
+bool ReorderSib::branchSpaceInsideClique(const vector<ui> &M,
+                                         const vector<ui> &E,
+                                         const vector<ui> &C) {
+  return includes(C.begin(), C.end(), M.begin(), M.end()) &&
+         includes(C.begin(), C.end(), E.begin(), E.end());
+}
+
+// Apply the sibling effect at this level, then continue the reorder search on
+// the resulting branch seeds (mustin, expandTo).
+void ReorderSib::rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo,
+                       ui level, vector<char> fullSkipCheck) {
+  ScopedTimer _t(rsp.rCall_ms, rsp.rCall_n);
+  if (fullSkipCheck.size() != mustin.size())
+    fullSkipCheck.assign(mustin.size(), 0);
+
+  if (debug) {
+    for (ui i = 0; i < level; i++)
+      cout << "     ";
+    cout << "Level " << level << ": mustin and expandTo sets:" << endl;
+    for (ui i = 0; i < mustin.size(); i++) {
+      for (ui j = 0; j < level; j++)
+        cout << "     ";
+      cout << "Vertex " << i << ": mustin={ ";
+      for (ui v : mustin[i])
+        cout << v << " ";
+      cout << "}  expandTo={ ";
+      for (ui v : expandTo[i])
+        cout << v << " ";
+      cout << "}" << endl;
+    }
+  }
+
+  if (level != 0 && !expandTo.empty() && !expandTo[0].empty()) {
+    ScopedTimer _tSibling(rsp.sibling_ms, rsp.sibling_n);
+    vector<ui> baseM = mustin[0];
+    vector<ui> baseE = expandTo[0];
+
+    // Old cliques containing M
+    vector<ui> coveringCliques = collectCoveringCliques(baseM, baseE, level);
+    bool hasCoveringCliques = !coveringCliques.empty();
+    bool needsFullSkip = fullSkipCheck.empty() ? false : fullSkipCheck[0];
+
+    vector<vector<ui>> siblingSets =
+        generateSiblingSetsFromCliques(baseM, baseE, coveringCliques, level);
+
+    mustin.clear();
+    expandTo.clear();
+    fullSkipCheck.clear();
+    mustin.reserve(siblingSets.size());
+    expandTo.reserve(siblingSets.size());
+    fullSkipCheck.reserve(siblingSets.size());
+    {
+      ScopedTimer _tBuild(rsp.branchBuild_ms, rsp.branchBuild_n);
+      for (const vector<ui> &S : siblingSets) {
+        vector<ui> baseMustin = unionSet(baseM, S);
+        vector<ui> baseExpand = commonExpand(baseE, S);
+        bool branchNeedsFullSkip = needsFullSkip || hasCoveringCliques;
+
+        if (!hasCoveringCliques || baseExpand.empty()) {
+          mustin.push_back(baseMustin);
+          expandTo.push_back(baseExpand);
+          fullSkipCheck.push_back(branchNeedsFullSkip);
+        } else {
+          vector<ui> childMustin;
+          vector<ui> childExpand;
+          childMustin.reserve(baseMustin.size() + 1);
+          for (ui v : baseExpand) {
+            childMustin.clear();
+            bool inserted = false;
+            for (ui mv : baseMustin) {
+              if (!inserted && v < mv) {
+                childMustin.push_back(v);
+                inserted = true;
+              }
+              childMustin.push_back(mv);
+            }
+            if (!inserted)
+              childMustin.push_back(v);
+
+            intersectInto(childExpand, baseExpand, adjList[v]);
+            mustin.emplace_back();
+            mustin.back().swap(childMustin);
+            expandTo.emplace_back();
+            expandTo.back().swap(childExpand);
+            fullSkipCheck.push_back(branchNeedsFullSkip);
+          }
+        }
+      }
+    }
+
+    // Deduplicate branches: two sibling paths can reach the same mustin from
+    // different directions (e.g. hitSet {5,9} expands as "5 then 9" and
+    // "9 then 5").  Only possible when covering cliques exist; singleton
+    // branches always have distinct mustins so the dedup is skipped.
+    if (hasCoveringCliques) {
+      ScopedTimer _tDedup(rsp.dedup_ms, rsp.dedup_n);
+      unordered_map<ull, vector<ui>> mustinIndex;
+      vector<vector<ui>> dedupMustin;
+      vector<vector<ui>> dedupExpand;
+      vector<char> dedupSkip;
+      for (ui i = 0; i < (ui)mustin.size(); i++) {
+        ull key = hashClique64(mustin[i]);
+        auto &bucket = mustinIndex[key];
+        ui match = UINT_MAX;
+        for (ui idx : bucket) {
+          if (dedupMustin[idx] == mustin[i]) {
+            match = idx;
+            break;
+          }
+        }
+
+        if (match == UINT_MAX) {
+          bucket.push_back((ui)dedupMustin.size());
+          dedupMustin.push_back(std::move(mustin[i]));
+          dedupExpand.push_back(std::move(expandTo[i]));
+          dedupSkip.push_back(fullSkipCheck[i]);
+        } else {
+          // merge expandTo so no candidate is dropped
+          dedupExpand[match] = unionSet(dedupExpand[match], expandTo[i]);
+        }
+      }
+      mustin = std::move(dedupMustin);
+      expandTo = std::move(dedupExpand);
+      fullSkipCheck = std::move(dedupSkip);
+    }
+
+    if (debug) {
+      for (ui i = 0; i < level; i++)
+        cout << "     ";
+      cout << "Level " << level << ": After Sibling Effect:" << endl;
+      for (ui i = 0; i < mustin.size(); i++) {
+        for (ui j = 0; j < level; j++)
+          cout << "     ";
+        cout << "Vertex " << i << ": mustin={ ";
+        for (ui v : mustin[i])
+          cout << v << " ";
+        cout << "}  expandTo={ ";
+        for (ui v : expandTo[i])
+          cout << v << " ";
+        cout << "}" << endl;
+      }
+    }
+  }
+
+  // Enumerate each branch until we find the next maximal clique.
+  for (ui i = 0; i < (ui)mustin.size(); i++) {
+    // sp5: skip branches that can't possibly produce a clique of size > 2.
+    if (sp5 && mustin[i].size() + expandTo[i].size() <= 2)
+      continue;
+    // Empty-expandTo branches always produce exactly mustin[i] as the clique.
+    // If another rCall already claimed this mustin, the result is identical —
+    // skip to avoid a cross-invocation duplicate that branch-dedup can't catch.
+    if (expandTo[i].empty()) {
+      string key = encodeClique(mustin[i]);
+      if (!claimedEmptyBranches.insert(key).second) {
+        dupBlocked++;
+        continue;
+      }
+    }
+    vector<ui> R = mustin[i];
+    vector<ui> Q = expandTo[i];
+    bool done = false;
+    enumerate(R, Q, {}, mustin, expandTo, fullSkipCheck, i, level, done);
+    if (done)
+      break;
+  }
+}
+
+// adding candidates to Partial solution until no candidates are left.
+// once maximal clique is found, reorder the remaining branches.
+// X: already-processed vertices adjacent to all of R (exclusion set for maximality).
+void ReorderSib::enumerate(vector<ui> &R, const vector<ui> &P,
+                           const vector<ui> &X,
+                           vector<vector<ui>> &mustin,
+                           vector<vector<ui>> &expandTo,
+                           vector<char> &fullSkipCheck, ui treeIndex, ui level,
+                           bool &done) {
+  ScopedTimer _t(rsp.enumerate_ms, rsp.enumerate_n);
+  const ui depth = enumDepth++;
+  struct DepthGuard {
+    ui &d;
+    ~DepthGuard() { d--; }
+  } depthGuard{enumDepth};
+  checksCount++;
+
+  if (debug) {
+    for (ui i = 0; i < level; i++)
+      cout << "     ";
+    cout << "Level " << level << ": Checking R={ ";
+    for (ui v : R)
+      cout << v << " ";
+    cout << "}  P={ ";
+    for (ui v : P)
+      cout << v << " ";
+    cout << "}" << endl;
+  }
+
+  // Base case: no candidates left.
+  // Report R as maximal only when X is also empty (nothing extends R).
+  if (P.empty()) {
+    if (X.empty() && (ui)R.size() > 2) {
+      vector<ui> C;
+      {
+        ScopedTimer _tRecord(rsp.cliqueRecord_ms, rsp.cliqueRecord_n);
+        C = R;
+        sort(C.begin(), C.end());
+        claimedEmptyBranches.insert(encodeClique(C));
+        cliqueCount++;
+        if (debug) {
+          for (ui i = 0; i < level; i++)
+            cout << "   ";
+          cout << "Maximal Clique Found: { ";
+          for (ui v : C)
+            cout << v << " ";
+          cout << "}" << endl;
+        }
+        maxCliqueSize = max(maxCliqueSize, C.size());
+        ui cliqueIdx = (ui)allCliques.size();
+        allCliques.push_back(C);
+        for (ui v : C) {
+          if ((ui)cliquesByVertexByLevel[v].size() <= level)
+            cliquesByVertexByLevel[v].resize(level + 1);
+          cliquesByVertexByLevel[v][level].push_back(cliqueIdx);
+          cliqueCountByVertex[v]++;
+        }
+      }
+
+      done = true;
+
+      // Reorder Logic: use the new clique to reorder the remaining branches.
+      vector<vector<ui>> newMustin;
+      vector<vector<ui>> newExpandTo;
+      vector<char> newFullSkipCheck;
+      vector<ui> scratchMerged;
+      vector<ui> scratchA;
+      vector<ui> scratchB;
+
+      for (ui i = treeIndex; i < (ui)mustin.size(); i++) {
+        bool skipBranch = false;
+        {
+          ScopedTimer _tSkip(rsp.reorderSkip_ms, rsp.reorderSkip_n);
+          if (i < fullSkipCheck.size() && fullSkipCheck[i]) {
+            skipBranch = branchSpaceInsideClique(mustin[i], expandTo[i], C);
+          } else {
+            skipBranch =
+                find(C.begin(), C.end(), mustin[i].back()) != C.end();
+          }
+        }
+        if (skipBranch)
+          continue;
+
+        vector<ui> reorderedExpand;
+        bool usesFullSkip = false;
+        {
+          ScopedTimer _tBuild(rsp.reorderBuild_ms, rsp.reorderBuild_n);
+          usesFullSkip = i < fullSkipCheck.size() && fullSkipCheck[i];
+          if (usesFullSkip) {
+            unionInto(scratchMerged, C, expandTo[i]);
+            setDiffInto(scratchA, scratchMerged, mustin[i]);
+            for (ui mv : mustin[i])
+            {
+              intersectInto(scratchB, scratchA, adjList[mv]);
+              scratchA.swap(scratchB);
+            }
+            reorderedExpand.swap(scratchA);
+          } else {
+            unionInto(scratchMerged, C, expandTo[i]);
+            intersectExcludingInto(reorderedExpand, adjList[mustin[i].back()],
+                                   scratchMerged, mustin[i]);
+          }
+
+          if (sp6 && reorderedExpand.empty() && mustin[i].size() <= 2)
+            continue;
+
+          newMustin.push_back(mustin[i]);
+          newExpandTo.push_back(reorderedExpand);
+          newFullSkipCheck.push_back(usesFullSkip);
+        }
+
+        if (debug) {
+          for (ui j = 0; j < level; j++)
+            cout << "     ";
+          cout << "Level " << level << ": After Reorder:" << endl;
+          for (ui k = 0; k < newMustin.size(); k++) {
+            for (ui j = 0; j < level; j++)
+              cout << "     ";
+            cout << "Vertex " << k << ": mustin={ ";
+            for (ui v : newMustin[k])
+              cout << v << " ";
+            cout << "}  expandTo={ ";
+            for (ui v : newExpandTo[k])
+              cout << v << " ";
+            cout << "}" << endl;
+          }
+        }
+        rCall(std::move(newMustin), std::move(newExpandTo), level + 1,
+              std::move(newFullSkipCheck));
+      }
+    }
+    return;
+  }
+
+  // Tomita pivot from P ∪ X.
+  // Adaptive scoring: walk the shorter of adjList[u] (check lab) or P (check
+  // adjSet) — always O(min(deg(u), |P|)) per candidate instead of O(deg(u)).
+  // Mark and restore immediately so recursive children see a clean lab state.
+  ui pivot = P[0];
+  {
+    ScopedTimer _tPivot(rsp.pivot_ms, rsp.pivot_n);
+    for (ui v : P) lab[v] = 1;
+    for (ui v : X) lab[v] = 2;
+    int bestNb = -1;
+    const ui pSize = (ui)P.size();
+    auto pivotScore = [&](ui u) -> int {
+      int nb = 0;
+      if ((ui)adjList[u].size() <= pSize) {
+        for (ui w : adjList[u]) if (lab[w] == 1) nb++;  // walk adj, check lab
+      } else {
+        for (ui w : P) if (adjSet[u].count(w)) nb++;    // walk P, check adjSet
+      }
+      return nb;
+    };
+    for (ui u : P) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+    for (ui u : X) { int nb = pivotScore(u); if (nb > bestNb) { bestNb = nb; pivot = u; } }
+    // Restore lab before the main loop so recursive children see a clean state.
+    for (ui v : P) lab[v] = 0;
+    for (ui v : X) lab[v] = 0;
+  }
+
+  // P_at_level and localX track the evolving candidate/exclusion sets.
+  // intersect is used for P_new/X_new — this avoids any ancestor lab
+  // interference that would arise if we used lab inside the recursive loop.
+  vector<ui> &P_at_level = depthPal[depth];
+  vector<ui> &localX = depthLX[depth];
+  vector<ui> &P_new = depthPnew[depth];
+  vector<ui> &X_new = depthXnew[depth];
+  P_at_level = P;
+  localX = X;
+  if (localX.capacity() < X.size() + 1)
+    localX.reserve(X.size() + 1);
+
+  // Iterate exactly the branching vertices P \ N(pivot) via one merge over the
+  // two sorted lists, instead of an O(1)-hash lookup for every v in P.
+  const vector<ui> &pivotNbrs = adjList[pivot];
+  ui nbrIdx = 0;
+  for (ui v : P) {
+    while (nbrIdx < pivotNbrs.size() && pivotNbrs[nbrIdx] < v)
+      nbrIdx++;
+    if (nbrIdx < pivotNbrs.size() && pivotNbrs[nbrIdx] == v)
+      continue;
+
+    intersectInto(P_new, P_at_level, adjList[v]);
+    intersectInto(X_new, localX, adjList[v]);
+    R.push_back(v);
+    enumerate(R, P_new, X_new, mustin, expandTo, fullSkipCheck, treeIndex,
+              level, done);
+    R.pop_back();
+    P_at_level.erase(lower_bound(P_at_level.begin(), P_at_level.end(), v));
+    localX.insert(lower_bound(localX.begin(), localX.end(), v), v);
+    if (done)
+      return;
+  }
+}
+
+void ReorderSib::findAllMaximalCliques() {
+  rsp.reset();
+#if SOLVER_TRACE
+  solverTraceSink.beginRun();
+#endif
+  cliqueCount = 0;
+  dupBlocked = 0;
+  maxCliqueSize = 0;
+  checksCount = 0;
+  allCliques.clear();
+  claimedEmptyBranches.clear();
+  cliquesByVertexByLevel.assign(n, {});
+  fill(cliqueCountByVertex.begin(), cliqueCountByVertex.end(), 0);
+  enumDepth = 0;
+
+  // Tree Must-In and Expand-To sets for the initial call
+  // Mustin : already a part of the clique.
+  vector<vector<ui>> mustin;
+  // ExpandTo : candidates that can be added to the clique.
+  vector<vector<ui>> expandTo;
+  for (ui v = 0; v < n; v++) {
+    mustin.push_back({v});
+    expandTo.push_back(adjList2[v]);
+  }
+
+  auto t0 = chrono::high_resolution_clock::now();
+  // how to check if current branch is fully inside a clique:
+  // fullSkipCheck[i] = flase we check using last vertex of mustin[i] in C,
+  // (normal branches),  true we check using whole mustin[i] and expandTo[i] in
+  // C. (sibling brnahces)
+  vector<char> fullSkipCheck(n, 0);
+  rCall(std::move(mustin), std::move(expandTo), 0, std::move(fullSkipCheck));
+  auto t1 = chrono::high_resolution_clock::now();
+  double ms = chrono::duration<double, milli>(t1 - t0).count();
+
+  cout << fixed << setprecision(3) << "ReorderSib: cliques=" << cliqueCount
+       << "  dups=" << dupBlocked << "  maxSize=" << maxCliqueSize
+       << "  checks=" << checksCount << "  time=" << ms << " ms" << endl;
+#if PROFILING
+  rsp.print(ms);
+#endif
+#if SOLVER_TRACE
+  solverTraceSink.endRun();
+#endif
+}
