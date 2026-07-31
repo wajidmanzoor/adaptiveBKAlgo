@@ -1,120 +1,114 @@
 #pragma once
 
+#include "checked_count.h"
 #include "common.h"
 #include "graph.h"
 
 enum class DegOrder { ORIGINAL, ASCENDING, DESCENDING };
-enum class SibMethod {
-  BACKTRACKING,
-  OPTIMIZED
-};
 
-// Optimized Adjacency List based Bron-Kerbosch with Pivoting and Pruning
+struct ReorderSibTestAccess;
+
+// Baseline adjacency-list Bron--Kerbosch with pivoting.
 class PivotBK {
 private:
   ui n;
   vector<vector<ui>> adjList;
-  ui cliqueCount;
+  ull cliqueCount;
   ui maxCliqueSize;
-  ui checksCount;
+  ull checksCount;
 
   vector<ui> intersect(const vector<ui> &set1, const vector<ui> &neighbors);
-  bool isEmpty(const vector<ui> &set);
   bool isConnected(ui u, ui v);
   ui choosePivot(const vector<ui> &P, const vector<ui> &X);
   void bronKerboschRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X);
 
 public:
-  PivotBK(Graph &g, DegOrder order = DegOrder::ASCENDING);
+  explicit PivotBK(Graph &g, DegOrder order = DegOrder::ASCENDING);
 
   void findAllMaximalCliques();
+  ull getCliqueCount() const { return cliqueCount; }
+  ui getMaxCliqueSize() const { return maxCliqueSize; }
+  ull getChecksCount() const { return checksCount; }
 };
 
+// Exact Pure-ReorderSib implementation.
+// 128-constraint masks, PXR/ET terminal handling, and fail-closed budget
+// fallback to exhaustive pivot enumeration.
 class ReorderSib {
 private:
+  friend struct ReorderSibTestAccess;
+
+  struct PureBranch {
+    vector<ui> mustin;
+    vector<ui> expandTo;
+  };
+
   ui n;
   vector<vector<ui>> adjList;
   vector<vector<ui>> adjList2;
-  vector<unordered_set<ui>> adjSet; // O(1) adjacency lookup
-  ui cliqueCount;
-  ui dupBlocked;
+  vector<unordered_set<ui>> adjSet;
+  ull cliqueCount;
+  ull dupBlocked;
   size_t maxCliqueSize;
-  ui checksCount;
-  SibMethod method;
-  ui hitSetLimit;
-  bool prune2; // level filter: skip covering cliques older than level-1
-  // prune3 is always ON: aggressive branch skip via branchSpaceInsideClique + fullSkipCheck
-  bool sp1;    // solver: unit propagation — force candidates that are the sole cover of a constraint
-  bool sp2;    // solver: constraint subsumption — drop constraints implied by tighter ones
-  bool sp3;    // solver: sort hitSets by ascending size so fail-first hits the hardest constraint first
-  bool sp4;    // collect: skip covering cliques whose intersection with E is exactly M (trivially weak)
-  bool sp5;    // rCall: skip branches where |mustin|+|expandTo| <= 2 (can't form clique of size > 2)
-  bool sp6;    // enumerate: skip reordered branches with empty expandTo and |mustin| <= 2
+  ull checksCount;
+  ull solverWorkBudget;
+  ull solverBudgetFallbacks;
+  ui minCliqueSize;
+
   vector<vector<ui>> allCliques;
-  // Two-tier clique index: [vertex][level] = list of clique IDs.
-  // Replaces the flat cliquesByVertex + foundLevel pair; with prune2 on we
-  // jump directly to the relevant level bucket instead of scanning all cliques.
+  vector<ui> internalToOriginal;
   vector<vector<vector<ui>>> cliquesByVertexByLevel;
-  vector<ui> cliqueCountByVertex; // total cliques per vertex — for seed selection
-  unordered_set<string> claimedEmptyBranches;
+  vector<ull> cliqueCountByVertex;
+  unordered_set<string> emittedCliqueKeys;
 
-  vector<char> lab; // lab[v] = 1 iff v is in current P; 2 iff in X
+  vector<ui> eIndex;
+  vector<ui> eIndexStamp;
+  ui eIndexToken;
 
-  // Pre-allocated per-depth workspace — avoids heap allocation inside enumerate.
-  // Each depth slot holds the working P, X, and scratch P_new/X_new buffers.
-  static constexpr ui MAX_ENUM_DEPTH = 200;
-  ui enumDepth;
-  vector<vector<ui>> depthPal;   // P_at_level per depth
-  vector<vector<ui>> depthLX;    // localX per depth
-  vector<vector<ui>> depthPnew;  // P_new scratch per depth
-  vector<vector<ui>> depthXnew;  // X_new scratch per depth
-
-  vector<ui> intersect(const vector<ui> &A, const vector<ui> &B);
   void intersectInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
-  void intersectExcludingInto(vector<ui> &out, const vector<ui> &A,
-                              const vector<ui> &B,
-                              const vector<ui> &exclude);
   vector<ui> setDiff(const vector<ui> &A, const vector<ui> &B);
   void setDiffInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
   vector<ui> unionSet(const vector<ui> &A, const vector<ui> &B);
-  void unionInto(vector<ui> &out, const vector<ui> &A, const vector<ui> &B);
 
-  bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   vector<ui> commonExpand(const vector<ui> &E, const vector<ui> &S);
-  vector<ui> collectCoveringCliques(const vector<ui> &M, const vector<ui> &E, ui level);
+  vector<ui> collectAllCoveringCliques(const vector<ui> &M);
   vector<vector<ui>> buildHitSets(const vector<ui> &E,
-                                  const vector<ui> &cliqueIds,
-                                  ui maxHitSets = UINT_MAX);
+                                  const vector<ui> &cliqueIds);
   vector<vector<ui>> singletonBranches(const vector<ui> &E);
-  vector<vector<ui>> minimalByInclusion(vector<vector<ui>> solutions);
   vector<vector<ui>>
-  generateSiblingSetsFromCliques(const vector<ui> &M, const vector<ui> &E,
-                                 const vector<ui> &cliqueIds, ui level);
-  vector<vector<ui>> backtrackingBranchBound(const vector<ui> &E,
-                                             const vector<vector<ui>> &hitSets);
+  generateExactSiblingSets(const vector<ui> &E,
+                           const vector<ui> &coveringCliqueIds,
+                           bool *usePivotFallback = nullptr);
   vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
-                                         const vector<vector<ui>> &hitSets);
+                                         const vector<vector<ui>> &hitSets,
+                                         bool *usePivotFallback = nullptr);
   void recordSolverCallStats(ui eSize, ui hSize);
   void recordSolverCompatStats(ull eligible, ull survivors);
-  bool branchSpaceInsideClique(const vector<ui> &M, const vector<ui> &E,
-                               const vector<ui> &C);
-  bool adj(ui u, ui v) const { return adjSet[u].count(v); }
 
-  void rCall(vector<vector<ui>> mustin, vector<vector<ui>> expandTo, ui level,
-             vector<char> fullSkipCheck);
-  void enumerate(vector<ui> &R, const vector<ui> &P, const vector<ui> &X,
-                 vector<vector<ui>> &mustin, vector<vector<ui>> &expandTo,
-                 vector<char> &fullSkipCheck, ui treeIndex, ui level,
-                 bool &done);
+  bool adj(ui u, ui v) const { return adjSet[u].count(v) != 0; }
+  bool findOnePure(const vector<ui> &M, const vector<ui> &Q, vector<ui> &found);
+  bool findOnePureRecursive(vector<ui> &R, vector<ui> P, vector<ui> X,
+                            vector<ui> &found);
+  ui pureNeighborsInP(ui u, const vector<ui> &P) const;
+  void scanPurePXRState(const vector<ui> &P, const vector<ui> &X, ui &pivot,
+                        ui &minPScore, ui &universalP, bool &xUniversal) const;
+  void pureMatchingParts(const vector<ui> &P, vector<ui> &forced,
+                         vector<pair<ui, ui>> &missingEdges) const;
+  void enumerateAllPureBranch(const vector<ui> &M, const vector<ui> &Q);
+  void enumerateAllPureBranchRecursive(vector<ui> &R, vector<ui> P,
+                                       vector<ui> X);
+  bool recordPureClique(vector<ui> C);
 
 public:
-  ReorderSib(Graph &g, DegOrder order = DegOrder::ORIGINAL,
-             SibMethod method = SibMethod::OPTIMIZED,
-             ui hitSetLimit = UINT_MAX,
-             bool prune2 = true,
-             bool sp1 = true, bool sp2 = true, bool sp3 = true,
-             bool sp4 = true, bool sp5 = true, bool sp6 = true);
-  void findAllMaximalCliques();
-  ui getCliqueCount() const { return cliqueCount; }
-  ui getMaxCliqueSize() const { return maxCliqueSize; }
+  explicit ReorderSib(Graph &g, DegOrder order = DegOrder::ASCENDING,
+                      ui minCliqueSize = 3);
+
+  void findAllMaximalCliquesPure();
+  void setSolverWorkBudget(ull budget) { solverWorkBudget = budget; }
+  ull getCliqueCount() const { return cliqueCount; }
+  ull getDuplicateCount() const { return dupBlocked; }
+  ui getMaxCliqueSize() const { return static_cast<ui>(maxCliqueSize); }
+  ull getChecksCount() const { return checksCount; }
+  ull getBudgetFallbackCount() const { return solverBudgetFallbacks; }
+  vector<vector<ui>> getCliques() const;
 };
