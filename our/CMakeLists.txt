@@ -36,7 +36,7 @@ include_directories(inc)
 # Sources
 add_executable(bk_algorithm
     main.cpp
-    src/common.cpp
+    src/fast_plex3.cpp
     src/graph.cpp
     src/helpers.cpp
 )
