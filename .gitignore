@@ -42,3 +42,11 @@
 data/real/usa_road_sort_q
 data/real/cit-patents.txt
 data/real/patent_q
+
+# In-tree CMake build directories
+our/build/
+compare/HBBMCPaperFaithful/build/
+
+# Benchmark run outputs
+results/*
+!results/.gitkeep

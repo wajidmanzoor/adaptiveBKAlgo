@@ -4,15 +4,15 @@ set -uo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ./run_compare [DATA_ROOT [RESULT_ROOT]]
+Usage: ./run_benchmark.sh [DATA_ROOT [RESULT_ROOT]]
 
 Build the current repository and compare:
   - independent paper-faithful HBBMC++ (RMCE + ET(3)); and
-  - Pure ReorderSib mode 1 with its remaining defaults.
+  - Pure ReorderSib 128+PXR+ET with a 10,000-work solver budget.
 
 Defaults:
   DATA_ROOT    /data/labdata/wajid/hbbmcData
-  RESULT_ROOT  REPO_ROOT/results/reorder_mode1_vs_hbbmc_faithful_TIMESTAMP
+  RESULT_ROOT  REPO_ROOT/results/pure_128_pxr_et_budget10k_vs_hbbmc_faithful_TIMESTAMP
   timeout      600 seconds per algorithm/dataset run
 
 Builds (Release, stripped, in-tree — Linux/Ubuntu toolchain required):
@@ -23,10 +23,12 @@ Environment overrides:
   COMPARE_TIMEOUT_SECONDS  timeout per run (default: 600)
   COMPARE_BUILD_JOBS       parallel build jobs (default: all cores)
   COMPARE_DATASETS         comma/space-separated dataset names to run
+  COMPARE_LOG_DIR          build and run log directory (default: REPO_ROOT/logs)
 
-The result directory contains runs.csv, comparison.csv, environment.txt,
-build logs, and stdout/stderr/resource logs for every run. Existing rows
-are skipped when an explicit RESULT_ROOT is resumed.
+The result directory contains runs.csv, comparison.csv, and environment.txt.
+Build logs and stdout/stderr/resource logs for every run are written under
+the log directory. Existing rows are skipped when an explicit RESULT_ROOT is
+resumed.
 EOF
 }
 
@@ -38,9 +40,11 @@ fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "$script_dir/.." && pwd)
+invocation_dir=$(pwd)
 data_root=${1:-/data/labdata/wajid/hbbmcData}
 timestamp=$(date +%Y%m%d_%H%M%S)
-result_root=${2:-"$repo_root/results/reorder_mode1_vs_hbbmc_faithful_$timestamp"}
+result_root=${2:-"$repo_root/results/pure_128_pxr_et_budget10k_vs_hbbmc_faithful_$timestamp"}
+log_root=${COMPARE_LOG_DIR:-"$repo_root/logs"}
 timeout_seconds=${COMPARE_TIMEOUT_SECONDS:-600}
 build_jobs=${COMPARE_BUILD_JOBS:-}
 dataset_filter=${COMPARE_DATASETS:-}
@@ -72,15 +76,17 @@ for tool in cmake timeout /usr/bin/time awk sed sha256sum strip; do
   fi
 done
 
-mkdir -p "$result_root/build_logs" "$result_root/logs"
+mkdir -p "$result_root" "$log_root"
 
 build_target() {
   local name=$1
   local source_dir=$2
   local binary_name=$3
+  shift 3
   local target_build_dir="$source_dir/build"
-  local configure_log="$result_root/build_logs/${name}_configure.log"
-  local build_log="$result_root/build_logs/${name}_build.log"
+  local configure_log="$log_root/${name}_configure.log"
+  local build_log="$log_root/${name}_build.log"
+  local -a configure_options=("$@")
   local -a build_command=(cmake --build "$target_build_dir")
 
   if [[ -n $build_jobs ]]; then
@@ -92,7 +98,7 @@ build_target() {
   echo "CONFIGURE name=$name source=$source_dir build=$target_build_dir"
   if ! cmake -S "$source_dir" -B "$target_build_dir" \
       -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
-      -DREORDERSIB_PROFILING=OFF -DREORDERSIB_SOLVER_TRACE=OFF \
+      "${configure_options[@]}" \
       >"$configure_log" 2>&1; then
     echo "CMake configure failed; see $configure_log" >&2
     return 1
@@ -111,7 +117,8 @@ build_target() {
   strip --strip-unneeded "$target_build_dir/$binary_name"
 }
 
-build_target pure "$repo_root/our" bk_algorithm || exit 2
+build_target pure "$repo_root/our" bk_algorithm \
+  -DREORDERSIB_PROFILING=OFF -DPURE_HITSET_VARIANT=128 || exit 2
 build_target hbbmc_faithful "$repo_root/compare/HBBMCPaperFaithful" \
   hbbmc_faithful || exit 2
 
@@ -127,20 +134,21 @@ if [[ ! -f $runs_csv ]]; then
 fi
 if [[ ! -f $comparison_csv ]]; then
   printf '%s\n' \
-    'dataset,n,m,hbbmc_status,hbbmc_total_cliques,hbbmc_wall_time_ms,hbbmc_algorithm_time_ms,reorder_status,reorder_total_cliques,reorder_wall_time_ms,reorder_algorithm_time_ms,count_match' \
+    'dataset,n,m,hbbmc_status,hbbmc_total_cliques,hbbmc_wall_time_ms,hbbmc_algorithm_time_ms,pure_status,pure_total_cliques,pure_wall_time_ms,pure_algorithm_time_ms,count_match' \
     >"$comparison_csv"
 fi
 
 {
-  echo "campaign=paper-faithful HBBMC++ versus Pure ReorderSib mode 1"
+  echo "campaign=Pure ReorderSib 128+PXR+ET+budget10000 versus paper-faithful HBBMC++"
   echo "repository=$repo_root"
   echo "data_root=$data_root"
   echo "result_root=$result_root"
+  echo "log_root=$log_root"
   echo "minimum_clique_size=3"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "pure_command=bk_algorithm GRAPH 1"
-  echo "pure_defaults=order1,minCliqueSize3,budget10000"
+  echo "pure_command=PURE_HITSET_BUDGET=10000 bk_algorithm GRAPH 6 1 1 4294967295 1 1 1 1 1 1 1 1 3"
+  echo "pure_configuration=capacity128,mode6,order1,optimized,PXR+ET,minCliqueSize3,budget10000"
   echo "hbbmc_command=hbbmc_faithful GRAPH --graph-reduction rmce --et 3 --num-vertices N --min-clique-size 3"
   sha256sum "$pure_binary" "$hbbmc_binary"
   uname -a
@@ -201,7 +209,7 @@ run_one() {
   fi
 
   local safe_dataset=${dataset//[^A-Za-z0-9_.-]/_}
-  local log_base="$result_root/logs/${variant}__${safe_dataset}"
+  local log_base="$log_root/${variant}__${safe_dataset}"
   local stdout_file="$log_base.stdout"
   local stderr_file="$log_base.stderr"
   local resource_file="$log_base.resources"
@@ -245,7 +253,7 @@ run_one() {
 
   total_cliques=""
   algorithm_time_ms=""
-  if [[ $variant == reorder_mode1 ]]; then
+  if [[ $variant == pure_128_pxr_et_budget10k ]]; then
     local summary
     summary=$(sed -n '/^PureReorderSib:/p' "$stdout_file" | tail -1)
     total_cliques=$(sed -n \
@@ -281,14 +289,14 @@ append_comparison() {
   local r_status r_count r_wall r_algorithm count_match
 
   comparison_recorded "$dataset" && return
-  h_status=$(csv_field hbbmc_faithful "$dataset" 5)
-  h_count=$(csv_field hbbmc_faithful "$dataset" 7)
-  h_wall=$(csv_field hbbmc_faithful "$dataset" 8)
-  h_algorithm=$(csv_field hbbmc_faithful "$dataset" 10)
-  r_status=$(csv_field reorder_mode1 "$dataset" 5)
-  r_count=$(csv_field reorder_mode1 "$dataset" 7)
-  r_wall=$(csv_field reorder_mode1 "$dataset" 8)
-  r_algorithm=$(csv_field reorder_mode1 "$dataset" 10)
+  h_status=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 5)
+  h_count=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 7)
+  h_wall=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 8)
+  h_algorithm=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 10)
+  r_status=$(csv_field pure_128_pxr_et_budget10k "$dataset" 5)
+  r_count=$(csv_field pure_128_pxr_et_budget10k "$dataset" 7)
+  r_wall=$(csv_field pure_128_pxr_et_budget10k "$dataset" 8)
+  r_algorithm=$(csv_field pure_128_pxr_et_budget10k "$dataset" 10)
 
   count_match=NA
   if [[ $h_status == completed && $r_status == completed &&
@@ -344,15 +352,16 @@ while IFS= read -r hbbmc_input; do
   fi
 
   pair_count=$((pair_count + 1))
-  run_one hbbmc_faithful "$dataset" "$n" "$m" "$hbbmc_input" \
+  run_one hbbmc_paper_faithful_rmce_et3 "$dataset" "$n" "$m" "$hbbmc_input" \
     env OMP_NUM_THREADS=1 \
     "$hbbmc_binary" "$hbbmc_input" \
     --graph-reduction rmce --et 3 --num-vertices "$n" --min-clique-size 3
 
-  run_one reorder_mode1 "$dataset" "$n" "$m" "$pure_input" \
-    env -u PURE_HITSET_BUDGET -u VLDB_VALIDATION -u VLDB_PRINT_CLIQUES \
-    OMP_NUM_THREADS=1 \
-    "$pure_binary" "$pure_input" 1
+  run_one pure_128_pxr_et_budget10k "$dataset" "$n" "$m" "$pure_input" \
+    env -u VLDB_VALIDATION -u VLDB_PRINT_CLIQUES \
+    OMP_NUM_THREADS=1 PURE_HITSET_BUDGET=10000 \
+    "$pure_binary" "$pure_input" \
+    6 1 1 4294967295 1 1 1 1 1 1 1 1 3
 
   append_comparison "$dataset" "$n" "$m"
 done < <(find "$data_root/hbbmc" -maxdepth 1 -type f -print | LC_ALL=C sort)

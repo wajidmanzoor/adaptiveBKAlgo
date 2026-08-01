@@ -416,6 +416,15 @@ FastPlex3Result solveFastPlex3SubtreeImpl(
 } // namespace
 
 FastPlex3Result solveFastPlex3Subtree(
+    const FastAdjacencyHash &adjacency, const std::vector<ui> &p,
+    ui cliqueSize, const std::vector<ui> *cliquePrefix,
+    ui minCliqueSize, const FastCliqueSink *cliqueSink) {
+  return solveFastPlex3SubtreeImpl(
+      [&](ui u, ui v) { return adjacency.contains(u, v); }, p, cliqueSize,
+      cliquePrefix, minCliqueSize, cliqueSink);
+}
+
+FastPlex3Result solveFastPlex3Subtree(
     const std::vector<std::unordered_set<ui>> &adjacency,
     const std::vector<ui> &p, ui cliqueSize,
     const std::vector<ui> *cliquePrefix, ui minCliqueSize,

@@ -4289,11 +4289,11 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
       break;
 
     preForced.push_back(forced);
-    forcedMark[forcedLocal] = 1;
-    active[forcedLocal] = 0;
-    for (size_t i = 0; i < inputE.size(); ++i)
-      if (active[i] && !adj(forced, inputE[i]))
-        active[i] = 0;
+    forcedMark[forced] = 1;
+    active[forced] = 0;
+    for (ui v : inputE)
+      if (active[v] && !adj(forced, v))
+        active[v] = 0;
   }
 
   if (infeasible)
@@ -4306,15 +4306,15 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
     return {preForced};
   }
 
-  vector<char> useful(inputE.size(), 0);
+  vector<char> useful(n, 0);
   for (const vector<ui> &H : hitSets)
     for (ui v : H)
-      useful[localIndexOf(v)] = 1;
+      useful[v] = 1;
   vector<ui> E;
   E.reserve(inputE.size());
-  for (size_t i = 0; i < inputE.size(); ++i)
-    if (active[i] && useful[i])
-      E.push_back(inputE[i]);
+  for (ui v : inputE)
+    if (active[v] && useful[v])
+      E.push_back(v);
 
   const ui eSize = (ui)E.size();
   const ui hSize = (ui)hitSets.size();
