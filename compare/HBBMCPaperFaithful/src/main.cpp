@@ -1,6 +1,6 @@
-#include "inc/enumerator.hpp"
-#include "inc/graph.hpp"
-#include "inc/reduction.hpp"
+#include "../inc/enumerator.hpp"
+#include "../inc/graph.hpp"
+#include "../inc/reduction.hpp"
 
 #include <algorithm>
 #include <chrono>

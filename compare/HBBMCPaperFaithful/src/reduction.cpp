@@ -1,4 +1,4 @@
-#include "inc/reduction.hpp"
+#include "../inc/reduction.hpp"
 
 #include <algorithm>
 #include <limits>

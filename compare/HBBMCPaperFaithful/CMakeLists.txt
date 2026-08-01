@@ -14,7 +14,7 @@ add_library(hbbmc_faithful_lib
     src/reduction.cpp
 )
 
-target_include_directories(hbbmc_faithful_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(hbbmc_faithful_lib PUBLIC inc)
 target_compile_options(hbbmc_faithful_lib PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(hbbmc_faithful src/main.cpp)

@@ -1,4 +1,4 @@
-#include "inc/truss_order.hpp"
+#include "../inc/truss_order.hpp"
 
 #include <algorithm>
 #include <functional>

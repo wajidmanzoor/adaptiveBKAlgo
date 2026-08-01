@@ -1,4 +1,4 @@
-#include "inc/early_termination.hpp"
+#include "../inc/early_termination.hpp"
 
 #include <algorithm>
 #include <cstdint>

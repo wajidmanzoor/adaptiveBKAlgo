@@ -1,6 +1,6 @@
-#include "inc/enumerator.hpp"
+#include "../inc/enumerator.hpp"
 
-#include "inc/early_termination.hpp"
+#include "../inc/early_termination.hpp"
 
 #include <algorithm>
 #include <iterator>
