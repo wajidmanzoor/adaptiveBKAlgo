@@ -15,6 +15,11 @@
 #include <unordered_map>
 #include <vector>
 
+// CLI driver: parses arguments, runs graph reduction (reduction.hpp) then
+// the truss-owned BK enumeration (enumerator.hpp) over the residual graph,
+// and prints the combined result. See README.md's "Implemented variants"
+// table for how --graph-reduction/--et combine into the HBBMC/HBBMC+/
+// HBBMC++ labels reported below.
 namespace {
 
 struct CliOptions {
@@ -107,6 +112,15 @@ CliOptions parse_cli(int argc, char **argv) {
   if (options.graph_path.empty()) {
     throw std::invalid_argument("missing graph path");
   }
+  // NOTE (likely unintentional): this inner check is unreachable. The
+  // `throw` above it always fires first when et_threshold is out of range,
+  // and when et_threshold IS in range this whole `if` is skipped, so
+  // --min-clique-size < 1 is never actually rejected here. In practice a
+  // non-positive --min-clique-size still can't crash the program: it's
+  // cast to std::size_t below for ReductionOptions/EnumerationOptions, and
+  // Enumerator's constructor only rejects exactly 0 (a negative value
+  // becomes a huge size_t, which just filters out every clique silently
+  // rather than erroring). See notes.md's "Known quirks" section.
   if (options.et_threshold < 0 || options.et_threshold > 3) {
     throw std::invalid_argument("early-termination threshold must be in [0,3]");
     if (options.minimum_clique_size < 1) {
@@ -170,6 +184,17 @@ void print_reduction_counters(
   print_counter("gr_duplicate_direct_outputs", c.duplicate_direct_outputs);
 }
 
+// End-to-end (--validate only) check that ties the two pipeline stages
+// together: every clique either graph reduction emitted directly
+// (reduced.directly_emitted_cliques) or the enumerator found in the
+// residual graph (residual.cliques) must be a valid, maximal clique of the
+// *original input graph* `input` -- not just of the residual graph, which
+// is the stronger claim the README's "direct and residual outputs are
+// disjoint and preserve the complete MCE set" argument depends on. Also
+// checks global uniqueness across both sources combined, and that the
+// total identity count matches the numeric counters exactly (which would
+// diverge if collect_cliques/validate_invariants ever disagreed with the
+// count-only bookkeeping).
 void validate_complete_pipeline(
     const hbbmc_faithful::Graph &input,
     const hbbmc_faithful::ReductionResult &reduced,
@@ -254,12 +279,20 @@ int main(int argc, char **argv) {
     const CliOptions cli = parse_cli(argc, argv);
     const hbbmc_faithful::Graph input = hbbmc_faithful::Graph::read_edge_list(
         cli.graph_path, cli.declared_vertices);
+    // "none" (identity) or "rmce" (full RMCE global reduction), see
+    // reduction.hpp/cpp. complete_hbbmc_gr() below is what gates whether
+    // the enumerator's dynamic/forbidden-set reductions turn on -- those
+    // are only sound as a package alongside the "rmce" module (README's
+    // "Feature and proof mapping" table).
     auto reduction =
         hbbmc_faithful::make_graph_reduction_module(cli.graph_reduction);
 
     const auto algorithm_start = std::chrono::steady_clock::now();
     const auto reduction_start = algorithm_start;
     hbbmc_faithful::ReductionOptions reduction_options;
+    // Identity materialization (needed for --print-cliques output and for
+    // --validate's checks) is the only thing that costs extra work here;
+    // plain counting always happens regardless of these flags.
     reduction_options.collect_cliques = cli.print_cliques || cli.validate;
     reduction_options.validate_invariants = cli.validate;
     reduction_options.minimum_output_clique_size =
@@ -269,6 +302,9 @@ int main(int argc, char **argv) {
 
     hbbmc_faithful::EnumerationOptions options;
     options.early_termination_threshold = cli.et_threshold;
+    // Both RMCE dynamic and forbidden-set reduction are tied to whether the
+    // *graph* reduction module ran (rather than being independently
+    // toggled), since they're only proven correct together with it.
     options.rmce_dynamic_reduction = reduction->complete_hbbmc_gr();
     options.rmce_forbidden_set_reduction = reduction->complete_hbbmc_gr();
     options.collect_cliques = cli.print_cliques || cli.validate;
@@ -276,6 +312,9 @@ int main(int argc, char **argv) {
     options.minimum_output_clique_size =
         static_cast<std::size_t>(cli.minimum_clique_size);
 
+    // The enumerator runs on `reduced.graph` (the residual graph), never on
+    // `input` directly -- everything graph reduction already proved
+    // maximal was removed from the search space entirely.
     const auto enumeration_start = std::chrono::steady_clock::now();
     hbbmc_faithful::Enumerator enumerator(reduced.graph, options);
     auto result = enumerator.run();
@@ -303,6 +342,12 @@ int main(int argc, char **argv) {
       validate_complete_pipeline(input, reduced, result);
     }
 
+    // Derive the reported algorithm label purely from which mechanisms were
+    // actually active, matching the README's "Implemented variants" table:
+    // "HBBMC++" is reserved for the one specific combination (full RMCE +
+    // ET(3)) the paper evaluates as its complete algorithm; every other
+    // combination is reported as an explicit ablation instead of being
+    // rounded up/down to one of the paper's names.
     std::string algorithm;
     const bool complete_gr = reduction->complete_hbbmc_gr();
     const bool hbbmc_plus_plus =
@@ -345,6 +390,13 @@ int main(int argc, char **argv) {
               << "algorithm_runtime_ms=" << total_milliseconds << '\n';
 
     if (cli.print_cliques) {
+      // reduced.directly_emitted_cliques already stores original input
+      // labels (reduction.cpp's emit() translates them at construction
+      // time). result.cliques instead stores dense vertex ids *within the
+      // residual graph*, so they're translated back through
+      // reduced.graph.original_label() here -- which still yields the
+      // original input labels, since Graph::original_label is preserved
+      // end-to-end through reduction's relabeling (see reduction.cpp).
       for (const auto &clique : reduced.directly_emitted_cliques) {
         std::cout << "clique";
         for (const std::int64_t label : clique) {

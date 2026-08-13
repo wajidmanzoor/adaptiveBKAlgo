@@ -9,6 +9,33 @@
 
 namespace hbbmc_faithful {
 
+// Greedy min-support edge peeling (a.k.a. truss decomposition order).
+//
+// Algorithm: maintain each edge's current "support" (number of common
+// neighbors it has in the *not-yet-removed* graph, i.e. how many triangles
+// it still closes). Repeatedly pop the globally minimum-support edge,
+// record it as the next rank, then decrement the support of every other
+// edge of every triangle that edge was part of (because that triangle no
+// longer fully exists). This is exactly k-truss peeling; `tau` ends up as
+// the graph's truss number.
+//
+// Implementation notes:
+//  - `alive_neighbors[v]` is a *mutable* copy of v's neighbor set that
+//    shrinks as edges are removed, so common-neighbor recomputation only
+//    looks at edges still in the graph.
+//  - support values are only ever decremented after being set from
+//    Graph::common_neighbors, so they can never legitimately go negative;
+//    the check below is a self-consistency assertion, not expected in
+//    normal operation.
+//  - the heap is a "lazy" min-heap: decrementing an edge's support doesn't
+//    update its existing heap entries (std::priority_queue can't do
+//    that), it just pushes a fresh (new_support, edge_id) entry. Stale
+//    entries are filtered out lazily when popped, by checking they're
+//    still `alive` and that their recorded support still matches the
+//    edge's *current* support (an edge can have several stale entries
+//    with different supports; only the entry matching the live value is
+//    valid). This trades extra heap entries for avoiding a
+//    decrease-key-capable heap.
 TrussOrder compute_truss_order(const Graph &graph) {
   const int n = graph.vertex_count();
   const int m = graph.edge_count();
@@ -21,6 +48,8 @@ TrussOrder compute_truss_order(const Graph &graph) {
     return result;
   }
 
+  // Per-vertex hash-set view of "neighbors not yet touched by peeling",
+  // used below to find each removed edge's remaining triangles.
   std::vector<std::unordered_set<int>> alive_neighbors(
       static_cast<std::size_t>(n));
   for (int v = 0; v < n; ++v) {
@@ -30,7 +59,7 @@ TrussOrder compute_truss_order(const Graph &graph) {
 
   std::vector<int> support(static_cast<std::size_t>(m), 0);
   std::vector<unsigned char> alive(static_cast<std::size_t>(m), 1U);
-  using HeapItem = std::pair<int, int>;
+  using HeapItem = std::pair<int, int>;  // (support, edge_id), min-heap.
   std::priority_queue<HeapItem, std::vector<HeapItem>, std::greater<HeapItem>>
       heap;
   for (int edge_id = 0; edge_id < m; ++edge_id) {
@@ -41,6 +70,7 @@ TrussOrder compute_truss_order(const Graph &graph) {
   }
 
   while (static_cast<int>(result.edge_at_rank.size()) < m) {
+    // Skip stale/dead heap entries until the true current minimum surfaces.
     while (!heap.empty()) {
       const auto [value, edge_id] = heap.top();
       if (alive[static_cast<std::size_t>(edge_id)] != 0U &&
@@ -62,6 +92,10 @@ TrussOrder compute_truss_order(const Graph &graph) {
     result.support_at_removal[static_cast<std::size_t>(edge_id)] = value;
     result.tau = std::max(result.tau, value);
 
+    // Find w's that still close a triangle with this edge (w in both
+    // alive_neighbors[u] and alive_neighbors[v]) by iterating the smaller
+    // set and probing the larger one, then decrement the support of the
+    // edge's two other triangle sides (u,w) and (v,w).
     auto &nu = alive_neighbors[static_cast<std::size_t>(edge.u)];
     auto &nv = alive_neighbors[static_cast<std::size_t>(edge.v)];
     const auto *smaller = &nu;
@@ -85,6 +119,8 @@ TrussOrder compute_truss_order(const Graph &graph) {
           support[static_cast<std::size_t>(vw)] < 0) {
         throw std::logic_error("negative support during truss peeling");
       }
+      // Push fresh entries reflecting the new (lower) support; the stale
+      // higher-support entries already in the heap will be skipped above.
       heap.emplace(support[static_cast<std::size_t>(uw)], uw);
       heap.emplace(support[static_cast<std::size_t>(vw)], vw);
     }
