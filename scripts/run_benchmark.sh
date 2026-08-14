@@ -147,8 +147,8 @@ fi
   echo "minimum_clique_size=3"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "pure_command=PURE_HITSET_BUDGET=10000 bk_algorithm GRAPH 6 1 1 4294967295 1 1 1 1 1 1 1 1 3"
-  echo "pure_configuration=capacity128,mode6,order1,optimized,PXR+ET,minCliqueSize3,budget10000"
+  echo "pure_command=PURE_HITSET_BUDGET=10000 bk_algorithm GRAPH 1 1 4294967295 1 1 1 1 1 1 1 1 3"
+  echo "pure_configuration=capacity128,mode1,ascending-degeneracy,optimized,PXR+ET,minCliqueSize3,budget10000"
   echo "hbbmc_command=hbbmc_faithful GRAPH --graph-reduction rmce --et 3 --num-vertices N --min-clique-size 3"
   sha256sum "$pure_binary" "$hbbmc_binary"
   uname -a
@@ -361,7 +361,7 @@ while IFS= read -r hbbmc_input; do
     env -u VLDB_VALIDATION -u VLDB_PRINT_CLIQUES \
     OMP_NUM_THREADS=1 PURE_HITSET_BUDGET=10000 \
     "$pure_binary" "$pure_input" \
-    6 1 1 4294967295 1 1 1 1 1 1 1 1 3
+    1 1 4294967295 1 1 1 1 1 1 1 1 3
 
   append_comparison "$dataset" "$n" "$m"
 done < <(find "$data_root/hbbmc" -maxdepth 1 -type f -print | LC_ALL=C sort)

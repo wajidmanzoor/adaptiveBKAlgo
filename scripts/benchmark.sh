@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# benchmark.sh — run every PivotBK/ReorderSib combination on all graphs
+# benchmark.sh — run the retained PivotBK/Pure ReorderSib combinations
 # Usage: ./benchmark.sh [data_dir]
 # Reference for correctness: PivotBK+ASC
 
 set -uo pipefail
 cd "$(dirname "$0")"
 
-BIN="../build/bk_algorithm"
-DATA="${1:-../../data}"
+BIN="../our/build/bk_algorithm"
+DATA="${1:-../data}"
 
 # macOS has no built-in 'timeout'; use gtimeout (brew coreutils) if present
 if command -v gtimeout &>/dev/null; then
@@ -20,8 +20,8 @@ fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 echo "=== Building bk_algorithm ==="
-cmake -S .. -B ../build -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1 \
-  && cmake --build ../build -j$(nproc) > /dev/null 2>&1 || { echo "Build failed"; exit 1; }
+cmake -S ../our -B ../our/build -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1 \
+  && cmake --build ../our/build --parallel > /dev/null 2>&1 || { echo "Build failed"; exit 1; }
 echo "OK"
 echo ""
 
@@ -62,42 +62,18 @@ echo "=== Reference pass: PivotBK + ASC ==="
 REF_COUNTS=()
 REF_MS=0
 for g in "${GRAPHS[@]}"; do
-    out=$(RUN "$BIN" "$g" 0 1 0 2>/dev/null) || out=""
+    out=$(RUN "$BIN" "$g" 0 0 2>/dev/null) || out=""
     REF_COUNTS+=("$(get_count "$out")")
     REF_MS=$(fadd "$REF_MS" "$(get_time "$out")")
 done
 printf "Total time: %.1f ms\n\n" "$REF_MS"
 
 # ── Combination table ─────────────────────────────────────────────────────────
-#  columns: label  algo  ord  meth
+#  columns: label  mode  method
 COMBOS=(
-    "PivotBK      ORIG    0 0 0"
-    "PivotBK      ASC     0 1 0"
-    "PivotBK      DES     0 2 0"
-    "---"
-    "BruteForce   ORIG    1 0 0"
-    "BruteForce   ASC     1 1 0"
-    "BruteForce   DES     1 2 0"
-    "---"
-    "Backtrack    ORIG    1 0 1"
-    "Backtrack    ASC     1 1 1"
-    "Backtrack    DES     1 2 1"
-    "---"
-    "Greedy       ORIG    1 0 2"
-    "Greedy       ASC     1 1 2"
-    "Greedy       DES     1 2 2"
-    "---"
-    "Bitmask      ORIG    1 0 3"
-    "Bitmask      ASC     1 1 3"
-    "Bitmask      DES     1 2 3"
-    "---"
-    "MinHS        ORIG    1 0 4"
-    "MinHS        ASC     1 1 4"
-    "MinHS        DES     1 2 4"
-    "---"
-    "Optimized    ORIG    1 0 5"
-    "Optimized    ASC     1 1 5"
-    "Optimized    DES     1 2 5"
+    "PivotBK   0 0"
+    "Pure-BT   1 0"
+    "Pure-Opt  1 1"
 )
 
 NC=${#COMBOS[@]}
@@ -113,35 +89,29 @@ echo ""
 WALL_START=$SECONDS
 
 # Print table header
-HDR_FMT="%-18s %-5s %10s %10s\n"
-ROW_FMT="%-18s %-5s %10.1f %8s\n"
-printf "$HDR_FMT" "Method" "Order" "Time(ms)" "Correct"
-printf "$HDR_FMT" "------------------" "-----" "----------" "----------"
+HDR_FMT="%-18s %10s %10s\n"
+ROW_FMT="%-18s %10.1f %8s\n"
+printf "$HDR_FMT" "Method" "Time(ms)" "Correct"
+printf "$HDR_FMT" "------------------" "----------" "----------"
 
 run_num=0
 for entry in "${COMBOS[@]}"; do
-    # Separator row
-    if [[ "$entry" == "---" ]]; then
-        printf "%-18s %-5s %10s %8s\n" "------------------" "-----" "----------" "----------"
-        continue
-    fi
-
-    read -r label order algo ord meth <<< "$entry"
+    read -r label algo meth <<< "$entry"
     ((run_num++)) || true
 
-    printf "  [%2d/%d] %-12s %s ...\r" "$run_num" "$REAL_COMBOS" "$label" "$order" >&2
+    printf "  [%2d/%d] %-12s ...\r" "$run_num" "$REAL_COMBOS" "$label" >&2
 
     ms=0
     correct=0
     for ((i=0; i<N; i++)); do
-        out=$(RUN "$BIN" "${GRAPHS[$i]}" "$algo" "$ord" "$meth" 2>/dev/null) || out=""
+        out=$(RUN "$BIN" "${GRAPHS[$i]}" "$algo" "$meth" 2>/dev/null) || out=""
         t=$(get_time "$out")
         ms=$(fadd "$ms" "$t")
         cnt=$(get_count "$out")
         [[ "$cnt" == "${REF_COUNTS[$i]}" ]] && ((correct++)) || true
     done
 
-    printf "$ROW_FMT" "$label" "$order" "$ms" "$correct/$N"
+    printf "$ROW_FMT" "$label" "$ms" "$correct/$N"
 done
 
 echo ""

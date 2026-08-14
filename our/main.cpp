@@ -1,5 +1,4 @@
 #include "inc/common.h"
-#include "inc/fast_list_bk.h"
 #include "inc/graph.h"
 #include "inc/helpers.h"
 #include "inc/rmce_reduction.h"
@@ -45,184 +44,99 @@ void printReducedCanonicalCliques(const RmceReductionResult &reduced,
 } // namespace
 
 int runMain(int argc, const char *argv[]) {
-  if (argc < 5 || argc > 15) {
-    cout << "Usage: bk_algorithm <file> <mode> <ord> <meth> [hitSetLimit] "
+  if (argc < 4 || argc > 14) {
+    cout << "Usage: bk_algorithm <file> <mode> <meth> [hitSetLimit] "
             "[prune1] [prune2] [sp1] [sp2] [sp3] [sp4] [sp5] [sp6] "
             "[minCliqueSize]"
          << endl;
-    cout << "  mode: 0=PivotBK  1=HybridReorder  2=BitsetBK  3=LocalBitsetBK  "
-            "4=AdaptiveBK  5=FastListBK  6=PureReorderExact"
+    cout << "  mode: 0=PivotBK  1=PureReorderExact" << endl;
+    cout << "  order: ascending degeneracy (fixed)" << endl;
+    cout << "  meth: 0=Backtracking  1=Optimized  (mode 1 only)"
          << endl;
-    cout << "  ord:  0=Original  1=Ascending  2=Descending" << endl;
-    cout << "  meth: 0=Backtracking  1=Optimized  (ReorderSib modes only)"
+    cout << "  mode 0: bk_algorithm <file> 0 <ignored-meth> [minCliqueSize]"
          << endl;
-    cout << "  minCliqueSize: mode-1/5/6 output threshold (default 3; use 1 "
-            "for conventional MCE)"
+    cout << "  minCliqueSize: output threshold for both modes (default 3; "
+            "use 1 for conventional MCE)"
          << endl;
     exit(1);
   }
 
   string filepath = argv[1];
   int mode = atoi(argv[2]);
-  int ord = atoi(argv[3]);
-  int meth = atoi(argv[4]);
+  int meth = atoi(argv[3]);
   ui hitSetLimit = UINT_MAX;
-  if (argc > 5) {
+  bool prune1 = true;
+  bool prune2 = true;
+  bool sp1 = true;
+  bool sp2 = true;
+  bool sp3 = true;
+  bool sp4 = true;
+  bool sp5 = true;
+  bool sp6 = true;
+  ui minCliqueSize = 3;
+
+  auto parsePositiveUi = [](const char *text, const char *name,
+                            ui &result) -> bool {
     char *end = nullptr;
     errno = 0;
-    const unsigned long long parsed = strtoull(argv[5], &end, 10);
-    if (argv[5][0] < '0' || argv[5][0] > '9' || errno == ERANGE ||
-        end == argv[5] || *end != '\0' || parsed == 0 || parsed > UINT_MAX) {
-      cerr << "Invalid hitSetLimit! Use an integer in 1.." << UINT_MAX << "."
+    const unsigned long long parsed = strtoull(text, &end, 10);
+    if (text[0] < '0' || text[0] > '9' || errno == ERANGE || end == text ||
+        *end != '\0' || parsed == 0 || parsed > UINT_MAX) {
+      cerr << "Invalid " << name << "! Use an integer in 1.." << UINT_MAX
+           << "." << endl;
+      return false;
+    }
+    result = static_cast<ui>(parsed);
+    return true;
+  };
+
+  if (mode == 0) {
+    if (argc > 5) {
+      cerr << "Mode 0 accepts only: <file> 0 <ignored-meth> "
+              "[minCliqueSize]"
            << endl;
       return 1;
     }
-    hitSetLimit = static_cast<ui>(parsed);
+    if (argc == 5 &&
+        !parsePositiveUi(argv[4], "minCliqueSize", minCliqueSize))
+      return 1;
+  } else if (mode == 1) {
+    if (argc > 4 && !parsePositiveUi(argv[4], "hitSetLimit", hitSetLimit))
+      return 1;
+    prune1 = (argc > 5) ? (bool)atoi(argv[5]) : true;
+    prune2 = (argc > 6) ? (bool)atoi(argv[6]) : true;
+    sp1 = (argc > 7) ? (bool)atoi(argv[7]) : true;
+    sp2 = (argc > 8) ? (bool)atoi(argv[8]) : true;
+    sp3 = (argc > 9) ? (bool)atoi(argv[9]) : true;
+    sp4 = (argc > 10) ? (bool)atoi(argv[10]) : true;
+    sp5 = (argc > 11) ? (bool)atoi(argv[11]) : true;
+    sp6 = (argc > 12) ? (bool)atoi(argv[12]) : true;
+    if (argc > 13 &&
+        !parsePositiveUi(argv[13], "minCliqueSize", minCliqueSize))
+      return 1;
+  } else {
+    cerr << "Invalid mode! Use 0 or 1." << endl;
+    return 1;
   }
-  bool prune1 = (argc > 6) ? (bool)atoi(argv[6]) : true;
-  bool prune2 = (argc > 7) ? (bool)atoi(argv[7]) : true;
-  bool sp1 = (argc > 8) ? (bool)atoi(argv[8]) : true;
-  bool sp2 = (argc > 9) ? (bool)atoi(argv[9]) : true;
-  bool sp3 = (argc > 10) ? (bool)atoi(argv[10]) : true;
-  bool sp4 = (argc > 11) ? (bool)atoi(argv[11]) : true;
-  bool sp5 = (argc > 12) ? (bool)atoi(argv[12]) : true;
-  bool sp6 = (argc > 13) ? (bool)atoi(argv[13]) : true;
-  const bool minCliqueSizeExplicit = argc > 14;
+
   const bool printCliqueIdentities = environmentFlagIsOne("VLDB_VALIDATION") ||
                                      environmentFlagIsOne("VLDB_PRINT_CLIQUES");
-  ui minCliqueSize = 3;
-  if (argc > 14) {
-    char *end = nullptr;
-    errno = 0;
-    const unsigned long long parsed = strtoull(argv[14], &end, 10);
-    if (argv[14][0] < '0' || argv[14][0] > '9' || errno == ERANGE ||
-        end == argv[14] || *end != '\0' || parsed == 0 || parsed > UINT_MAX) {
-      cerr << "Invalid minCliqueSize! Use an integer in 1.." << UINT_MAX << "."
-           << endl;
-      return 1;
-    }
-    if (mode != 1 && mode != 5 && mode != 6) {
-      cerr << "minCliqueSize is supported only by modes 1, 5, and 6; other "
-              "modes retain their existing threshold."
-           << endl;
-      return 1;
-    }
-    minCliqueSize = static_cast<ui>(parsed);
-  }
 
   Graph g(filepath);
 
   if (mode == 0) {
-    cout << "Running Pivot BK ";
-    if (ord == 0)
-      cout << "(Original order)...";
-    else if (ord == 1)
-      cout << "(Ascending degeneracy)...";
-    else if (ord == 2)
-      cout << "(Descending degeneracy)...";
-    else {
-      cout << "Invalid order! Use 0..2." << endl;
-      exit(1);
-    }
-    cout << endl;
-    PivotBK pivotBk(g, static_cast<DegOrder>(ord));
+    cout << "Running Pivot BK (Ascending degeneracy)..." << endl;
+    PivotBK pivotBk(g, minCliqueSize);
     pivotBk.findAllMaximalCliques();
-  } else if (mode == 2) {
-    cout << "Running Bitset BK..." << endl;
-    BitsetBK bitsetBk(g);
-    bitsetBk.findAllMaximalCliques();
-  } else if (mode == 3) {
-    cout << "Running Local Bitset BK..." << endl;
-    LocalBitsetBK localBitsetBk(g);
-    localBitsetBk.findAllMaximalCliques();
-  } else if (mode == 4) {
-    const ull words = (g.n + 63) >> 6;
-    const ull denseBytes = (ull)g.n * words * sizeof(ull);
-    const double avgDegree =
-        g.n == 0 ? 0.0 : (2.0 * static_cast<double>(g.m)) / g.n;
-    ui maxDegree = 0;
-    ui zeroDegree = 0;
-    for (ui d : g.degree) {
-      maxDegree = max(maxDegree, d);
-      if (d == 0)
-        zeroDegree++;
-    }
-    const bool cheapModuleDense = g.n <= 16000 && avgDegree >= 6.0 &&
-                                  maxDegree >= 90 && zeroDegree * 4 >= g.n;
-    const bool denseCoreCandidate = !cheapModuleDense &&
-                                    denseBytes <= (64ULL << 20) &&
-                                    avgDegree >= 3.0 && maxDegree >= 90;
-    const ui degeneracy = denseCoreCandidate ? graphDegeneracy(g) : 0;
-    const bool useDense =
-        denseBytes <= (64ULL << 20) &&
-        (g.n <= 1000 || (g.n <= 8000 && avgDegree >= 10.0) ||
-         (g.n <= 10000 && avgDegree >= 14.0) || cheapModuleDense ||
-         (g.n <= 16000 && avgDegree >= 6.0 && maxDegree >= 90 &&
-          degeneracy >= 45) ||
-         (g.n <= 16000 && avgDegree >= 40.0) ||
-         (g.n <= 18000 && avgDegree >= 44.0) || avgDegree >= 46.0 ||
-         degeneracy >= 64);
-
-    if (useDense) {
-      cout << "Running Adaptive BK (BitsetBK)..." << endl;
-      BitsetBK bitsetBk(g);
-      bitsetBk.findAllMaximalCliques();
-    } else {
-      cout << "Running Adaptive BK (LocalBitsetBK)..." << endl;
-      LocalBitsetBK localBitsetBk(g);
-      localBitsetBk.findAllMaximalCliques();
-    }
-  } else if (mode == 5) {
-    cout << "Running Fast List BK..." << endl;
-    FastListBK fastListBk(g, false, minCliqueSize);
-    if (printCliqueIdentities)
-      fastListBk.setCliqueSink(printCanonicalClique);
-    fastListBk.findAllMaximalCliques();
-  } else if (mode == 1 || mode == 6) {
-    if (ord < 0 || ord > 2) {
-      cout << "Invalid order! Use 0..2." << endl;
-      exit(1);
-    }
+  } else if (mode == 1) {
     if (meth < 0 || meth > 1) {
       cout << "Invalid method! Use 0 (Backtracking) or 1 (Optimized)." << endl;
       exit(1);
     }
 
-    const bool allRulesEnabled =
-        prune1 && prune2 && sp1 && sp2 && sp3 && sp4 && sp5 && sp6;
-    const bool useAdaptivePivotExpansion =
-        mode == 1 && ord == 1 && meth == 1 && hitSetLimit == UINT_MAX &&
-        allRulesEnabled &&
-        (g.n >= 128 || minCliqueSizeExplicit || printCliqueIdentities);
-
-    if (mode == 1 && (minCliqueSizeExplicit || printCliqueIdentities) &&
-        !useAdaptivePivotExpansion) {
-      cerr << "An explicit minCliqueSize or clique-identity validation in "
-              "mode 1 requires ord=1, meth=1, hitSetLimit=UINT_MAX, and all "
-              "rule flags enabled so the Hybrid FastList lane is selected."
-           << endl;
-      return 1;
-    }
-
-    if (useAdaptivePivotExpansion) {
-      cout << "Running ReorderSib (Hybrid reorder/sibling + pivot expansion)..."
-           << endl;
-      FastListBK fastListBk(g, true, minCliqueSize);
-      if (printCliqueIdentities)
-        fastListBk.setCliqueSink(printCanonicalClique);
-      fastListBk.findAllMaximalCliques("ReorderSib");
-    } else {
-      // Mode 6 is the theorem-aligned Pure worklist.  Mode 1 retains the
-      // original recursive implementation on configurations that do not route
-      // to FastListBK, preserving the legacy lane for ablations.
-      cout << (mode == 6 ? "Running Pure ReorderSib (exact worklist) "
-                         : "Running ReorderSib Legacy ");
-      if (ord == 0)
-        cout << "(Original order) ";
-      else if (ord == 1)
-        cout << "(Ascending degeneracy) ";
-      else
-        cout << "(Descending degeneracy) ";
+    {
+      cout << "Running Pure ReorderSib (exact worklist) "
+              "(Ascending degeneracy) ";
 
       if (meth == 0)
         cout << "(Backtracking Branch And Bound) Algorithm...";
@@ -232,7 +146,7 @@ int runMain(int argc, const char *argv[]) {
 
       RmceReductionResult reduced;
       Graph *searchGraph = &g;
-      const bool useRmce = mode == 6 && environmentFlagIsOne("PURE_RMCE");
+      const bool useRmce = environmentFlagIsOne("PURE_RMCE");
       if (useRmce) {
         const auto reduceStart = chrono::steady_clock::now();
         reduced = applyRmceReduction(g, minCliqueSize, printCliqueIdentities);
@@ -251,19 +165,15 @@ int runMain(int argc, const char *argv[]) {
              << "  reductionTime=" << reductionMs << " ms" << endl;
       }
 
-      ReorderSib reorder(*searchGraph, static_cast<DegOrder>(ord),
-                         static_cast<SibMethod>(meth), hitSetLimit, prune1,
+      ReorderSib reorder(*searchGraph, static_cast<SibMethod>(meth), hitSetLimit, prune1,
                          prune2, sp1, sp2, sp3, sp4, sp5, sp6, minCliqueSize);
       if (const char *budget = getenv("PURE_HITSET_BUDGET"))
         reorder.setSolverWorkBudget(strtoull(budget, nullptr, 10));
       if (useRmce)
         reorder.setExternalResults(reduced.directlyEmittedCount,
                                    reduced.maximumCliqueSize);
-      if (mode == 6)
-        reorder.findAllMaximalCliquesPure();
-      else
-        reorder.findAllMaximalCliques();
-      if (mode == 6 && printCliqueIdentities) {
+      reorder.findAllMaximalCliquesPure();
+      if (printCliqueIdentities) {
         if (useRmce)
           printReducedCanonicalCliques(reduced, reorder.getCliques());
         else
@@ -271,7 +181,7 @@ int runMain(int argc, const char *argv[]) {
       }
     }
   } else {
-    cout << "Invalid mode! Use 0..6." << endl;
+    cout << "Invalid mode! Use 0 or 1." << endl;
     exit(1);
   }
 

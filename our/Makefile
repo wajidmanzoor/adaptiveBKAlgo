@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -O3 -DNDEBUG
+CXXFLAGS = -std=c++17 -O3 -DNDEBUG -DPURE_HITSET_CAPACITY=128
 SRCDIR = src
 INCDIR = inc
 OBJDIR = obj
@@ -7,7 +7,9 @@ OBJDIR = obj
 SOURCES = main.cpp \
           $(SRCDIR)/graph.cpp \
           $(SRCDIR)/common.cpp \
-          $(SRCDIR)/helpers.cpp
+          $(SRCDIR)/helpers.cpp \
+          $(SRCDIR)/fast_plex3.cpp \
+          $(SRCDIR)/rmce_reduction.cpp
 
 OBJECTS = $(patsubst %.cpp,$(OBJDIR)/%.o,$(SOURCES))
 

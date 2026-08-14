@@ -25,8 +25,6 @@ include_directories(inc)
 
 set(BK_CORE_SOURCES
     src/common.cpp
-    src/fast_list_bk.cpp
-    src/fast_local_bitset.cpp
     src/fast_plex3.cpp
     src/graph.cpp
     src/helpers.cpp
