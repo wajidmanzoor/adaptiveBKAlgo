@@ -55,3 +55,4 @@ compare/HBBMCPaperFaithful/build/
 # Benchmark run outputs
 results/*
 !results/.gitkeep
+ablation/**/results/
