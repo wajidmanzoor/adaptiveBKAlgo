@@ -1,9 +1,9 @@
 # AdaptiveBK / ReorderSib
 
 This repository contains an exact maximal-clique enumerator based on the
-optimized ReorderSib worklist algorithm. The implementation uses the final
-portable configuration selected by the optimization study; experimental,
-ablation, profiling, and PGO build paths are intentionally excluded.
+optimized ReorderSib worklist algorithm. `our/` remains the clean production
+implementation. This branch adds only the recursive PXR-state ablation under
+`ablation/pxr_states/`, including isolated Pure and HBBMC source copies.
 
 The search combines:
 
@@ -92,6 +92,16 @@ Run `bash scripts/run_benchmark.sh --help` for available controls. Results,
 commands, logs, clique-count checks, and resource measurements are retained in
 the selected result directory.
 
+## Recursive PXR-state ablation
+
+See the [PXR-state ablation guide](ablation/README.md). The runner compares
+recursive `(R,P,X)` entries with graph reduction and early termination disabled
+in both implementations.
+
+```bash
+./ablation/pxr_states/run.sh DATA_ROOT [RESULT_ROOT]
+```
+
 ## Source layout
 
 ```text
@@ -100,11 +110,13 @@ our/
 ├── main.cpp
 ├── inc/
 └── src/
+ablation/
+└── pxr_states/
 ```
 
-The production implementation has one supported algorithm configuration. It
-does not contain runtime ablation switches, optional RMCE preprocessing,
-profiling counters, or compiler profile-generation flags.
+The production implementation has one supported algorithm configuration. The
+state counters and ET-disabled configuration are confined to
+`ablation/pxr_states/`; compiler profile-generation flags are not included.
 
 ## License
 
