@@ -1,9 +1,9 @@
 # AdaptiveBK / ReorderSib
 
 This repository contains an exact maximal-clique enumerator based on the
-optimized ReorderSib worklist algorithm. The implementation uses the final
-portable configuration selected by the optimization study; experimental,
-ablation, profiling, and PGO build paths are intentionally excluded.
+optimized ReorderSib worklist algorithm. `our/` remains the clean production
+implementation. This branch adds only the seed-mask capacity ablation under
+`ablation/capacity/`, with its controls and diagnostics isolated from `our/`.
 
 The search combines:
 
@@ -92,6 +92,16 @@ Run `bash scripts/run_benchmark.sh --help` for available controls. Results,
 commands, logs, clique-count checks, and resource measurements are retained in
 the selected result directory.
 
+## Seed-mask capacity ablation
+
+See the [capacity ablation guide](ablation/README.md). The runner compares
+fixed capacities 64, 128, 512, and 1024 with a dynamic mask while fixing the
+latest optimized reorder core and all other controls.
+
+```bash
+./ablation/capacity/run.sh DATA_ROOT [RESULT_ROOT]
+```
+
 ## Source layout
 
 ```text
@@ -100,11 +110,13 @@ our/
 ├── main.cpp
 ├── inc/
 └── src/
+ablation/
+└── capacity/
 ```
 
-The production implementation has one supported algorithm configuration. It
-does not contain runtime ablation switches, optional RMCE preprocessing,
-profiling counters, or compiler profile-generation flags.
+The production implementation has one supported algorithm configuration. The
+capacity-study switches and diagnostics are confined to `ablation/capacity/`;
+compiler profile-generation flags are not included.
 
 ## License
 
