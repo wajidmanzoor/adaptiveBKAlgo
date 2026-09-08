@@ -1,280 +1,142 @@
 #include "../inc/graph.h"
-#include <numeric>
+
+#include <limits>
+#include <stdexcept>
 
 namespace {
+
 class FastIntScanner {
 private:
   static constexpr size_t BUFFER_SIZE = 1 << 20;
-  std::ifstream in;
+  std::ifstream input;
   std::vector<char> buffer;
-  size_t pos;
-  size_t limit;
+  size_t position = 0;
+  size_t limit = 0;
 
   bool refill() {
-    if (pos < limit)
+    if (position < limit)
       return true;
-    in.read(buffer.data(), buffer.size());
-    limit = static_cast<size_t>(in.gcount());
-    pos = 0;
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    limit = static_cast<size_t>(input.gcount());
+    position = 0;
     return limit != 0;
   }
 
   int peek() {
     if (!refill())
       return EOF;
-    return buffer[pos];
+    return buffer[position];
   }
 
   int get() {
     if (!refill())
       return EOF;
-    return buffer[pos++];
+    return buffer[position++];
   }
 
-  static bool isSpace(int c) {
-    return c == ' ' || c == '\n' || c == '\r' || c == '\t' ||
-           c == '\v' || c == '\f';
+  static bool isSpace(int character) {
+    return character == ' ' || character == '\n' || character == '\r' ||
+           character == '\t' || character == '\v' || character == '\f';
   }
 
-  static bool isHorizontalSpace(int c) {
-    return c == ' ' || c == '\t' || c == '\v' || c == '\f';
+  static bool isHorizontalSpace(int character) {
+    return character == ' ' || character == '\t' || character == '\v' ||
+           character == '\f';
+  }
+
+  bool readDigits(ui &value) {
+    unsigned long long parsed = 0;
+    int character = peek();
+    if (character < '0' || character > '9')
+      return false;
+    while (character >= '0' && character <= '9') {
+      parsed = parsed * 10 + static_cast<unsigned>(character - '0');
+      if (parsed > std::numeric_limits<ui>::max())
+        throw std::runtime_error("graph integer exceeds uint32 range");
+      get();
+      character = peek();
+    }
+    value = static_cast<ui>(parsed);
+    return true;
   }
 
 public:
   explicit FastIntScanner(const std::string &path)
-      : in(path, std::ios::in | std::ios::binary), buffer(BUFFER_SIZE), pos(0),
-        limit(0) {}
+      : input(path, std::ios::in | std::ios::binary), buffer(BUFFER_SIZE) {}
 
-  bool isOpen() const { return in.is_open(); }
+  bool isOpen() const { return input.is_open(); }
 
   bool readUint(ui &value) {
-    int c = peek();
-    while (c != EOF && isSpace(c)) {
+    int character = peek();
+    while (character != EOF && isSpace(character)) {
       get();
-      c = peek();
+      character = peek();
     }
-    if (c == EOF)
-      return false;
-    if (c < '0' || c > '9')
-      return false;
-
-    value = 0;
-    while (c >= '0' && c <= '9') {
-      value = value * 10 + static_cast<ui>(c - '0');
-      get();
-      c = peek();
-    }
-    return true;
+    return character != EOF && readDigits(value);
   }
 
   bool readUintOnLine(ui &value) {
-    int c = peek();
-    while (c != EOF && isHorizontalSpace(c)) {
+    int character = peek();
+    while (character != EOF && isHorizontalSpace(character)) {
       get();
-      c = peek();
+      character = peek();
     }
-    if (c == EOF)
-      return false;
-    if (c == '\n') {
+    if (character == '\n') {
       get();
       return false;
     }
-    if (c == '\r') {
+    if (character == '\r') {
       get();
       if (peek() == '\n')
         get();
       return false;
     }
-    if (c < '0' || c > '9') {
-      get();
-      return false;
-    }
-
-    value = 0;
-    while (c >= '0' && c <= '9') {
-      value = value * 10 + static_cast<ui>(c - '0');
-      get();
-      c = peek();
-    }
-    return true;
+    return character != EOF && readDigits(value);
   }
 };
+
 } // namespace
 
-Graph::Graph() : n(0), m(0), kmax(0), adjacencySorted(false) {}
-
-Graph::Graph(ui vertexCount,
-             const std::vector<std::pair<ui, ui>> &edges)
-    : n(vertexCount), m(0), kmax(0), adjacencySorted(true) {
-  std::vector<std::vector<ui>> rows(n);
-  for (const auto &[u, v] : edges) {
-    if (u >= n || v >= n || u == v)
-      continue;
-    rows[u].push_back(v);
-    rows[v].push_back(u);
-  }
-
-  offset.assign(n + 1, 0);
-  degree.assign(n, 0);
-  for (ui v = 0; v < n; v++) {
-    auto &row = rows[v];
-    std::sort(row.begin(), row.end());
-    row.erase(std::unique(row.begin(), row.end()), row.end());
-    degree[v] = static_cast<ui>(row.size());
-    offset[v + 1] = offset[v] + degree[v];
-  }
-
-  neighbors.resize(offset[n]);
-  for (ui v = 0; v < n; v++)
-    std::copy(rows[v].begin(), rows[v].end(), neighbors.begin() + offset[v]);
-  m = static_cast<ui>(neighbors.size() / 2);
-}
-
-Graph::Graph(std::string path) : n(0), m(0), kmax(0), adjacencySorted(false) {
+Graph::Graph(const std::string &path) {
   FastIntScanner scanner(path);
+  if (!scanner.isOpen())
+    throw std::runtime_error("cannot open graph file: " + path);
+  if (!scanner.readUint(n) || !scanner.readUint(m))
+    throw std::runtime_error("invalid graph header: " + path);
 
-  if (!scanner.isOpen()) {
-    std::cout << "Graph file Open Failed " << std::endl;
-    exit(1);
-  } else {
-    scanner.readUint(n);
-    scanner.readUint(m);
+  if (static_cast<size_t>(m) > std::numeric_limits<size_t>::max() / 2 ||
+      m > std::numeric_limits<ui>::max() / 2)
+    throw std::runtime_error("graph adjacency size overflows size_t");
+  const size_t expectedEntries = static_cast<size_t>(m) * 2;
 
-    offset.resize(n + 1, 0);
-    neighbors.resize(2 * m);
-    degree.resize(n, 0);
-    ui vertex, neigh;
-    bool rowsSorted = true;
-    for (ui row = 0; row < n; row++) {
-      if (!scanner.readUint(vertex))
-        break;
-      bool haveLastNeigh = false;
-      ui lastNeigh = 0;
-      while (scanner.readUintOnLine(neigh)) {
-        if (vertex == neigh)
-          continue;
-        if (haveLastNeigh && neigh < lastNeigh)
-          rowsSorted = false;
-        lastNeigh = neigh;
-        haveLastNeigh = true;
-        neighbors[offset[vertex] + offset[vertex + 1]] = neigh;
-        offset[vertex + 1]++;
-      }
-      degree[vertex] = offset[vertex + 1];
-      offset[vertex + 1] += offset[vertex];
+  offset.assign(static_cast<size_t>(n) + 1, 0);
+  degree.assign(n, 0);
+  neighbors.clear();
+  neighbors.reserve(expectedEntries);
+
+  for (ui row = 0; row < n; ++row) {
+    ui vertex = 0;
+    if (!scanner.readUint(vertex) || vertex != row)
+      throw std::runtime_error("graph rows must appear once in vertex order");
+
+    ui neighbor = 0;
+    while (scanner.readUintOnLine(neighbor)) {
+      if (neighbor >= n)
+        throw std::runtime_error("graph contains an out-of-range neighbor");
+      if (neighbor == vertex)
+        throw std::runtime_error("graph contains a self-loop");
+      if (neighbors.size() == expectedEntries)
+        throw std::runtime_error("graph has more adjacency entries than header");
+      neighbors.push_back(neighbor);
     }
-    adjacencySorted = rowsSorted;
+
+    degree[row] = static_cast<ui>(neighbors.size() - offset[row]);
+    offset[row + 1] = static_cast<ui>(neighbors.size());
   }
 
-  if (debug) {
-    std::cout << "n=" << n << ", m=" << m << std::endl;
-
-    cout << "ofsset ";
-    for (ui i = 0; i <= n; i++) {
-      cout << offset[i] << " ";
-    }
-    cout << endl;
-    cout << "degree ";
-    for (ui i = 0; i < n; i++) {
-      cout << degree[i] << " ";
-    }
-    cout << endl;
-    cout << "neighbors ";
-    for (ui i = 0; i < 2 * m; i++) {
-      cout << neighbors[i] << " ";
-    }
-    cout << endl;
-  }
-}
-
-void Graph::sortAdjacency() {
-  if (adjacencySorted)
-    return;
-
-  for (ui v = 0; v < n; v++) {
-    auto first = neighbors.begin() + offset[v];
-    auto last = neighbors.begin() + offset[v + 1];
-    if (!std::is_sorted(first, last))
-      std::sort(first, last);
-  }
-  adjacencySorted = true;
-}
-
-void Graph::getListingOrder(std::vector<ui> &arr) {
-  /* Rettrun an array with each index storing the listing order based on the
-  core value. Listing order is a unique number. high core values get low listing
-  order*/
-  corePeelSequence.resize(n);
-  coreDecompose(corePeelSequence);
-
-  for (size_t i = 0; i < n; ++i) {
-    arr[corePeelSequence[i]] = i + 1;
-  }
-}
-
-void Graph::coreDecompose(std::vector<ui> &arr) {
-  /* Peeling algorithm to find the core values of each vertex.
-     Returns the peeling sequence i.e. verticies in increaseing order of core
-     values. */
-  core.resize(n);
-  if (n == 0) {
-    kmax = 0;
-    return;
-  }
-
-  int maxDegree = *std::max_element(degree.begin(), degree.end());
-  if (debug) std::cout << "Max Degree=" << maxDegree << std::endl;
-
-  // Initialize bins
-  std::vector<ui> bins(maxDegree + 1, 0);
-  for (ui deg : degree) {
-    bins[deg]++;
-  }
-
-  // Compute bin positions
-  std::vector<int> bin_positions(maxDegree + 1, 0);
-  std::partial_sum(bins.begin(), bins.end(), bin_positions.begin());
-
-  // Initialize position and sortedVertex arrays
-  std::vector<ui> position(n);
-  std::vector<ui> sortedVertex(n);
-
-  for (ui v = 0; v < n; v++) {
-    position[v] = --bin_positions[degree[v]]; // Assign position
-    sortedVertex[position[v]] = v;            // Place vertex in sorted list
-  }
-
-  // Perform core decomposition
-  for (int i = 0; i < n; i++) {
-    ui v = sortedVertex[i];
-    core[v] = degree[v]; // Assign core value
-    arr[n - i - 1] = v;  // Assign peel sequence
-
-    // Update degrees of neighbors
-    for (int j = offset[v]; j < offset[v + 1]; j++) {
-      ui u = neighbors[j];
-      if (degree[u] > degree[v]) {
-        ui du = degree[u];
-        ui pu = position[u];
-        ui pw = bin_positions[du];
-        ui w = sortedVertex[pw];
-
-        if (u != w) {
-          position[u] = pw;
-          sortedVertex[pu] = w;
-          position[w] = pu;
-          sortedVertex[pw] = u;
-        }
-
-        bin_positions[du]++;
-        degree[u]--;
-      }
-    }
-  }
-
-  kmax = core[0]; // Initialize with first element
-  for (ui val : core) {
-    if (val > kmax)
-      kmax = val;
-  }
+  if (neighbors.size() != expectedEntries)
+    throw std::runtime_error("graph edge count does not match header");
+  ui extra = 0;
+  if (scanner.readUint(extra))
+    throw std::runtime_error("graph contains rows beyond declared vertex count");
 }

@@ -1,47 +1,18 @@
 #pragma once
 
-#define miv(a, b) ((a) > (b) ? (b) : (a))
-#define mav(a, b) ((a) < (b) ? (b) : (a))
-
-#include <assert.h>
-#include <string.h>
-
-#include <cstdlib>
-#include <fstream>
-#include <list>
-#include <queue>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include <algorithm>
 #include <array>
-#include <bitset>
-#include <cmath>
-#include <cstdio>
-#include <ctime>
+#include <climits>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <limits.h>
-#include <map>
-#include <mutex>
-#include <set>
-#include <sys/stat.h>
+#include <limits>
+#include <string>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
-#define debug 0
-#ifndef PROFILING
-#define PROFILING 0
-#endif
 using namespace std;
 
-typedef unsigned int ui;
-typedef unsigned short ushort;
-typedef unsigned char uchar;
-
-typedef unsigned char byte;
-typedef unsigned long long ull;
-
-const int inf = 1e9;
-const double DINF = 1e9;
+using ui = unsigned int;
+using ull = unsigned long long;

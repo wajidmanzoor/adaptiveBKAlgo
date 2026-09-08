@@ -1,50 +1,26 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
-project(bk_algorithm LANGUAGES CXX)
+project(adaptive_bk_algorithm LANGUAGES CXX)
 
-option(REORDERSIB_PROFILING "Enable ReorderSib profiling timers" OFF)
-set(PURE_HITSET_VARIANT "128" CACHE STRING
-    "Pure optimized hitting-set coverage: 128, 256, or dynamic")
-set_property(CACHE PURE_HITSET_VARIANT PROPERTY STRINGS 128 256 dynamic)
-
-# C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Default to Release
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif()
 
-# Compiler flags per build type
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0 -Wall")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-
-# Include directories
-include_directories(inc)
-
-set(BK_CORE_SOURCES
-    src/common.cpp
+add_library(reorder_core STATIC
     src/fast_plex3.cpp
     src/graph.cpp
     src/helpers.cpp
-    src/rmce_reduction.cpp
 )
+target_include_directories(reorder_core PUBLIC inc)
 
-add_library(bk_core STATIC ${BK_CORE_SOURCES})
-if(PURE_HITSET_VARIANT STREQUAL "dynamic")
-    target_compile_definitions(bk_core PUBLIC PURE_HITSET_DYNAMIC=1)
-elseif(PURE_HITSET_VARIANT STREQUAL "128")
-    target_compile_definitions(bk_core PUBLIC PURE_HITSET_CAPACITY=128)
-elseif(PURE_HITSET_VARIANT STREQUAL "256")
-    target_compile_definitions(bk_core PUBLIC PURE_HITSET_CAPACITY=256)
-else()
-    message(FATAL_ERROR
-        "PURE_HITSET_VARIANT must be one of: 128, 256, dynamic")
-endif()
-add_executable(bk_algorithm main.cpp)
-target_link_libraries(bk_algorithm PRIVATE bk_core)
+add_executable(adaptive_bk main.cpp)
+target_link_libraries(adaptive_bk PRIVATE reorder_core)
 
-if(REORDERSIB_PROFILING)
-    target_compile_definitions(bk_core PRIVATE PROFILING=1)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(reorder_core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(adaptive_bk PRIVATE -Wall -Wextra -Wpedantic)
 endif()

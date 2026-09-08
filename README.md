@@ -1,22 +1,23 @@
-# PivotBK and Pure ReorderSib
+# AdaptiveBK / ReorderSib
 
-This repository provides two maximal-clique enumeration modes:
+This repository contains an exact maximal-clique enumerator based on the
+optimized ReorderSib worklist algorithm. The implementation uses the final
+portable configuration selected by the optimization study; experimental,
+ablation, profiling, and PGO build paths are intentionally excluded.
 
-- mode `0`: PivotBK, the conventional pivoting baseline;
-- mode `1`: Pure ReorderSib, the optimized exact worklist implementation used
-  by the comparison benchmark.
+The search combines:
 
-It also includes an independent paper-faithful HBBMC++ implementation used as
-the reference.
+- ascending degeneracy reordering and CSR adjacency storage;
+- exact sibling generation through a fixed 128-constraint hitting-set solver;
+- a bounded seed solver with exact PXR fallback;
+- complete-P, complement-matching, and complement-degree-two terminals;
+- compact clique storage and exact duplicate detection; and
+- specialized small-branch enumeration for up to four expansion vertices.
 
 ## Requirements
 
-- A C++17 compiler
 - CMake 3.16 or newer
-- Linux/Ubuntu with GNU `time`, `timeout`, `sha256sum`, and `strip` for the
-  comparison benchmark
-
-All commands below are run from the repository root.
+- a C++17 compiler
 
 ## Build
 
@@ -25,12 +26,14 @@ cmake -S our -B our/build -DCMAKE_BUILD_TYPE=Release
 cmake --build our/build --parallel
 ```
 
-This creates `our/build/bk_algorithm`.
+The executable is `our/build/adaptive_bk`.
 
 ## Input format
 
-The main executable expects an adjacency list. The first line is `n m`; each
-following line starts with a vertex ID and lists its neighbors:
+Input is a symmetric adjacency list. The first line is `n m`, where `n` is the
+number of vertices and `m` is the number of undirected edges. It is followed by
+exactly `n` rows in vertex order. Each row begins with its vertex ID and then
+lists its neighbors:
 
 ```text
 4 4
@@ -40,118 +43,69 @@ following line starts with a vertex ID and lists its neighbors:
 3 0 2
 ```
 
-Vertex IDs must be in `0..n-1`. Each undirected edge must appear in both
-vertices' adjacency lists, while `m` counts each edge once.
+Vertex IDs must be in `0..n-1`, self-loops are rejected, every undirected edge
+must occur in both adjacency rows, and the header counts each edge once.
 
-## Run mode 0: PivotBK
-
-```bash
-./our/build/bk_algorithm PATH/TO/GRAPH 0 0
-```
-
-The final method argument is required by the common CLI but is ignored by
-PivotBK. Both algorithms always use ascending degeneracy order. The optional
-next argument sets the minimum reported clique size:
+## Run
 
 ```bash
-# Include singleton and two-vertex maximal cliques.
-./our/build/bk_algorithm PATH/TO/GRAPH 0 0 1
-
-# Report only maximal cliques of size at least four.
-./our/build/bk_algorithm PATH/TO/GRAPH 0 0 4
+./our/build/adaptive_bk PATH/TO/GRAPH
 ```
 
-The default minimum clique size is `3`.
-
-## Run mode 1: Pure ReorderSib
-
-The complete command is:
-
-```bash
-./our/build/bk_algorithm GRAPH MODE METHOD \
-  [hitSetLimit] \
-  [prune1] [prune2] \
-  [sp1] [sp2] [sp3] [sp4] [sp5] [sp6] \
-  [minCliqueSize]
-```
-
-The standard optimized configuration is:
-
-```bash
-cmake -S our -B our/build \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DREORDERSIB_PROFILING=OFF \
-  -DPURE_HITSET_VARIANT=128
-cmake --build our/build --parallel
-
-PURE_HITSET_BUDGET=10000 \
-  ./our/build/bk_algorithm PATH/TO/GRAPH \
-  1 1 4294967295 1 1 1 1 1 1 1 1 3
-```
-
-This selects optimized exact hitting-set search with the fixed ascending
-degeneracy order, all solver flags, minimum clique size three, a 128-entry
-hitting-set build, and a 10,000-work solver budget. The Pure exact lane retains
-the legacy pruning-flag positions for command compatibility; `sp1`, `sp2`, and
-`sp3` control its hitting-set solver.
-
-Use a final value of `1` to include singleton and two-vertex maximal cliques.
-Set `PURE_RMCE=1` to enable optional RMCE preprocessing.
-
-## Run the paper-faithful HBBMC++ reference directly
-
-The reference accepts a whitespace-separated undirected edge list with one
-edge `u v` per line:
-
-```bash
-cmake -S compare/HBBMCPaperFaithful \
-  -B compare/HBBMCPaperFaithful/build \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build compare/HBBMCPaperFaithful/build --parallel
-
-./compare/HBBMCPaperFaithful/build/hbbmc_faithful PATH/TO/EDGES \
-  --graph-reduction rmce \
-  --et 3 \
-  --num-vertices N \
-  --min-clique-size 3
-```
-
-Replace `N` with the graph's vertex count. `--num-vertices N` preserves
-isolated vertices whose labels do not occur in the edge list.
-
-## Run Pure ReorderSib vs. the paper-faithful reference
-
-The benchmark requires paired versions of each dataset:
+The default configuration reports maximal cliques of size at least three and
+uses a seed-solver work budget of 1,000.
 
 ```text
-DATA_ROOT/
-├── hbbmc/   # edge-list files: NAME.edges or NAME.txt.clean
-└── pure/   # adjacency-list files: NAME.graph or NAME.txt
+Usage: adaptive_bk GRAPH [options]
+
+  --budget N|unlimited  Compatibility-work budget per seed solver call
+  --min-clique-size N   Output threshold (default: 3)
+  --print-cliques       Print canonical original vertex IDs
+  -h, --help            Show help
 ```
 
-Run the comparison on Linux/Ubuntu:
+Use `--min-clique-size 1` for conventional maximal-clique enumeration,
+including maximal singleton and two-vertex cliques. The output includes the
+exact clique count, stored count, selected threshold and budget, and algorithm
+runtime in milliseconds. With `--print-cliques`, each result is emitted as a
+sorted line beginning with `clique`.
+
+## Reference comparison
+
+`compare/HBBMCPaperFaithful` contains the independent HBBMC++ reference used
+for correctness and runtime comparisons. Given paired HBBMC edge-list and
+AdaptiveBK adjacency-list inputs, run:
 
 ```bash
 bash scripts/run_benchmark.sh DATA_ROOT [RESULT_ROOT]
 ```
 
-For example:
+Expected input layout:
 
-```bash
-COMPARE_DATASETS="dblp,youtube" \
-COMPARE_TIMEOUT_SECONDS=1200 \
-  bash scripts/run_benchmark.sh \
-  /data/labdata/wajid/hbbmcData results/reference_run
+```text
+DATA_ROOT/
+├── hbbmc/  # NAME.edges or NAME.txt.clean
+└── pure/   # NAME.graph or NAME.txt
 ```
 
-If `RESULT_ROOT` is omitted, the script creates a timestamped directory under
-`results/`. It contains `runs.csv`, `comparison.csv`, and `environment.txt`.
-Build logs, commands, stdout/stderr, and resource measurements are written to
-`logs/` unless `COMPARE_LOG_DIR` overrides that location. Reusing an explicit
-result directory resumes a partial campaign and skips recorded rows.
+Run `bash scripts/run_benchmark.sh --help` for available controls. Results,
+commands, logs, clique-count checks, and resource measurements are retained in
+the selected result directory.
 
-Show every benchmark option without starting a run:
+## Source layout
 
-```bash
-bash scripts/run_benchmark.sh --help
+```text
+our/
+├── CMakeLists.txt
+├── main.cpp
+├── inc/
+└── src/
 ```
+
+The production implementation has one supported algorithm configuration. It
+does not contain runtime ablation switches, optional RMCE preprocessing,
+profiling counters, or compiler profile-generation flags.
+
+## License
+
+See [LICENSE](LICENSE).

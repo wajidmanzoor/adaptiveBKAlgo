@@ -1,6 +1,10 @@
 # Prerequisites
 *.d
 
+# OS and editor metadata
+.DS_Store
+.vscode/
+
 # Compiled Object files
 *.slo
 *.lo
@@ -46,6 +50,7 @@ data/real/patent_q
 # In-tree CMake build directories
 our/build/
 compare/HBBMCPaperFaithful/build/
+**/build/
 
 # Benchmark run outputs
 results/*

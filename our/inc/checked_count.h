@@ -29,10 +29,3 @@ inline void addCliqueCountOrThrow(ull &count, ull increment) {
         "maximal-clique count exceeds the uint64_t output range");
   count = sum;
 }
-
-inline void incrementSearchStateOrThrow(ull &count) {
-  if (count == std::numeric_limits<ull>::max())
-    throw std::overflow_error(
-        "recursive search-state count exceeds the uint64_t range");
-  ++count;
-}

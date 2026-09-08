@@ -8,15 +8,15 @@ Usage: ./run_benchmark.sh [DATA_ROOT [RESULT_ROOT]]
 
 Build the current repository and compare:
   - independent paper-faithful HBBMC++ (RMCE + ET(3)); and
-  - Pure ReorderSib 128+PXR+ET with a 10,000-work solver budget.
+  - AdaptiveBK/ReorderSib with its default 1,000-work solver budget.
 
 Defaults:
   DATA_ROOT    /data/labdata/wajid/hbbmcData
-  RESULT_ROOT  REPO_ROOT/results/pure_128_pxr_et_budget10k_vs_hbbmc_faithful_TIMESTAMP
+  RESULT_ROOT  REPO_ROOT/results/adaptive_bk_vs_hbbmc_faithful_TIMESTAMP
   timeout      600 seconds per algorithm/dataset run
 
 Builds (Release, stripped, in-tree — Linux/Ubuntu toolchain required):
-  our/build/bk_algorithm
+  our/build/adaptive_bk
   compare/HBBMCPaperFaithful/build/hbbmc_faithful
 
 Environment overrides:
@@ -43,7 +43,7 @@ repo_root=$(cd "$script_dir/.." && pwd)
 invocation_dir=$(pwd)
 data_root=${1:-/data/labdata/wajid/hbbmcData}
 timestamp=$(date +%Y%m%d_%H%M%S)
-result_root=${2:-"$repo_root/results/pure_128_pxr_et_budget10k_vs_hbbmc_faithful_$timestamp"}
+result_root=${2:-"$repo_root/results/adaptive_bk_vs_hbbmc_faithful_$timestamp"}
 log_root=${COMPARE_LOG_DIR:-"$repo_root/logs"}
 timeout_seconds=${COMPARE_TIMEOUT_SECONDS:-600}
 build_jobs=${COMPARE_BUILD_JOBS:-}
@@ -117,12 +117,11 @@ build_target() {
   strip --strip-unneeded "$target_build_dir/$binary_name"
 }
 
-build_target pure "$repo_root/our" bk_algorithm \
-  -DREORDERSIB_PROFILING=OFF -DPURE_HITSET_VARIANT=128 || exit 2
+build_target adaptive_bk "$repo_root/our" adaptive_bk || exit 2
 build_target hbbmc_faithful "$repo_root/compare/HBBMCPaperFaithful" \
   hbbmc_faithful || exit 2
 
-pure_binary="$repo_root/our/build/bk_algorithm"
+pure_binary="$repo_root/our/build/adaptive_bk"
 hbbmc_binary="$repo_root/compare/HBBMCPaperFaithful/build/hbbmc_faithful"
 runs_csv="$result_root/runs.csv"
 comparison_csv="$result_root/comparison.csv"
@@ -139,7 +138,7 @@ if [[ ! -f $comparison_csv ]]; then
 fi
 
 {
-  echo "campaign=Pure ReorderSib 128+PXR+ET+budget10000 versus paper-faithful HBBMC++"
+  echo "campaign=AdaptiveBK/ReorderSib versus paper-faithful HBBMC++"
   echo "repository=$repo_root"
   echo "data_root=$data_root"
   echo "result_root=$result_root"
@@ -147,8 +146,8 @@ fi
   echo "minimum_clique_size=3"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "pure_command=PURE_HITSET_BUDGET=10000 bk_algorithm GRAPH 1 1 4294967295 1 1 1 1 1 1 1 1 3"
-  echo "pure_configuration=capacity128,mode1,ascending-degeneracy,optimized,PXR+ET,minCliqueSize3,budget10000"
+  echo "pure_command=adaptive_bk GRAPH --budget 1000 --min-clique-size 3"
+  echo "pure_configuration=capacity128,ascending-degeneracy,optimized,PXR+ET,minCliqueSize3,budget1000"
   echo "hbbmc_command=hbbmc_faithful GRAPH --graph-reduction rmce --et 3 --num-vertices N --min-clique-size 3"
   sha256sum "$pure_binary" "$hbbmc_binary"
   uname -a
@@ -253,13 +252,9 @@ run_one() {
 
   total_cliques=""
   algorithm_time_ms=""
-  if [[ $variant == pure_128_pxr_et_budget10k ]]; then
-    local summary
-    summary=$(sed -n '/^PureReorderSib:/p' "$stdout_file" | tail -1)
-    total_cliques=$(sed -n \
-      's/.*cliques=\([0-9][0-9]*\).*/\1/p' <<<"$summary")
-    algorithm_time_ms=$(sed -n \
-      's/.*time=\([0-9][0-9.]*\) ms.*/\1/p' <<<"$summary")
+  if [[ $variant == adaptive_bk ]]; then
+    total_cliques=$(sed -n 's/^reorder\.cliques=//p' "$stdout_file" | tail -1)
+    algorithm_time_ms=$(sed -n 's/^reorder\.runtime_ms=//p' "$stdout_file" | tail -1)
   else
     total_cliques=$(sed -n 's/^maximal_cliques=//p' "$stdout_file" | tail -1)
     algorithm_time_ms=$(sed -n 's/^algorithm_runtime_ms=//p' "$stdout_file" | tail -1)
@@ -293,10 +288,10 @@ append_comparison() {
   h_count=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 7)
   h_wall=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 8)
   h_algorithm=$(csv_field hbbmc_paper_faithful_rmce_et3 "$dataset" 10)
-  r_status=$(csv_field pure_128_pxr_et_budget10k "$dataset" 5)
-  r_count=$(csv_field pure_128_pxr_et_budget10k "$dataset" 7)
-  r_wall=$(csv_field pure_128_pxr_et_budget10k "$dataset" 8)
-  r_algorithm=$(csv_field pure_128_pxr_et_budget10k "$dataset" 10)
+  r_status=$(csv_field adaptive_bk "$dataset" 5)
+  r_count=$(csv_field adaptive_bk "$dataset" 7)
+  r_wall=$(csv_field adaptive_bk "$dataset" 8)
+  r_algorithm=$(csv_field adaptive_bk "$dataset" 10)
 
   count_match=NA
   if [[ $h_status == completed && $r_status == completed &&
@@ -357,11 +352,9 @@ while IFS= read -r hbbmc_input; do
     "$hbbmc_binary" "$hbbmc_input" \
     --graph-reduction rmce --et 3 --num-vertices "$n" --min-clique-size 3
 
-  run_one pure_128_pxr_et_budget10k "$dataset" "$n" "$m" "$pure_input" \
-    env -u VLDB_VALIDATION -u VLDB_PRINT_CLIQUES \
-    OMP_NUM_THREADS=1 PURE_HITSET_BUDGET=10000 \
-    "$pure_binary" "$pure_input" \
-    1 1 4294967295 1 1 1 1 1 1 1 1 3
+  run_one adaptive_bk "$dataset" "$n" "$m" "$pure_input" \
+    env OMP_NUM_THREADS=1 \
+    "$pure_binary" "$pure_input" --budget 1000 --min-clique-size 3
 
   append_comparison "$dataset" "$n" "$m"
 done < <(find "$data_root/hbbmc" -maxdepth 1 -type f -print | LC_ALL=C sort)
