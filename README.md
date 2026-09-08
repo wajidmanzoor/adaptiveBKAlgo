@@ -1,9 +1,9 @@
 # AdaptiveBK / ReorderSib
 
 This repository contains an exact maximal-clique enumerator based on the
-optimized ReorderSib worklist algorithm. The implementation uses the final
-portable configuration selected by the optimization study; experimental,
-ablation, profiling, and PGO build paths are intentionally excluded.
+optimized ReorderSib worklist algorithm. `our/` remains the clean production
+implementation. This branch adds only the keep-one pruning ablation under
+`ablation/pruning_keep_one/`, isolated from `our/`.
 
 The search combines:
 
@@ -92,6 +92,16 @@ Run `bash scripts/run_benchmark.sh --help` for available controls. Results,
 commands, logs, clique-count checks, and resource measurements are retained in
 the selected result directory.
 
+## Keep-one pruning ablation
+
+See the [keep-one pruning guide](ablation/README.md). The runner builds an
+all-rules reference and seven variants that each retain exactly one pruning
+rule while disabling the other six.
+
+```bash
+./ablation/pruning_keep_one/run.sh DATA_ROOT [RESULT_ROOT]
+```
+
 ## Source layout
 
 ```text
@@ -100,11 +110,13 @@ our/
 ├── main.cpp
 ├── inc/
 └── src/
+ablation/
+└── pruning_keep_one/
 ```
 
-The production implementation has one supported algorithm configuration. It
-does not contain runtime ablation switches, optional RMCE preprocessing,
-profiling counters, or compiler profile-generation flags.
+The production implementation has one supported algorithm configuration. The
+study switches and diagnostics are confined to `ablation/pruning_keep_one/`;
+compiler profile-generation flags are not included.
 
 ## License
 
