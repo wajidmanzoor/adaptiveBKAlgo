@@ -10,8 +10,12 @@ using pure_config::kEt1Enabled;
 using pure_config::kEt2Enabled;
 using pure_config::kEt3Enabled;
 using pure_config::kAdjHashThreshold;
+using pure_config::kAdaptiveDirectMinCliquesPerRootDenominator;
+using pure_config::kAdaptiveDirectQThreshold;
+using pure_config::kAdaptiveDirectWarmupRoots;
+using pure_config::kCoverCollectionCutoff;
 using pure_config::kHitsetCapacity;
-using pure_config::kSmallQFullPxrThreshold;
+using pure_config::kSmallQCcrThreshold;
 using pure_config::kPruneAntichain;
 using pure_config::kPruneFailFirst;
 using pure_config::kPruneNormalization;
@@ -21,6 +25,14 @@ using pure_config::kPruneUsefulness;
 using pure_config::kPruneZeroCoverage;
 
 constexpr size_t kBinaryIntersectionRatio = 16;
+
+void addCcrMetric(ull &metric, ull increment) {
+  ull updated = 0;
+  if (!tryAddUll(metric, increment, updated))
+    throw overflow_error("CCRMCE experiment metric exceeds uint64_t");
+  metric = updated;
+}
+
 } // namespace
 
 // Returns peelSeq index of verticies by core value
@@ -116,6 +128,13 @@ ReorderSib::ReorderSib(Graph &g, ui minCliqueSize)
   cliqueCount = 0;
   solverWorkBudget = 0;
   solverWorkBudgetEnabled = false;
+  ccrFindOneCalls = 0;
+  ccrFullCalls = 0;
+  ccrFindOneStates = 0;
+  ccrFullStates = 0;
+  ccrCoreExtractions = 0;
+  ccrCoreVertices = 0;
+  ccrResidualVertices = 0;
 
   cliqueIdsByVertex.resize(n);
 
@@ -146,6 +165,9 @@ ReorderSib::ReorderSib(Graph &g, ui minCliqueSize)
   eIndex.assign(n, 0);
   eIndexStamp.assign(n, 0);
   eIndexToken = 0;
+  ccrIndex.assign(n, 0);
+  ccrIndexStamp.assign(n, 0);
+  ccrIndexToken = 0;
 }
 
 void ReorderSib::intersectInto(vector<ui> &out, const vector<ui> &A,
@@ -490,11 +512,14 @@ void ReorderSib::commonExpandInto(vector<ui> &out, const vector<ui> &E,
 
 // Proof-faithful cover lookup for Pure-ReorderSib. Every emitted clique
 // containing M must be visible before FindOne may run, so no recent-level or
-// weak-cover filters are applied here.
-vector<ui> ReorderSib::collectAllCoveringCliques(const vector<ui> &M) {
-  vector<ui> result;
+// weak-cover filters are applied here. Large exact constraint sets commonly
+// end in the direct-CCRMCE fallback anyway. Stop once the configured cutoff is
+// exceeded and let the caller take the same exact fallback immediately.
+bool ReorderSib::collectAllCoveringCliques(const vector<ui> &M,
+                                           vector<ui> &result) {
+  result.clear();
   if (M.empty())
-    return result;
+    return true;
 
   ui seed = M[0];
   for (ui v : M)
@@ -502,12 +527,24 @@ vector<ui> ReorderSib::collectAllCoveringCliques(const vector<ui> &M) {
       seed = v;
 
   const auto &posting = cliqueIdsByVertex[seed];
-  result.reserve(posting.size());
-  for (ui cliqueId : posting) {
-    if (storedCliqueContains(cliqueId, M))
-      result.push_back(cliqueId);
+  const size_t neededCapacity = min(
+      posting.size(), static_cast<size_t>(kCoverCollectionCutoff) + 1);
+  if (result.capacity() < neededCapacity)
+    result.reserve(neededCapacity);
+  if (posting.size() <= kCoverCollectionCutoff) {
+    for (ui cliqueId : posting)
+      if (storedCliqueContains(cliqueId, M))
+        result.push_back(cliqueId);
+    return true;
   }
-  return result;
+  for (ui cliqueId : posting) {
+    if (storedCliqueContains(cliqueId, M)) {
+      if (result.size() == kCoverCollectionCutoff)
+        return false;
+      result.push_back(cliqueId);
+    }
+  }
+  return true;
 }
 
 // Each covering clique C contributes the constraint "pick something from E
@@ -1545,155 +1582,887 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
   return result;
 }
 
-ui ReorderSib::pureNeighborsInP(ui u, const vector<ui> &P) const {
-  ui score = 0;
-  const AdjacencyRow row = adjacentVertices(u);
-  // A short contiguous CSR scan is cheaper than one hash/binary lookup per P
-  // vertex even when the row is moderately larger than P.
-  if (row.size() <= P.size() * 32) {
-    for (ui v : row)
-      score += eIndexStamp[v] == eIndexToken;
-  } else {
-    for (ui v : P)
-      score += adj(u, v);
-  }
-  return score;
+namespace {
+
+ui ccrBitCount(const vector<ull> &bits) {
+  ull count = 0;
+  for (ull word : bits)
+    count += static_cast<ull>(__builtin_popcountll(word));
+  if (count > numeric_limits<ui>::max())
+    throw overflow_error("CCRMCE local set exceeds uint32_t");
+  return static_cast<ui>(count);
 }
 
-void ReorderSib::scanPurePXRState(
-    const vector<ui> &P, const vector<ui> &X, ui &pivot, ui &minPScore,
-    ui &universalP, bool &xUniversal) {
-  const ui pSize = static_cast<ui>(P.size());
-  if (++eIndexToken == 0) {
-    fill(eIndexStamp.begin(), eIndexStamp.end(), 0);
-    eIndexToken = 1;
-  }
-  for (ui v : P)
-    eIndexStamp[v] = eIndexToken;
-
-  pivot = P.front();
-  minPScore = pSize;
-  universalP = numeric_limits<ui>::max();
-  xUniversal = false;
-  int bestScore = -1;
-
-  for (ui u : P) {
-    const ui score = pureNeighborsInP(u, P);
-    minPScore = min(minPScore, score);
-    if (score + 1 == pSize && universalP == numeric_limits<ui>::max())
-      universalP = u;
-    if (static_cast<int>(score) > bestScore) {
-      bestScore = static_cast<int>(score);
-      pivot = u;
-    }
-  }
-  for (ui u : X) {
-    const ui score = pureNeighborsInP(u, P);
-    xUniversal = xUniversal || score == pSize;
-    if (static_cast<int>(score) > bestScore) {
-      bestScore = static_cast<int>(score);
-      pivot = u;
-    }
-  }
+bool ccrBitIsSet(const vector<ull> &bits, ui vertex) {
+  return (bits[vertex >> 6] & (1ULL << (vertex & 63))) != 0;
 }
 
-void ReorderSib::pureMatchingParts(
-    const vector<ui> &P, vector<ui> &forced,
-    vector<pair<ui, ui>> &missingEdges) const {
-  forced.clear();
-  missingEdges.clear();
-  vector<char> paired(P.size(), 0);
-  for (size_t i = 0; i < P.size(); ++i) {
-    if (paired[i])
+void ccrSetBit(vector<ull> &bits, ui vertex) {
+  bits[vertex >> 6] |= 1ULL << (vertex & 63);
+}
+
+void ccrClearBit(vector<ull> &bits, ui vertex) {
+  bits[vertex >> 6] &= ~(1ULL << (vertex & 63));
+}
+
+ui ccrFirstBit(const vector<ull> &bits) {
+  for (size_t wordIndex = 0; wordIndex < bits.size(); ++wordIndex) {
+    if (bits[wordIndex] == 0)
       continue;
-    size_t mate = P.size();
-    for (size_t j = i + 1; j < P.size(); ++j) {
-      if (!paired[j] && !adj(P[i], P[j])) {
-        mate = j;
-        break;
-      }
-    }
-    if (mate == P.size()) {
-      forced.push_back(P[i]);
-    } else {
-      paired[i] = paired[mate] = 1;
-      missingEdges.emplace_back(P[i], P[mate]);
+    return static_cast<ui>(
+        wordIndex * 64 + __builtin_ctzll(bits[wordIndex]));
+  }
+  throw logic_error("CCRMCE requested a vertex from an empty set");
+}
+
+template <typename Visitor>
+void ccrForEachBit(const vector<ull> &bits, Visitor &&visit) {
+  for (size_t wordIndex = 0; wordIndex < bits.size(); ++wordIndex) {
+    ull word = bits[wordIndex];
+    while (word != 0) {
+      const unsigned bit = static_cast<unsigned>(__builtin_ctzll(word));
+      visit(static_cast<ui>(wordIndex * 64 + bit));
+      word &= word - 1;
     }
   }
 }
 
-// Exact constant-size kernel for a formal branch B=(M,Q), |Q| <= 4.  It
-// enumerates every clique-compatible subset of Q and accepts it only when no
-// graph vertex extends M union S.  This is the same global maximality
-// condition enforced by the X set in ordinary PXR, without constructing P/X
-// child vectors and recursive frames for at most sixteen possibilities.
-void ReorderSib::enumerateSmallPureBranch(const vector<ui> &M,
-                                          const vector<ui> &Q) {
-  if (M.empty() || Q.size() > 4)
-    throw logic_error("small Pure branch kernel received invalid dimensions");
+} // namespace
 
-  const AdjacencyRow firstRow = adjacentVertices(M[0]);
-  vector<ui> common(firstRow.begin(), firstRow.end());
-  vector<ui> scratch;
-  for (size_t i = 1; i < M.size() && !common.empty(); ++i) {
-    intersectInto(scratch, common, adjacentVertices(M[i]));
-    common.swap(scratch);
-  }
+// One-word CCRMCE for the high-frequency Q<=64 route. External X stays lazy:
+// maximality normally rejects after very few adjacency tests, which is
+// cheaper here than materializing every X-by-Q relation.
+bool ReorderSib::runSmallCcrBranch(const vector<ui> &M,
+                                   const vector<ui> &Q,
+                                   const vector<ui> &common,
+                                   vector<ui> *found) {
+  if (Q.size() > kSmallQCcrThreshold)
+    throw logic_error("one-word CCRMCE received too many candidates");
+  addCcrMetric(ccrCoreExtractions, 1);
 
-  const unsigned subsetCount = 1U << static_cast<unsigned>(Q.size());
-  vector<ui> selected;
-  vector<ui> clique;
-  selected.reserve(Q.size());
-  clique.reserve(M.size() + Q.size());
-  for (unsigned mask = 0; mask < subsetCount; ++mask) {
-    const size_t selectedCount =
-        static_cast<size_t>(__builtin_popcount(mask));
-    if (M.size() + selectedCount < minCliqueSize)
-      continue;
-
-    selected.clear();
-    bool isClique = true;
-    for (size_t i = 0; i < Q.size() && isClique; ++i) {
-      if ((mask & (1U << i)) == 0)
+  const ui qSize = static_cast<ui>(Q.size());
+  const ull universe = qSize == 64 ? ~0ULL
+                                   : (qSize == 0 ? 0ULL
+                                                 : (1ULL << qSize) - 1ULL);
+  array<ull, 64> qAdj{};
+  for (ui left = 0; left < qSize; ++left) {
+    for (ui right = left + 1; right < qSize; ++right) {
+      if (!adj(Q[left], Q[right]))
         continue;
-      for (ui chosen : selected) {
-        if (!adj(chosen, Q[i])) {
-          isClique = false;
-          break;
-        }
-      }
-      selected.push_back(Q[i]);
+      qAdj[left] |= 1ULL << right;
+      qAdj[right] |= 1ULL << left;
     }
-    if (!isClique)
-      continue;
+  }
 
-    bool hasExtension = false;
-    for (ui candidate : common) {
-      bool extends = true;
-      for (ui chosen : selected) {
-        if (!adj(candidate, chosen)) {
-          extends = false;
+  ull core = universe;
+  ull residual = 0;
+  ui coreCount = qSize;
+  ui residualCount = 0;
+  ull directedEdges = 0;
+  for (ui local = 0; local < qSize; ++local)
+    directedEdges += static_cast<ull>(
+        __builtin_popcountll(qAdj[local] & core));
+
+  while (coreCount > 1 &&
+         directedEdges !=
+             static_cast<ull>(coreCount) * (coreCount - 1)) {
+    ui removed = numeric_limits<ui>::max();
+    ui minimumDegree = numeric_limits<ui>::max();
+    ull candidates = core;
+    while (candidates != 0) {
+      const ui local =
+          static_cast<ui>(__builtin_ctzll(candidates));
+      const ui degree = static_cast<ui>(
+          __builtin_popcountll(qAdj[local] & core));
+      if (degree < minimumDegree ||
+          (degree == minimumDegree &&
+           (removed == numeric_limits<ui>::max() ||
+            Q[local] < Q[removed]))) {
+        removed = local;
+        minimumDegree = degree;
+      }
+      candidates &= candidates - 1;
+    }
+    directedEdges -= static_cast<ull>(minimumDegree) * 2;
+    core &= ~(1ULL << removed);
+    residual |= 1ULL << removed;
+    --coreCount;
+    ++residualCount;
+  }
+  addCcrMetric(ccrCoreVertices, coreCount);
+  addCcrMetric(ccrResidualVertices, residualCount);
+
+  const bool stopAfterOne = found != nullptr;
+  auto recurse = [&](auto &&self, ull currentCore,
+                     ull currentResidual, ull excluded,
+                     ull selected, bool fromP) -> bool {
+    if (stopAfterOne)
+      addCcrMetric(ccrFindOneStates, 1);
+    else
+      addCcrMetric(ccrFullStates, 1);
+
+    const size_t maximumSize =
+        M.size() + static_cast<size_t>(__builtin_popcountll(
+                       selected | currentCore | currentResidual));
+    if (maximumSize < minCliqueSize)
+      return false;
+
+    // C vertices adjacent to all of P and P vertices adjacent to all of
+    // C union P occur in every maximal extension. Move them directly to R.
+    // Filtering X by the forced vertices preserves the usual BK invariant.
+    ull forcedCore = 0;
+    ull candidates = currentCore;
+    while (candidates != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(candidates));
+      const ull bit = 1ULL << local;
+      if ((currentResidual & ~qAdj[local] & universe) == 0)
+        forcedCore |= bit;
+      candidates &= candidates - 1;
+    }
+    ull forcedResidual = 0;
+    const ull active = currentCore | currentResidual;
+    candidates = currentResidual;
+    while (candidates != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(candidates));
+      const ull bit = 1ULL << local;
+      if (((active & ~qAdj[local] & universe) & ~bit) == 0)
+        forcedResidual |= bit;
+      candidates &= candidates - 1;
+    }
+    ull forced = forcedCore | forcedResidual;
+    if (forced != 0) {
+      currentCore &= ~forcedCore;
+      currentResidual &= ~forcedResidual;
+      selected |= forced;
+      if (forcedResidual != 0)
+        fromP = true;
+      while (forced != 0) {
+        const ui local = static_cast<ui>(__builtin_ctzll(forced));
+        excluded &= qAdj[local];
+        forced &= forced - 1;
+      }
+    }
+
+    bool maximal = fromP &&
+                   M.size() + static_cast<size_t>(__builtin_popcountll(
+                                  selected | currentCore)) >=
+                       minCliqueSize;
+    auto localExtendsCore = [&](ui local) {
+      return (currentCore & ~qAdj[local]) == 0;
+    };
+    if (maximal) {
+      ull blockers = currentResidual | excluded;
+      while (blockers != 0) {
+        const ui local =
+            static_cast<ui>(__builtin_ctzll(blockers));
+        if (localExtendsCore(local)) {
+          maximal = false;
+          break;
+        }
+        blockers &= blockers - 1;
+      }
+    }
+    if (maximal) {
+      const ull represented = selected | currentCore;
+      for (ui x : common) {
+        bool extends = true;
+        ull required = represented;
+        while (required != 0) {
+          const ui local =
+              static_cast<ui>(__builtin_ctzll(required));
+          if (!adj(x, Q[local])) {
+            extends = false;
+            break;
+          }
+          required &= required - 1;
+        }
+        if (extends) {
+          maximal = false;
           break;
         }
       }
-      if (extends) {
-        hasExtension = true;
+    }
+
+    if (maximal) {
+      vector<ui> clique = M;
+      ull extension = selected | currentCore;
+      while (extension != 0) {
+        const ui local =
+            static_cast<ui>(__builtin_ctzll(extension));
+        clique.push_back(Q[local]);
+        extension &= extension - 1;
+      }
+      if (stopAfterOne) {
+        *found = std::move(clique);
+        sort(found->begin(), found->end());
+        return true;
+      }
+      recordPureClique(std::move(clique));
+    }
+    if (currentResidual == 0)
+      return false;
+
+    // An excluded vertex with no P neighbor cannot survive any descendant,
+    // because every descendant adds a vertex from P.
+    ull excludedToCheck = excluded;
+    while (excludedToCheck != 0) {
+      const ui local =
+          static_cast<ui>(__builtin_ctzll(excludedToCheck));
+      const ull bit = 1ULL << local;
+      if ((qAdj[local] & currentResidual) == 0)
+        excluded &= ~bit;
+      excludedToCheck &= excludedToCheck - 1;
+    }
+
+    // The sole P vertex is the only possible next non-core choice. Avoid
+    // pivot selection and branch-root construction for this common terminal.
+    if ((currentResidual & (currentResidual - 1)) == 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(currentResidual));
+      const ull bit = 1ULL << local;
+      return self(self, currentCore & qAdj[local], 0,
+                  excluded & qAdj[local], selected | bit, true);
+    }
+
+    const ull pivotActive = currentCore | currentResidual;
+    bool havePivot = false;
+    ull pivotMask = 0;
+    ui pivotLabel = 0;
+    ui bestScore = 0;
+    auto consider = [&](ull mask, ui label) {
+      const ui score =
+          static_cast<ui>(__builtin_popcountll(mask & pivotActive));
+      if (!havePivot || score > bestScore ||
+          (score == bestScore && label < pivotLabel)) {
+        havePivot = true;
+        pivotMask = mask;
+        pivotLabel = label;
+        bestScore = score;
+      }
+    };
+
+    ull localPivots = pivotActive | excluded;
+    while (localPivots != 0) {
+      const ui local =
+          static_cast<ui>(__builtin_ctzll(localPivots));
+      consider(qAdj[local], Q[local]);
+      localPivots &= localPivots - 1;
+    }
+    if (!havePivot)
+      throw logic_error("small CCRMCE could not choose a pivot");
+
+    ull roots = currentResidual & ~pivotMask & universe;
+    ull coreNonNeighbors =
+        currentCore & ~pivotMask & universe;
+    while (coreNonNeighbors != 0) {
+      const ui local =
+          static_cast<ui>(__builtin_ctzll(coreNonNeighbors));
+      if ((qAdj[local] & currentResidual & pivotMask) != 0)
+        roots |= 1ULL << local;
+      coreNonNeighbors &= coreNonNeighbors - 1;
+    }
+
+    while (roots != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(roots));
+      const ull bit = 1ULL << local;
+      const bool selectedFromP = (currentResidual & bit) != 0;
+      if (self(self, currentCore & qAdj[local],
+               currentResidual & qAdj[local],
+               excluded & qAdj[local], selected | bit,
+               selectedFromP) &&
+          stopAfterOne)
+        return true;
+
+      if (selectedFromP)
+        currentResidual &= ~bit;
+      else
+        currentCore &= ~bit;
+      excluded |= bit;
+      roots &= roots - 1;
+    }
+    return false;
+  };
+
+  return recurse(recurse, core, residual, 0, 0, true);
+}
+
+// Construct one reusable local induced graph for a formal branch (M,Q).
+// Adjacency rows are dense only across Q; external X stays a compact list.
+// This is the important implementation difference from the earlier
+// correctness-first port: recursive CCRMCE states now use word operations
+// instead of rebuilding sorted C/P/X vectors and issuing graph lookups.
+void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
+                                  const vector<ui> &X,
+                                  bool materializeExternalRows) {
+  addCcrMetric(ccrCoreExtractions, 1);
+  ccrQVertices.assign(Q.begin(), Q.end());
+  ccrXVertices.assign(X.begin(), X.end());
+  const size_t qSize = ccrQVertices.size();
+  const size_t xSize = ccrXVertices.size();
+  ccrWordCount = (qSize + 63) / 64;
+  ccrExternalRowsMaterialized = materializeExternalRows;
+
+#ifndef NDEBUG
+  if (!is_sorted(Q.begin(), Q.end()) ||
+      adjacent_find(Q.begin(), Q.end()) != Q.end() ||
+      !is_sorted(X.begin(), X.end()) ||
+      adjacent_find(X.begin(), X.end()) != X.end())
+    throw logic_error("CCRMCE branch sets must be sorted and unique");
+#endif
+
+  if (++ccrIndexToken == 0) {
+    fill(ccrIndexStamp.begin(), ccrIndexStamp.end(), 0);
+    ccrIndexToken = 1;
+  }
+  for (size_t local = 0; local < qSize; ++local) {
+    const ui vertex = ccrQVertices[local];
+    ccrIndex[vertex] = static_cast<ui>(local);
+    ccrIndexStamp[vertex] = ccrIndexToken;
+  }
+
+  if (ccrExternalRowsMaterialized) {
+    if (++eIndexToken == 0) {
+      fill(eIndexStamp.begin(), eIndexStamp.end(), 0);
+      eIndexToken = 1;
+    }
+    for (size_t local = 0; local < xSize; ++local) {
+      const ui vertex = ccrXVertices[local];
+      eIndex[vertex] = static_cast<ui>(local);
+      eIndexStamp[vertex] = eIndexToken;
+    }
+  }
+
+  const size_t rowCount =
+      qSize + (ccrExternalRowsMaterialized ? xSize : 0);
+  if (ccrWordCount != 0 &&
+      rowCount > numeric_limits<size_t>::max() / ccrWordCount)
+    throw length_error("CCRMCE local adjacency dimensions overflow");
+  ccrNeighborBits.assign(rowCount * ccrWordCount, 0);
+
+  ull scanWork = 0;
+  for (ui vertex : ccrQVertices)
+    scanWork += static_cast<ull>(adjacentVertices(vertex).size());
+  ull pairWork = static_cast<ull>(qSize) *
+                 static_cast<ull>(qSize > 0 ? qSize - 1 : 0) / 2;
+  if (ccrExternalRowsMaterialized)
+    pairWork += static_cast<ull>(qSize) * xSize;
+  constexpr ull kAdjacencyLookupWeight = 8;
+  const ull lookupEquivalentScanWork =
+      scanWork / kAdjacencyLookupWeight +
+      static_cast<ull>(scanWork % kAdjacencyLookupWeight != 0);
+  const bool scanRows =
+      pairWork == 0 || lookupEquivalentScanWork <= pairWork;
+
+  if (scanRows) {
+    for (size_t local = 0; local < qSize; ++local) {
+      ull *qRow = ccrNeighborBits.data() + local * ccrWordCount;
+      for (ui neighbor : adjacentVertices(ccrQVertices[local])) {
+        if (ccrIndexStamp[neighbor] == ccrIndexToken) {
+          const ui qNeighbor = ccrIndex[neighbor];
+          qRow[qNeighbor >> 6] |= 1ULL << (qNeighbor & 63);
+        } else if (ccrExternalRowsMaterialized &&
+                   eIndexStamp[neighbor] == eIndexToken) {
+          const size_t xLocal = eIndex[neighbor];
+          ull *xRow = ccrNeighborBits.data() +
+                      (qSize + xLocal) * ccrWordCount;
+          xRow[local >> 6] |= 1ULL << (local & 63);
+        }
+      }
+    }
+  } else {
+    for (size_t left = 0; left < qSize; ++left) {
+      for (size_t right = left + 1; right < qSize; ++right) {
+        if (!adj(ccrQVertices[left], ccrQVertices[right]))
+          continue;
+        ull *leftRow =
+            ccrNeighborBits.data() + left * ccrWordCount;
+        ull *rightRow =
+            ccrNeighborBits.data() + right * ccrWordCount;
+        leftRow[right >> 6] |= 1ULL << (right & 63);
+        rightRow[left >> 6] |= 1ULL << (left & 63);
+      }
+    }
+    if (ccrExternalRowsMaterialized) {
+      for (size_t xLocal = 0; xLocal < xSize; ++xLocal) {
+        ull *xRow = ccrNeighborBits.data() +
+                    (qSize + xLocal) * ccrWordCount;
+        for (size_t qLocal = 0; qLocal < qSize; ++qLocal)
+          if (adj(ccrXVertices[xLocal], ccrQVertices[qLocal]))
+            xRow[qLocal >> 6] |= 1ULL << (qLocal & 63);
+      }
+    }
+  }
+
+  if (ccrStates.size() < qSize + 1)
+    ccrStates.resize(qSize + 1);
+  CcrBitState &root = ccrStates[0];
+  root.core.assign(ccrWordCount, ~0ULL);
+  if (ccrWordCount != 0 && (qSize & 63) != 0)
+    root.core.back() = (1ULL << (qSize & 63)) - 1;
+  root.residual.assign(ccrWordCount, 0);
+  root.excludedCandidates.assign(ccrWordCount, 0);
+  root.excludedExternal.resize(xSize);
+  iota(root.excludedExternal.begin(), root.excludedExternal.end(), 0);
+  root.branchRoots.clear();
+  root.coreCount = static_cast<ui>(qSize);
+  root.residualCount = 0;
+
+  if (qSize == 0) {
+    addCcrMetric(ccrCoreVertices, 0);
+    addCcrMetric(ccrResidualVertices, 0);
+    return;
+  }
+
+  // A one-word induced graph is faster to peel by scanning its active bits
+  // than by maintaining three heap vectors. This chooses the same
+  // minimum-degree vertex (including the original vertex-ID tie break), so
+  // only branch-preparation cost changes; the recursive CCRMCE state and
+  // external-X handling remain identical.
+  if (ccrWordCount == 1) {
+    ull core = root.core[0];
+    ull directedEdges = 0;
+    for (ui local = 0; local < qSize; ++local)
+      directedEdges += static_cast<ull>(__builtin_popcountll(
+          ccrNeighborBits[local] & core));
+
+    while (root.coreCount > 1 &&
+           directedEdges !=
+               static_cast<ull>(root.coreCount) * (root.coreCount - 1)) {
+      ui removed = numeric_limits<ui>::max();
+      ui minimumDegree = numeric_limits<ui>::max();
+      ull candidates = core;
+      while (candidates != 0) {
+        const ui local = static_cast<ui>(__builtin_ctzll(candidates));
+        const ui degree = static_cast<ui>(__builtin_popcountll(
+            ccrNeighborBits[local] & core));
+        if (degree < minimumDegree ||
+            (degree == minimumDegree &&
+             (removed == numeric_limits<ui>::max() ||
+              ccrQVertices[local] < ccrQVertices[removed]))) {
+          removed = local;
+          minimumDegree = degree;
+        }
+        candidates &= candidates - 1;
+      }
+      directedEdges -= static_cast<ull>(minimumDegree) * 2;
+      const ull bit = 1ULL << removed;
+      core &= ~bit;
+      root.core[0] = core;
+      root.residual[0] |= bit;
+      --root.coreCount;
+      ++root.residualCount;
+    }
+
+    addCcrMetric(ccrCoreVertices, root.coreCount);
+    addCcrMetric(ccrResidualVertices, root.residualCount);
+    return;
+  }
+
+  ccrDegree.resize(qSize);
+  ccrHeap.resize(qSize);
+  ccrHeapPosition.resize(qSize);
+  ull directedEdges = 0;
+  for (ui local = 0; local < qSize; ++local) {
+    const ull *row =
+        ccrNeighborBits.data() + static_cast<size_t>(local) * ccrWordCount;
+    ui degree = 0;
+    for (size_t word = 0; word < ccrWordCount; ++word)
+      degree += static_cast<ui>(__builtin_popcountll(row[word]));
+    ccrDegree[local] = degree;
+    ccrHeap[local] = local;
+    ccrHeapPosition[local] = local;
+    directedEdges += degree;
+  }
+
+  auto heapLess = [&](ui lhs, ui rhs) {
+    if (ccrDegree[lhs] != ccrDegree[rhs])
+      return ccrDegree[lhs] < ccrDegree[rhs];
+    return ccrQVertices[lhs] < ccrQVertices[rhs];
+  };
+  auto heapSwap = [&](size_t lhs, size_t rhs) {
+    swap(ccrHeap[lhs], ccrHeap[rhs]);
+    ccrHeapPosition[ccrHeap[lhs]] = static_cast<ui>(lhs);
+    ccrHeapPosition[ccrHeap[rhs]] = static_cast<ui>(rhs);
+  };
+  auto siftDown = [&](size_t position) {
+    while (true) {
+      const size_t left = position * 2 + 1;
+      if (left >= ccrHeap.size())
+        break;
+      size_t best = left;
+      const size_t right = left + 1;
+      if (right < ccrHeap.size() &&
+          heapLess(ccrHeap[right], ccrHeap[left]))
+        best = right;
+      if (!heapLess(ccrHeap[best], ccrHeap[position]))
+        break;
+      heapSwap(position, best);
+      position = best;
+    }
+  };
+  auto siftUp = [&](size_t position) {
+    while (position != 0) {
+      const size_t parent = (position - 1) / 2;
+      if (!heapLess(ccrHeap[position], ccrHeap[parent]))
+        break;
+      heapSwap(position, parent);
+      position = parent;
+    }
+  };
+  for (size_t position = ccrHeap.size() / 2; position-- > 0;)
+    siftDown(position);
+
+  size_t activeCount = qSize;
+  while (activeCount > 1) {
+    ull completeDirectedEdges = 0;
+    if (!tryMultiplyUll(static_cast<ull>(activeCount),
+                        static_cast<ull>(activeCount - 1),
+                        completeDirectedEdges))
+      throw overflow_error("CCRMCE core completeness test exceeds uint64_t");
+    if (directedEdges == completeDirectedEdges)
+      break;
+
+    const ui removed = ccrHeap.front();
+    heapSwap(0, ccrHeap.size() - 1);
+    ccrHeap.pop_back();
+    ccrHeapPosition[removed] = numeric_limits<ui>::max();
+    if (!ccrHeap.empty())
+      siftDown(0);
+
+    const ull removedDirectedEdges =
+        static_cast<ull>(ccrDegree[removed]) * 2;
+    if (removedDirectedEdges > directedEdges)
+      throw logic_error("CCRMCE induced edge count became inconsistent");
+    directedEdges -= removedDirectedEdges;
+    ccrClearBit(root.core, removed);
+    ccrSetBit(root.residual, removed);
+    --root.coreCount;
+    ++root.residualCount;
+    --activeCount;
+
+    const ull *row = ccrNeighborBits.data() +
+                     static_cast<size_t>(removed) * ccrWordCount;
+    for (size_t wordIndex = 0; wordIndex < ccrWordCount; ++wordIndex) {
+      ull neighbors = row[wordIndex] & root.core[wordIndex];
+      while (neighbors != 0) {
+        const unsigned bit =
+            static_cast<unsigned>(__builtin_ctzll(neighbors));
+        const ui neighbor =
+            static_cast<ui>(wordIndex * 64 + bit);
+        if (ccrDegree[neighbor] == 0)
+          throw logic_error("CCRMCE active-neighbor degree underflow");
+        --ccrDegree[neighbor];
+        siftUp(ccrHeapPosition[neighbor]);
+        neighbors &= neighbors - 1;
+      }
+    }
+  }
+
+  addCcrMetric(ccrCoreVertices, root.coreCount);
+  addCcrMetric(ccrResidualVertices, root.residualCount);
+}
+
+void ReorderSib::normalizeCcrState(vector<ui> &R, CcrBitState &state,
+                                   bool &fromP) {
+  state.branchRoots.clear();
+  state.branchRoots.reserve(
+      static_cast<size_t>(state.coreCount) + state.residualCount);
+
+  // A core vertex adjacent to every residual candidate belongs to every
+  // maximal extension of this state: C is already a clique, so omitting the
+  // vertex would leave the extension non-maximal.
+  ccrForEachBit(state.core, [&](ui local) {
+    const ull *row = ccrNeighborBits.data() +
+                     static_cast<size_t>(local) * ccrWordCount;
+    bool universal = true;
+    for (size_t word = 0; word < ccrWordCount; ++word) {
+      if ((state.residual[word] & ~row[word]) != 0) {
+        universal = false;
         break;
       }
     }
-    if (hasExtension)
-      continue;
+    if (universal)
+      state.branchRoots.push_back(local);
+  });
+  const size_t forcedCoreCount = state.branchRoots.size();
 
-    clique.assign(M.begin(), M.end());
-    clique.insert(clique.end(), selected.begin(), selected.end());
-    recordPureClique(clique);
+  // A residual vertex adjacent to all other active vertices is likewise
+  // forced. The vertex's own bit is ignored because adjacency has no loops.
+  ccrForEachBit(state.residual, [&](ui local) {
+    const ull *row = ccrNeighborBits.data() +
+                     static_cast<size_t>(local) * ccrWordCount;
+    bool universal = true;
+    for (size_t word = 0; word < ccrWordCount; ++word) {
+      ull nonNeighbors =
+          (state.core[word] | state.residual[word]) & ~row[word];
+      if (word == (local >> 6))
+        nonNeighbors &= ~(1ULL << (local & 63));
+      if (nonNeighbors != 0) {
+        universal = false;
+        break;
+      }
+    }
+    if (universal)
+      state.branchRoots.push_back(local);
+  });
+
+  if (state.branchRoots.empty())
+    return;
+
+  for (size_t index = 0; index < state.branchRoots.size(); ++index) {
+    const ui local = state.branchRoots[index];
+    if (index < forcedCoreCount) {
+      ccrClearBit(state.core, local);
+      --state.coreCount;
+    } else {
+      ccrClearBit(state.residual, local);
+      --state.residualCount;
+      fromP = true;
+    }
+    R.push_back(ccrQVertices[local]);
+
+    const ull *row = ccrNeighborBits.data() +
+                     static_cast<size_t>(local) * ccrWordCount;
+    for (size_t word = 0; word < ccrWordCount; ++word)
+      state.excludedCandidates[word] &= row[word];
+  }
+
+  size_t kept = 0;
+  const size_t qSize = ccrQVertices.size();
+  for (ui xLocal : state.excludedExternal) {
+    bool adjacentToAll = true;
+    if (ccrExternalRowsMaterialized) {
+      const ull *xRow = ccrNeighborBits.data() +
+                        (qSize + xLocal) * ccrWordCount;
+      for (ui local : state.branchRoots) {
+        if ((xRow[local >> 6] & (1ULL << (local & 63))) == 0) {
+          adjacentToAll = false;
+          break;
+        }
+      }
+    } else {
+      for (ui local : state.branchRoots) {
+        if (!adj(ccrXVertices[xLocal], ccrQVertices[local])) {
+          adjacentToAll = false;
+          break;
+        }
+      }
+    }
+    if (adjacentToAll)
+      state.excludedExternal[kept++] = xLocal;
+  }
+  state.excludedExternal.resize(kept);
+  state.branchRoots.clear();
+}
+
+void ReorderSib::pruneCcrExcludedWithoutResidualNeighbors(
+    CcrBitState &state) {
+  ccrForEachBit(state.excludedCandidates, [&](ui local) {
+    const ull *row = ccrNeighborBits.data() +
+                     static_cast<size_t>(local) * ccrWordCount;
+    bool hasResidualNeighbor = false;
+    for (size_t word = 0; word < ccrWordCount; ++word) {
+      if ((row[word] & state.residual[word]) != 0) {
+        hasResidualNeighbor = true;
+        break;
+      }
+    }
+    if (!hasResidualNeighbor)
+      ccrClearBit(state.excludedCandidates, local);
+  });
+
+  size_t kept = 0;
+  const size_t qSize = ccrQVertices.size();
+  for (ui xLocal : state.excludedExternal) {
+    bool hasResidualNeighbor = false;
+    if (ccrExternalRowsMaterialized) {
+      const ull *xRow = ccrNeighborBits.data() +
+                        (qSize + xLocal) * ccrWordCount;
+      for (size_t word = 0; word < ccrWordCount; ++word) {
+        if ((xRow[word] & state.residual[word]) != 0) {
+          hasResidualNeighbor = true;
+          break;
+        }
+      }
+    } else {
+      for (size_t wordIndex = 0;
+           wordIndex < ccrWordCount && !hasResidualNeighbor; ++wordIndex) {
+        ull residual = state.residual[wordIndex];
+        while (residual != 0) {
+          const ui local = static_cast<ui>(
+              wordIndex * 64 + __builtin_ctzll(residual));
+          if (adj(ccrXVertices[xLocal], ccrQVertices[local])) {
+            hasResidualNeighbor = true;
+            break;
+          }
+          residual &= residual - 1;
+        }
+      }
+    }
+    if (hasResidualNeighbor)
+      state.excludedExternal[kept++] = xLocal;
+  }
+  state.excludedExternal.resize(kept);
+}
+
+void ReorderSib::buildCcrChildState(CcrBitState &child,
+                                    const CcrBitState &parent,
+                                    ui local) const {
+  child.core.resize(ccrWordCount);
+  child.residual.resize(ccrWordCount);
+  child.excludedCandidates.resize(ccrWordCount);
+  const ull *row = ccrNeighborBits.data() +
+                   static_cast<size_t>(local) * ccrWordCount;
+  for (size_t word = 0; word < ccrWordCount; ++word) {
+    child.core[word] = parent.core[word] & row[word];
+    child.residual[word] = parent.residual[word] & row[word];
+    child.excludedCandidates[word] =
+        parent.excludedCandidates[word] & row[word];
+  }
+  child.coreCount = ccrBitCount(child.core);
+  child.residualCount = ccrBitCount(child.residual);
+  child.excludedExternal.clear();
+  if (child.excludedExternal.capacity() <
+      parent.excludedExternal.size())
+    child.excludedExternal.reserve(parent.excludedExternal.size());
+  const size_t qSize = ccrQVertices.size();
+  for (ui xLocal : parent.excludedExternal) {
+    const bool adjacent =
+        ccrExternalRowsMaterialized
+            ? (ccrNeighborBits[(qSize + xLocal) * ccrWordCount +
+                               (local >> 6)] &
+               (1ULL << (local & 63))) != 0
+            : adj(ccrXVertices[xLocal], ccrQVertices[local]);
+    if (adjacent)
+      child.excludedExternal.push_back(xLocal);
+  }
+  child.branchRoots.clear();
+}
+
+bool ReorderSib::ccrCoreUnionIsMaximal(
+    const CcrBitState &state) const {
+  auto rowContainsCore = [&](size_t rowIndex) {
+    const ull *row =
+        ccrNeighborBits.data() + rowIndex * ccrWordCount;
+    for (size_t word = 0; word < ccrWordCount; ++word)
+      if ((state.core[word] & ~row[word]) != 0)
+        return false;
+    return true;
+  };
+
+  bool blocked = false;
+  ccrForEachBit(state.residual, [&](ui local) {
+    blocked = blocked || rowContainsCore(local);
+  });
+  if (blocked)
+    return false;
+  ccrForEachBit(state.excludedCandidates, [&](ui local) {
+    blocked = blocked || rowContainsCore(local);
+  });
+  if (blocked)
+    return false;
+  const size_t qSize = ccrQVertices.size();
+  for (ui xLocal : state.excludedExternal) {
+    if (ccrExternalRowsMaterialized) {
+      if (rowContainsCore(qSize + xLocal))
+        return false;
+      continue;
+    }
+    bool extendsCore = true;
+    ccrForEachBit(state.core, [&](ui local) {
+      extendsCore =
+          extendsCore &&
+          adj(ccrXVertices[xLocal], ccrQVertices[local]);
+    });
+    if (extendsCore)
+      return false;
+  }
+  return true;
+}
+
+size_t ReorderSib::selectCcrPivot(const CcrBitState &state) const {
+  const size_t qSize = ccrQVertices.size();
+  bool havePivot = false;
+  size_t pivot = 0;
+  ui pivotLabel = 0;
+  ui bestScore = 0;
+
+  auto consider = [&](size_t rowIndex, ui label) {
+    const ull *row =
+        ccrNeighborBits.data() + rowIndex * ccrWordCount;
+    ui score = 0;
+    for (size_t word = 0; word < ccrWordCount; ++word) {
+      score += static_cast<ui>(__builtin_popcountll(
+          row[word] & (state.core[word] | state.residual[word])));
+    }
+    if (!havePivot || score > bestScore ||
+        (score == bestScore && label < pivotLabel)) {
+      havePivot = true;
+      pivot = rowIndex;
+      pivotLabel = label;
+      bestScore = score;
+    }
+  };
+
+  for (size_t wordIndex = 0; wordIndex < ccrWordCount; ++wordIndex) {
+    ull localCandidates = state.core[wordIndex] |
+                          state.residual[wordIndex] |
+                          state.excludedCandidates[wordIndex];
+    while (localCandidates != 0) {
+      const unsigned bit =
+          static_cast<unsigned>(__builtin_ctzll(localCandidates));
+      const ui local = static_cast<ui>(wordIndex * 64 + bit);
+      consider(local, ccrQVertices[local]);
+      localCandidates &= localCandidates - 1;
+    }
+  }
+  if (ccrExternalRowsMaterialized)
+    for (ui xLocal : state.excludedExternal)
+      consider(qSize + xLocal, ccrXVertices[xLocal]);
+
+  if (!havePivot)
+    throw logic_error("CCRMCE pivot requested for an empty state");
+  return pivot;
+}
+
+void ReorderSib::buildCcrBranchRoots(CcrBitState &state,
+                                     size_t pivot) const {
+  state.branchRoots.clear();
+  state.branchRoots.reserve(
+      static_cast<size_t>(state.coreCount) + state.residualCount);
+  const ull *pivotRow =
+      ccrNeighborBits.data() + pivot * ccrWordCount;
+
+  for (size_t wordIndex = 0; wordIndex < ccrWordCount; ++wordIndex) {
+    ull roots = state.residual[wordIndex] & ~pivotRow[wordIndex];
+    while (roots != 0) {
+      const unsigned bit = static_cast<unsigned>(__builtin_ctzll(roots));
+      state.branchRoots.push_back(
+          static_cast<ui>(wordIndex * 64 + bit));
+      roots &= roots - 1;
+    }
+  }
+
+  for (size_t wordIndex = 0; wordIndex < ccrWordCount; ++wordIndex) {
+    ull roots = state.core[wordIndex] & ~pivotRow[wordIndex];
+    while (roots != 0) {
+      const unsigned bit = static_cast<unsigned>(__builtin_ctzll(roots));
+      const ui local = static_cast<ui>(wordIndex * 64 + bit);
+      const ull *row = ccrNeighborBits.data() +
+                       static_cast<size_t>(local) * ccrWordCount;
+      bool sharesPivotResidualNeighbor = false;
+      for (size_t word = 0; word < ccrWordCount; ++word) {
+        if ((row[word] & state.residual[word] & pivotRow[word]) != 0) {
+          sharesPivotResidualNeighbor = true;
+          break;
+        }
+      }
+      if (sharesPivotResidualNeighbor)
+        state.branchRoots.push_back(local);
+      roots &= roots - 1;
+    }
   }
 }
 
-// Stop-after-one Bron--Kerbosch for a formal branch B=(M,Q). The initial X is
-// the set of common neighbors of M that lie outside Q. Carrying X through the
-// recursion makes every returned leaf globally maximal, not merely maximal
-// inside M union Q.
 bool ReorderSib::findOnePure(const vector<ui> &M, const vector<ui> &Q,
                              vector<ui> &found) {
   found.clear();
@@ -1701,274 +2470,170 @@ bool ReorderSib::findOnePure(const vector<ui> &M, const vector<ui> &Q,
     return false;
 
   const AdjacencyRow firstRow = adjacentVertices(M[0]);
-  vector<ui> common(firstRow.begin(), firstRow.end());
-  vector<ui> scratch;
-  for (ui i = 1; i < (ui)M.size() && !common.empty(); i++) {
-    intersectInto(scratch, common, adjacentVertices(M[i]));
-    common.swap(scratch);
+  ccrCommon.assign(firstRow.begin(), firstRow.end());
+  for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
+    intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
+    ccrCommon.swap(ccrCommonScratch);
   }
-
-  vector<ui> X;
-  setDiffInto(X, common, Q);
-  vector<ui> R = M;
-  vector<ui> P = Q;
-  const size_t bufferCount = P.size() + 1;
-  if (pxrPBuffers.size() < bufferCount) {
-    pxrPBuffers.resize(bufferCount);
-    pxrXBuffers.resize(bufferCount);
-  }
-  return findOnePureRecursive(R, P, X, found, 0);
+  addCcrMetric(ccrFindOneCalls, 1);
+  if (Q.size() <= 4)
+    return runSmallCcrBranch(M, Q, ccrCommon, &found);
+  setDiffInto(ccrBranchX, ccrCommon, Q);
+  prepareCcrBranch(Q, ccrBranchX, false);
+  ccrBranchR.assign(M.begin(), M.end());
+  return findOnePureRecursive(ccrBranchR, ccrStates[0], true, found, 0);
 }
 
-bool ReorderSib::findOnePureRecursive(vector<ui> &R, vector<ui> &P,
-                                      vector<ui> &X, vector<ui> &found,
-                                      size_t depth) {
-  if (R.size() + P.size() < minCliqueSize)
+bool ReorderSib::findOnePureRecursive(vector<ui> &R,
+                                      CcrBitState &state, bool fromP,
+                                      vector<ui> &found, size_t depth) {
+  addCcrMetric(ccrFindOneStates, 1);
+  if (R.size() + state.coreCount + state.residualCount < minCliqueSize)
     return false;
 
-  // These structural terminals are enabled by default in the Pure PXR lane
-  // and do not depend on the Hybrid graph-level portfolio. The master ET
-  // ablation used by the controlled PXR-state experiment disables them.
-  if (P.empty()) {
-    if (X.empty()) {
-      found = R;
-      sort(found.begin(), found.end());
-      return true;
-    }
+  const size_t entryRSize = R.size();
+  normalizeCcrState(R, state, fromP);
+
+  if (fromP && R.size() + state.coreCount >= minCliqueSize &&
+      ccrCoreUnionIsMaximal(state)) {
+    found = R;
+    ccrForEachBit(state.core, [&](ui local) {
+      found.push_back(ccrQVertices[local]);
+    });
+    sort(found.begin(), found.end());
+    R.resize(entryRSize);
+    return true;
+  }
+  if (state.residualCount == 0) {
+    R.resize(entryRSize);
     return false;
   }
 
-  // A zero/one-candidate child can be decided without another BK level.
-  if (kEt1Enabled && P.size() == 1) {
-    const ui extension = P.front();
-    for (ui x : X)
-      if (adj(x, extension))
-        return false;
-    found = R;
-    found.push_back(extension);
-    sort(found.begin(), found.end());
-    return found.size() >= minCliqueSize;
-  }
-
-  ui pivot = P.front();
-  ui minPScore = static_cast<ui>(P.size());
-  ui universalP = numeric_limits<ui>::max();
-  bool xUniversal = false;
-  scanPurePXRState(P, X, pivot, minPScore, universalP, xUniversal);
-  const ui pSize = static_cast<ui>(P.size());
-
-  // An excluded vertex covering all of P makes every continuation nonmaximal.
-  if (xUniversal)
-    return false;
-
-  // P is complete. With no X-universal blocker, R union P is the sole
-  // maximal continuation even when X itself is nonempty.
-  if (kEt1Enabled && minPScore + 1 == pSize) {
-    found = R;
-    found.insert(found.end(), P.begin(), P.end());
-    sort(found.begin(), found.end());
-    return found.size() >= minCliqueSize;
-  }
-
-  // The complement of P is a matching: isolated complement vertices are
-  // forced and one endpoint from every missing edge gives a maximal clique.
-  if (kEt2Enabled && X.empty() && minPScore + 2 >= pSize) {
-    vector<ui> forced;
-    vector<pair<ui, ui>> missingEdges;
-    pureMatchingParts(P, forced, missingEdges);
-    found = R;
-    found.insert(found.end(), forced.begin(), forced.end());
-    for (const auto &edge : missingEdges)
-      found.push_back(edge.first);
-    sort(found.begin(), found.end());
-    return found.size() >= minCliqueSize;
-  }
-
-  // If every P vertex misses at most two P-neighbors, the complement consists
-  // of paths and cycles. Reuse the exact 3-plex DP to obtain one witness.
-  if (kEt3Enabled && X.empty() && minPScore + 3 >= pSize &&
-      (!kEt2Enabled || minPScore + 2 < pSize)) {
-    FastPlex3Result plex = solveFastPlex3Subtree(
-        adjVertices, adjOffsets, adjHash, P, static_cast<ui>(R.size()), &R,
-        minCliqueSize, nullptr);
-    if (plex.handled) {
-      found = std::move(plex.witness);
-      sort(found.begin(), found.end());
-      return plex.found;
-    }
-  }
-
-  // A P-universal vertex must be present in every maximal continuation, so
-  // force it into R and make a single recursive call.
-  if (universalP != numeric_limits<ui>::max()) {
-    vector<ui> &childP = pxrPBuffers[depth + 1];
-    vector<ui> &childX = pxrXBuffers[depth + 1];
-    intersectInto(childP, P, adjacentVertices(universalP));
-    intersectInto(childX, X, adjacentVertices(universalP));
-    R.push_back(universalP);
+  pruneCcrExcludedWithoutResidualNeighbors(state);
+  if (state.residualCount == 1) {
+    const ui local = ccrFirstBit(state.residual);
+    CcrBitState &child = ccrStates[depth + 1];
+    buildCcrChildState(child, state, local);
+    R.push_back(ccrQVertices[local]);
     const bool result =
-        findOnePureRecursive(R, childP, childX, found, depth + 1);
-    R.pop_back();
+        findOnePureRecursive(R, child, true, found, depth + 1);
+    R.resize(entryRSize);
     return result;
   }
 
-  vector<ui> branchRoots;
-  setDiffInto(branchRoots, P, adjacentVertices(pivot));
-  for (ui v : branchRoots) {
-    vector<ui> &childP = pxrPBuffers[depth + 1];
-    vector<ui> &childX = pxrXBuffers[depth + 1];
-    intersectInto(childP, P, adjacentVertices(v));
-    intersectInto(childX, X, adjacentVertices(v));
-    R.push_back(v);
-    if (findOnePureRecursive(R, childP, childX, found, depth + 1)) {
-      R.pop_back();
+  const size_t pivot = selectCcrPivot(state);
+  buildCcrBranchRoots(state, pivot);
+  for (ui local : state.branchRoots) {
+    const bool selectedFromP = ccrBitIsSet(state.residual, local);
+    if (!selectedFromP && !ccrBitIsSet(state.core, local))
+      throw logic_error("CCRMCE find-one branch root was already removed");
+
+    CcrBitState &child = ccrStates[depth + 1];
+    buildCcrChildState(child, state, local);
+
+    R.push_back(ccrQVertices[local]);
+    if (findOnePureRecursive(R, child, selectedFromP, found,
+                             depth + 1)) {
+      R.resize(entryRSize);
       return true;
     }
     R.pop_back();
 
-    auto pIt = lower_bound(P.begin(), P.end(), v);
-    if (pIt != P.end() && *pIt == v)
-      P.erase(pIt);
-    X.insert(lower_bound(X.begin(), X.end(), v), v);
+    if (selectedFromP) {
+      ccrClearBit(state.residual, local);
+      --state.residualCount;
+    } else {
+      ccrClearBit(state.core, local);
+      --state.coreCount;
+    }
+    ccrSetBit(state.excludedCandidates, local);
   }
+  R.resize(entryRSize);
   return false;
 }
 
-// Exhaustive pivot Bron--Kerbosch for a formal Pure branch B=(M,Q).  Unlike
-// findOnePure this consumes the whole branch in one pass.  It is used only
-// when a fixed-size hitting-set mask remains over capacity after exact
-// preprocessing.  The global output guard safely absorbs overlap with cliques
-// already emitted by sibling-effect branches.
 void ReorderSib::enumerateAllPureBranch(const vector<ui> &M,
                                         const vector<ui> &Q) {
   if (M.empty())
     return;
 
   const AdjacencyRow firstRow = adjacentVertices(M[0]);
-  vector<ui> common(firstRow.begin(), firstRow.end());
-  vector<ui> scratch;
-  for (ui i = 1; i < (ui)M.size() && !common.empty(); i++) {
-    intersectInto(scratch, common, adjacentVertices(M[i]));
-    common.swap(scratch);
+  ccrCommon.assign(firstRow.begin(), firstRow.end());
+  for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
+    intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
+    ccrCommon.swap(ccrCommonScratch);
   }
-
-  vector<ui> X;
-  setDiffInto(X, common, Q);
-  vector<ui> R = M;
-  vector<ui> P = Q;
-  const size_t bufferCount = P.size() + 1;
-  if (pxrPBuffers.size() < bufferCount) {
-    pxrPBuffers.resize(bufferCount);
-    pxrXBuffers.resize(bufferCount);
+  addCcrMetric(ccrFullCalls, 1);
+  if (Q.size() <= 4) {
+    runSmallCcrBranch(M, Q, ccrCommon, nullptr);
+    return;
   }
-  enumerateAllPureBranchRecursive(R, P, X, 0);
+  setDiffInto(ccrBranchX, ccrCommon, Q);
+  prepareCcrBranch(Q, ccrBranchX, true);
+  ccrBranchR.assign(M.begin(), M.end());
+  enumerateAllPureBranchRecursive(ccrBranchR, ccrStates[0], true, 0);
 }
 
 void ReorderSib::enumerateAllPureBranchRecursive(
-    vector<ui> &R, vector<ui> &P, vector<ui> &X, size_t depth) {
-  if (R.size() + P.size() < minCliqueSize)
+    vector<ui> &R, CcrBitState &state, bool fromP, size_t depth) {
+  addCcrMetric(ccrFullStates, 1);
+  if (R.size() + state.coreCount + state.residualCount < minCliqueSize)
     return;
 
-  // The same default terminals used by witness search also consume an
-  // over-capacity Pure branch without descending through ordinary Pivot-BK.
-  if (P.empty()) {
-    if (X.empty())
-      recordPureClique(R);
-    return;
-  }
+  const size_t entryRSize = R.size();
+  normalizeCcrState(R, state, fromP);
 
-  if (kEt1Enabled && P.size() == 1) {
-    const ui extension = P.front();
-    for (ui x : X)
-      if (adj(x, extension))
-        return;
+  if (fromP && R.size() + state.coreCount >= minCliqueSize &&
+      ccrCoreUnionIsMaximal(state)) {
     vector<ui> clique = R;
-    clique.push_back(extension);
-    if (clique.size() >= minCliqueSize)
-      recordPureClique(std::move(clique));
+    ccrForEachBit(state.core, [&](ui local) {
+      clique.push_back(ccrQVertices[local]);
+    });
+    recordPureClique(std::move(clique));
+  }
+  if (state.residualCount == 0) {
+    R.resize(entryRSize);
     return;
   }
 
-  ui pivot = P.front();
-  ui minPScore = static_cast<ui>(P.size());
-  ui universalP = numeric_limits<ui>::max();
-  bool xUniversal = false;
-  scanPurePXRState(P, X, pivot, minPScore, universalP, xUniversal);
-  const ui pSize = static_cast<ui>(P.size());
-
-  if (xUniversal)
-    return;
-
-  if (kEt1Enabled && minPScore + 1 == pSize) {
-    vector<ui> clique = R;
-    clique.insert(clique.end(), P.begin(), P.end());
-    if (clique.size() >= minCliqueSize)
-      recordPureClique(std::move(clique));
+  pruneCcrExcludedWithoutResidualNeighbors(state);
+  if (state.residualCount == 1) {
+    const ui local = ccrFirstBit(state.residual);
+    CcrBitState &child = ccrStates[depth + 1];
+    buildCcrChildState(child, state, local);
+    R.push_back(ccrQVertices[local]);
+    enumerateAllPureBranchRecursive(R, child, true, depth + 1);
+    R.resize(entryRSize);
     return;
   }
 
-  if (kEt2Enabled && X.empty() && minPScore + 2 >= pSize) {
-    vector<ui> forced;
-    vector<pair<ui, ui>> missingEdges;
-    pureMatchingParts(P, forced, missingEdges);
-    vector<ui> clique = R;
-    clique.insert(clique.end(), forced.begin(), forced.end());
-    function<void(size_t)> materialize = [&](size_t at) {
-      if (at == missingEdges.size()) {
-        if (clique.size() >= minCliqueSize)
-          recordPureClique(clique);
-        return;
-      }
-      clique.push_back(missingEdges[at].first);
-      materialize(at + 1);
-      clique.back() = missingEdges[at].second;
-      materialize(at + 1);
-      clique.pop_back();
-    };
-    materialize(0);
-    return;
-  }
+  const size_t pivot = selectCcrPivot(state);
+  buildCcrBranchRoots(state, pivot);
+  for (ui local : state.branchRoots) {
+    const bool selectedFromP = ccrBitIsSet(state.residual, local);
+    if (!selectedFromP && !ccrBitIsSet(state.core, local))
+      throw logic_error("CCRMCE full branch root was already removed");
 
-  if (kEt3Enabled && X.empty() && minPScore + 3 >= pSize &&
-      (!kEt2Enabled || minPScore + 2 < pSize)) {
-    FastCliqueSink sink =
-        [&](const vector<ui> &clique) { recordPureClique(clique); };
-    FastPlex3Result plex = solveFastPlex3Subtree(
-        adjVertices, adjOffsets, adjHash, P, static_cast<ui>(R.size()), &R,
-        minCliqueSize, &sink);
-    if (plex.handled) {
-      return;
+    CcrBitState &child = ccrStates[depth + 1];
+    buildCcrChildState(child, state, local);
+
+    R.push_back(ccrQVertices[local]);
+    enumerateAllPureBranchRecursive(R, child, selectedFromP,
+                                    depth + 1);
+    R.pop_back();
+
+    if (selectedFromP) {
+      ccrClearBit(state.residual, local);
+      --state.residualCount;
+    } else {
+      ccrClearBit(state.core, local);
+      --state.coreCount;
     }
+    ccrSetBit(state.excludedCandidates, local);
   }
-
-  if (universalP != numeric_limits<ui>::max()) {
-    vector<ui> &childP = pxrPBuffers[depth + 1];
-    vector<ui> &childX = pxrXBuffers[depth + 1];
-    intersectInto(childP, P, adjacentVertices(universalP));
-    intersectInto(childX, X, adjacentVertices(universalP));
-    R.push_back(universalP);
-    enumerateAllPureBranchRecursive(R, childP, childX, depth + 1);
-    R.pop_back();
-    return;
-  }
-
-  vector<ui> branchRoots;
-  setDiffInto(branchRoots, P, adjacentVertices(pivot));
-  for (ui v : branchRoots) {
-    vector<ui> &childP = pxrPBuffers[depth + 1];
-    vector<ui> &childX = pxrXBuffers[depth + 1];
-    intersectInto(childP, P, adjacentVertices(v));
-    intersectInto(childX, X, adjacentVertices(v));
-    R.push_back(v);
-    enumerateAllPureBranchRecursive(R, childP, childX, depth + 1);
-    R.pop_back();
-
-    auto pIt = lower_bound(P.begin(), P.end(), v);
-    if (pIt != P.end() && *pIt == v)
-      P.erase(pIt);
-    X.insert(lower_bound(X.begin(), X.end(), v), v);
-  }
+  R.resize(entryRSize);
 }
+
 
 static ull hashClique(const vector<ui> &clique) {
   ull hash = 1469598103934665603ULL;
@@ -2083,6 +2748,13 @@ void ReorderSib::findAllMaximalCliquesPure() {
   emittedHashNext.clear();
   emittedHashSlotsUsed = 0;
   cliqueIdsByVertex.assign(n, {});
+  ccrFindOneCalls = 0;
+  ccrFullCalls = 0;
+  ccrFindOneStates = 0;
+  ccrFullStates = 0;
+  ccrCoreExtractions = 0;
+  ccrCoreVertices = 0;
+  ccrResidualVertices = 0;
 
   vector<PureBranch> worklist;
   vector<PureBranch> freeBranches;
@@ -2116,13 +2788,42 @@ void ReorderSib::findAllMaximalCliquesPure() {
         static_cast<size_t>(neighbors.end() - forwardBegin);
     if (1 + forwardCount < minCliqueSize)
       continue;
+
+    // Cache the wider-route productivity decision once per relevant root.
+    // Low-degree roots skip the ratio arithmetic, while roots with many
+    // sibling branches avoid recomputing the same decision on every pop.
+    bool useAdaptiveDirectRoute = false;
+    if (forwardCount > kSmallQCcrThreshold) {
+      const ull completedRoots = root;
+      const ull minimumProductiveCliques =
+          (completedRoots +
+           kAdaptiveDirectMinCliquesPerRootDenominator - 1) /
+          kAdaptiveDirectMinCliquesPerRootDenominator;
+      useAdaptiveDirectRoute =
+          completedRoots < kAdaptiveDirectWarmupRoots ||
+          cliqueCount >= minimumProductiveCliques;
+    }
+    // Every clique below this branch contains root and only vertices larger
+    // than root. Different roots therefore cannot produce equal cliques.
+    // Keep global clique storage and cover postings, but restart only the
+    // exact duplicate hash at a small root-local capacity.
+    constexpr size_t kInitialRootHashCapacity = 16;
+    emittedHashKeys.resize(kInitialRootHashCapacity);
+    emittedHashHeads.resize(kInitialRootHashCapacity);
+    fill(emittedHashHeads.begin(), emittedHashHeads.end(),
+         numeric_limits<size_t>::max());
+    emittedHashSlotsUsed = 0;
+
     PureBranch rootBranch = acquireBranch();
     rootBranch.mustin.clear();
     rootBranch.expandTo.clear();
     rootBranch.mustin.push_back(root);
     rootBranch.expandTo.assign(forwardBegin, neighbors.end());
     pushBranch(std::move(rootBranch));
-    while (!worklist.empty()) {
+    const auto processRoot = [&](auto directThresholdTag) {
+      constexpr size_t directCcrThreshold =
+          decltype(directThresholdTag)::value;
+      while (!worklist.empty()) {
       PureBranch branch = std::move(worklist.back());
       worklist.pop_back();
 
@@ -2131,16 +2832,22 @@ void ReorderSib::findAllMaximalCliquesPure() {
         continue;
       }
 
-      if (branch.expandTo.size() <= kSmallQFullPxrThreshold) {
-        if (branch.expandTo.size() <= 4)
-          enumerateSmallPureBranch(branch.mustin, branch.expandTo);
-        else
-          enumerateAllPureBranch(branch.mustin, branch.expandTo);
+      if (branch.expandTo.size() <= directCcrThreshold) {
+        // Small branches use the same exhaustive CCRMCE engine. Its
+        // one-word state is cheaper than entering a separate subset kernel
+        // and keeps every enumeration route on one implementation.
+        enumerateAllPureBranch(branch.mustin, branch.expandTo);
         recycleBranch(std::move(branch));
         continue;
       }
 
-      vector<ui> covers = collectAllCoveringCliques(branch.mustin);
+      if (!collectAllCoveringCliques(branch.mustin,
+                                     coveringCliqueScratch)) {
+        enumerateAllPureBranch(branch.mustin, branch.expandTo);
+        recycleBranch(std::move(branch));
+        continue;
+      }
+      const vector<ui> &covers = coveringCliqueScratch;
       if (covers.empty()) {
         vector<ui> found;
         if (findOnePure(branch.mustin, branch.expandTo, found)) {
@@ -2176,7 +2883,12 @@ void ReorderSib::findAllMaximalCliquesPure() {
         pushBranch(std::move(nextBranch));
       }
       recycleBranch(std::move(branch));
-    }
+      }
+    };
+    if (useAdaptiveDirectRoute)
+      processRoot(integral_constant<size_t, kAdaptiveDirectQThreshold>{});
+    else
+      processRoot(integral_constant<size_t, kSmallQCcrThreshold>{});
   }
 
   if (static_cast<ull>(storedCliqueCount()) != cliqueCount)
@@ -2190,6 +2902,16 @@ void ReorderSib::findAllMaximalCliquesPure() {
     cout << solverWorkBudget;
   else
     cout << "unlimited";
-  cout << '\n';
-
+  cout << '\n'
+       << "reorder.ccr.enabled=1\n"
+       << "reorder.config.et1=" << kEt1Enabled << '\n'
+       << "reorder.config.et2=" << kEt2Enabled << '\n'
+       << "reorder.config.et3=" << kEt3Enabled << '\n'
+       << "reorder.ccr.findone_calls=" << ccrFindOneCalls << '\n'
+       << "reorder.ccr.full_calls=" << ccrFullCalls << '\n'
+       << "reorder.ccr.findone_states=" << ccrFindOneStates << '\n'
+       << "reorder.ccr.full_states=" << ccrFullStates << '\n'
+       << "reorder.ccr.core_extractions=" << ccrCoreExtractions << '\n'
+       << "reorder.ccr.core_vertices=" << ccrCoreVertices << '\n'
+       << "reorder.ccr.residual_vertices=" << ccrResidualVertices << '\n';
 }
