@@ -70,27 +70,29 @@ exact clique count, stored count, selected threshold and budget, and algorithm
 runtime in milliseconds. With `--print-cliques`, each result is emitted as a
 sorted line beginning with `clique`.
 
-## Reference comparison
+## Four-system wall-time comparison
 
-`compare/HBBMCPaperFaithful` contains the independent HBBMC++ reference used
-for correctness and runtime comparisons. Given paired HBBMC edge-list and
-AdaptiveBK adjacency-list inputs, run:
+The experiment compares Reorder, the independent paper-faithful HBBMC++,
+sparse adjacency-list Tomita, and standalone CCRMCE. Pass their two native
+input trees explicitly:
 
 ```bash
-bash scripts/run_benchmark.sh DATA_ROOT [RESULT_ROOT]
+bash scripts/run_benchmark.sh ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]
 ```
 
-Expected input layout:
+Both directories must have matching relative paths:
 
 ```text
-DATA_ROOT/
-├── hbbmc/  # NAME.edges or NAME.txt.clean
-└── pure/   # NAME.graph or NAME.txt
+ADJACENCY_DIR/GROUP/GRAPH  # n m, followed by n symmetric adjacency rows
+EDGE_DIR/GROUP/GRAPH       # headerless normalized rows: u v with u < v
 ```
 
-Run `bash scripts/run_benchmark.sh --help` for available controls. Results,
-commands, logs, clique-count checks, and resource measurements are retained in
-the selected result directory.
+`runs.csv` reports full program wall time in microseconds. The interval
+includes native-format parsing, preprocessing, enumeration, retained output
+work performed by each implementation, and process teardown. Tomita format
+conversion is prepared and logged separately. The default timeout is 1800
+seconds per program/graph. A failure or timeout is recorded and the runner
+continues with later programs and graphs.
 
 ## Source layout
 
