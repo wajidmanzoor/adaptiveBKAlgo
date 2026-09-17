@@ -99,7 +99,7 @@ recursive `(R,P,X)` entries with graph reduction and early termination disabled
 in both implementations.
 
 ```bash
-./ablation/pxr_states/run.sh DATA_ROOT [RESULT_ROOT]
+./ablation/pxr_states/run.sh ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]
 ```
 
 ## Source layout

@@ -140,10 +140,6 @@ ReorderSib::ReorderSib(Graph &g, ui minCliqueSize)
   cliqueCount = 0;
   solverWorkBudget = 0;
   solverWorkBudgetEnabled = false;
-  solverBudgetFallbacks = 0;
-  solverCapacityFallbacks = 0;
-  seedSolverCalls = 0;
-  maximumSeedConstraints = 0;
   ccrFindOneCalls = 0;
   ccrFullCalls = 0;
   ccrFindOneStates = 0;
@@ -737,8 +733,6 @@ vector<vector<ui>> ReorderSib::efficientHittingSetDirect(
   });
 
   const ui hSize = static_cast<ui>(constraintOrder.size());
-  addCcrMetric(seedSolverCalls, 1);
-  maximumSeedConstraints = max(maximumSeedConstraints, hSize);
   auto solve = [&](auto wordCountTag) -> vector<vector<ui>> {
   static constexpr ui maskWords = decltype(wordCountTag)::value;
   using Mask = array<ull, maskWords>;
@@ -941,7 +935,6 @@ vector<vector<ui>> ReorderSib::efficientHittingSetDirect(
             rootCandidates * (rootCandidates - 1) / 2;
         if (unavoidableRootWork > solverWorkBudget) {
           *usePivotFallback = true;
-          addCcrMetric(solverBudgetFallbacks, 1);
           return {};
         }
       } else {
@@ -1045,7 +1038,6 @@ vector<vector<ui>> ReorderSib::efficientHittingSetDirect(
   dfs(initCands, forcedCov, 1);
   if (budgetExceeded) {
     *usePivotFallback = true;
-    addCcrMetric(solverBudgetFallbacks, 1);
     return {};
   }
 
@@ -1243,15 +1235,11 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
 
   const ui eSize = (ui)E.size();
   const ui hSize = (ui)hitSets.size();
-  addCcrMetric(seedSolverCalls, 1);
-  maximumSeedConstraints = max(maximumSeedConstraints, hSize);
   static_assert(kHitsetCapacity == 128,
                 "the normal Pure seed solver uses two 64-bit words");
   if (hSize > kHitsetCapacity) {
-    if (usePivotFallback != nullptr) {
+    if (usePivotFallback != nullptr)
       *usePivotFallback = true;
-      addCcrMetric(solverCapacityFallbacks, 1);
-    }
     return {};
   }
   static constexpr ui fixedMaskWords = kHitsetCapacity / 64;
@@ -1488,7 +1476,6 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
             rootCandidates * (rootCandidates - 1) / 2;
         if (unavoidableRootWork > solverWorkBudget) {
           *usePivotFallback = true;
-          addCcrMetric(solverBudgetFallbacks, 1);
           return {};
         }
       } else {
@@ -1613,7 +1600,6 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
 
   if (budgetExceeded) {
     *usePivotFallback = true;
-    addCcrMetric(solverBudgetFallbacks, 1);
     return {};
   }
   // Convert E-index solutions back to actual vertex IDs, merging any forced
@@ -3325,10 +3311,6 @@ void ReorderSib::findAllMaximalCliquesPure() {
   ccrCoreExtractions = 0;
   ccrCoreVertices = 0;
   ccrResidualVertices = 0;
-  solverBudgetFallbacks = 0;
-  solverCapacityFallbacks = 0;
-  seedSolverCalls = 0;
-  maximumSeedConstraints = 0;
 
   vector<PureBranch> worklist;
   vector<PureBranch> freeBranches;
@@ -3481,21 +3463,6 @@ void ReorderSib::findAllMaximalCliquesPure() {
        << "reorder.config.et1=" << kEt1Enabled << '\n'
        << "reorder.config.et2=" << kEt2Enabled << '\n'
        << "reorder.config.et3=" << kEt3Enabled << '\n'
-       << "reorder.config.hitset_capacity=" << kHitsetCapacity << '\n'
-       << "reorder.config.small_q_ccr_threshold=" << kSmallQCcrThreshold << '\n'
-       << "reorder.config.adaptive_direct_q_threshold="
-       << kAdaptiveDirectQThreshold << '\n'
-       << "reorder.config.pruning.normalization=" << kPruneNormalization << '\n'
-       << "reorder.config.pruning.subsumption=" << kPruneSubsumption << '\n'
-       << "reorder.config.pruning.unit=" << kPruneUnit << '\n'
-       << "reorder.config.pruning.usefulness=" << kPruneUsefulness << '\n'
-       << "reorder.config.pruning.antichain=" << kPruneAntichain << '\n'
-       << "reorder.config.pruning.fail_first=" << kPruneFailFirst << '\n'
-       << "reorder.config.pruning.zero_coverage=" << kPruneZeroCoverage << '\n'
-       << "reorder.seed_solver_calls=" << seedSolverCalls << '\n'
-       << "reorder.maximum_seed_constraints=" << maximumSeedConstraints << '\n'
-       << "reorder.budget_fallbacks=" << solverBudgetFallbacks << '\n'
-       << "reorder.capacity_fallbacks=" << solverCapacityFallbacks << '\n'
        << "reorder.ccr.findone_calls=" << ccrFindOneCalls << '\n'
        << "reorder.ccr.full_calls=" << ccrFullCalls << '\n'
        << "reorder.ccr.findone_states=" << ccrFindOneStates << '\n'

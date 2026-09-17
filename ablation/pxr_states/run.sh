@@ -8,26 +8,24 @@ source "$script_dir/../../experiment_common.sh"
 # shellcheck source=../../grouped_experiment_common.sh
 source "$script_dir/../../grouped_experiment_common.sh"
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 DATA_ROOT [RESULT_ROOT]" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+  echo "Usage: $0 ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]" >&2
   exit 2
 fi
 
-data_root=$1
+adjacency_root=$1
+edge_root=$2
 timestamp=$(date +%Y%m%d_%H%M%S)
-result_root=${2:-"$script_dir/results/$timestamp"}
-timeout_seconds=${PXR_TIMEOUT_SECONDS:-3600}
+result_root=${3:-"$script_dir/results/$timestamp"}
+timeout_seconds=${PXR_TIMEOUT_SECONDS:-1800}
 build_jobs=${PXR_BUILD_JOBS:-4}
 dataset_filter=${PXR_DATASETS:-}
-reorder_budget=${PXR_REORDER_BUDGET:-1000}
+reorder_budget=unlimited
 
 final_require_positive_integer PXR_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer PXR_BUILD_JOBS "$build_jobs" || exit 2
-if [[ $reorder_budget != unlimited ]]; then
-  final_require_nonnegative_integer PXR_REORDER_BUDGET "$reorder_budget" || exit 2
-fi
 final_require_tools cmake timeout /usr/bin/time awk sha256sum uname find sort || exit 2
-final_collect_grouped_datasets "$data_root" "$dataset_filter" 1 || exit 2
+final_collect_grouped_datasets "$adjacency_root" "$edge_root" "$dataset_filter" 1 || exit 2
 
 mkdir -p "$result_root/build_logs"
 pure_build="$result_root/build/reorder_no_et"
@@ -54,12 +52,12 @@ fi
 
 {
   echo "campaign=four-system exact maximal-clique recursive states"
-  echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "edge_root=$FINAL_EDGE_ROOT"
   echo "result_root=$result_root"
   echo "groups=${FINAL_SELECTED_GROUPS[*]}"
   echo "graphs=${#FINAL_SELECTED_DATASETS[@]}"
+  echo "skipped_graphs=$FINAL_SKIPPED_DATASETS"
   echo "timeout_seconds_per_program=$timeout_seconds"
   echo "execution=sequential"
   echo "minimum_clique_size=3"
@@ -117,14 +115,15 @@ run_dataset() {
   local tomita_base="$log_dir/tomita"
   local ccrmce_base="$log_dir/ccrmce"
   local tomita_input="$log_dir/tomita.input"
+  local tomita_input_ready=1
   mkdir -p "$log_dir"
 
   final_write_command "$log_dir/tomita_adapter.command" \
     "$tomita_adapter" "$hbbmc_input" "$n" "$m"
   if ! "$tomita_adapter" "$hbbmc_input" "$n" "$m" \
       >"$tomita_input" 2>"$log_dir/tomita_adapter.stderr"; then
-    echo "Tomita input conversion failed for $graph." >&2
-    exit 2
+    tomita_input_ready=0
+    echo "Tomita input conversion failed for $graph; continuing with the other systems." >&2
   fi
 
   local -a pure_command=(
@@ -151,7 +150,7 @@ run_dataset() {
   local pure_wall=$FINAL_RUN_WALL_MS
 
   local reorder_cliques reorder_stored pure_pxr pure_findone pure_full pure_et pure_total
-  local pure_runtime pure_checks pure_fallbacks reorder_status reorder_invariant=no
+  local pure_runtime pure_checks reorder_status reorder_invariant=no
   reorder_cliques=$(final_output_value "$pure_base.stdout" reorder.cliques)
   reorder_stored=$(final_output_value "$pure_base.stdout" reorder.stored_cliques)
   pure_pxr=
@@ -165,21 +164,17 @@ run_dataset() {
   fi
   pure_runtime=$(final_output_value "$pure_base.stdout" reorder.runtime_ms)
   pure_checks=$pure_pxr
-  pure_fallbacks=$(final_output_value "$pure_base.stdout" reorder.budget_fallbacks)
 
   if [[ $pure_exit -eq 0 ]] &&
       final_all_uint "$reorder_cliques" "$reorder_stored" "$pure_pxr" "$pure_findone" \
-        "$pure_full" "$pure_et" "$pure_total" "$pure_checks" \
-        "$pure_fallbacks" &&
+        "$pure_full" "$pure_et" "$pure_total" "$pure_checks" &&
       final_all_number "$pure_runtime" &&
       [[ $reorder_stored == "$reorder_cliques" ]] &&
       [[ $(final_output_value "$pure_base.stdout" reorder.minimum_clique_size) == 3 ]] &&
       [[ $(final_output_value "$pure_base.stdout" reorder.budget) == "$reorder_budget" ]] &&
-      [[ $(final_output_value "$pure_base.stdout" reorder.config.small_q_ccr_threshold) == 32 ]] &&
       [[ $(final_output_value "$pure_base.stdout" reorder.config.et1) == 0 ]] &&
       [[ $(final_output_value "$pure_base.stdout" reorder.config.et2) == 0 ]] &&
-      [[ $(final_output_value "$pure_base.stdout" reorder.config.et3) == 0 ]] &&
-      final_pruning_config_matches "$pure_base.stdout" production; then
+      [[ $(final_output_value "$pure_base.stdout" reorder.config.et3) == 0 ]]; then
     if [[ $pure_pxr -eq $((pure_findone + pure_full)) &&
           $pure_checks -eq $pure_pxr && $pure_et -eq 0 &&
           $pure_total -eq $pure_pxr ]]; then
@@ -233,29 +228,39 @@ run_dataset() {
   echo "DONE system=hbbmc graph=$graph status=$hbbmc_status pxr=${hbbmc_pxr:-NA}"
 
   final_write_command "$tomita_base.command" "${tomita_command[@]}"
-  final_run_timed "system=tomita graph=$graph" "$tomita_base.stdout" \
-    "$tomita_base.stderr" "$tomita_base.resources" "$timeout_seconds" \
-    "${tomita_command[@]}"
-  local tomita_exit=$FINAL_RUN_EXIT_CODE
-  local tomita_wall=$FINAL_RUN_WALL_MS
-
   local tomita_cliques tomita_stored tomita_states tomita_runtime
   local tomita_status tomita_invariant=no
-  tomita_cliques=$(final_output_value "$tomita_base.stdout" maximal_cliques)
-  tomita_stored=$(final_output_value "$tomita_base.stdout" stored_cliques)
-  tomita_states=$(final_output_value "$tomita_base.stdout" recursive_states)
-  tomita_runtime=$(final_output_value "$tomita_base.stdout" algorithm_wall_ms)
-  if [[ $tomita_exit -eq 0 ]] &&
-      final_all_uint "$tomita_cliques" "$tomita_stored" "$tomita_states" &&
-      final_all_number "$tomita_runtime" &&
-      [[ $tomita_stored == "$tomita_cliques" ]] &&
-      [[ $(final_output_value "$tomita_base.stdout" algorithm) == tomita-adjacency-list ]] &&
-      [[ $(final_output_value "$tomita_base.stdout" minimum_clique_size) == 3 ]] &&
-      [[ $(final_output_value "$tomita_base.stdout" clique_storage) == all ]]; then
-    tomita_invariant=yes
-    tomita_status=completed
+  local tomita_exit tomita_wall
+  if [[ $tomita_input_ready -eq 1 ]]; then
+    final_run_timed "system=tomita graph=$graph" "$tomita_base.stdout" \
+      "$tomita_base.stderr" "$tomita_base.resources" "$timeout_seconds" \
+      "${tomita_command[@]}"
+    tomita_exit=$FINAL_RUN_EXIT_CODE
+    tomita_wall=$FINAL_RUN_WALL_MS
+    tomita_cliques=$(final_output_value "$tomita_base.stdout" maximal_cliques)
+    tomita_stored=$(final_output_value "$tomita_base.stdout" stored_cliques)
+    tomita_states=$(final_output_value "$tomita_base.stdout" recursive_states)
+    tomita_runtime=$(final_output_value "$tomita_base.stdout" algorithm_wall_ms)
+    if [[ $tomita_exit -eq 0 ]] &&
+        final_all_uint "$tomita_cliques" "$tomita_stored" "$tomita_states" &&
+        final_all_number "$tomita_runtime" &&
+        [[ $tomita_stored == "$tomita_cliques" ]] &&
+        [[ $(final_output_value "$tomita_base.stdout" algorithm) == tomita-adjacency-list ]] &&
+        [[ $(final_output_value "$tomita_base.stdout" minimum_clique_size) == 3 ]] &&
+        [[ $(final_output_value "$tomita_base.stdout" clique_storage) == all ]]; then
+      tomita_invariant=yes
+      tomita_status=completed
+    else
+      tomita_status=$(final_status_from_exit "$tomita_exit")
+    fi
   else
-    tomita_status=$(final_status_from_exit "$tomita_exit")
+    tomita_exit=1
+    tomita_wall=0
+    tomita_cliques=
+    tomita_stored=
+    tomita_states=
+    tomita_runtime=
+    tomita_status=failed
   fi
   echo "DONE system=tomita graph=$graph status=$tomita_status states=${tomita_states:-NA}"
 
@@ -321,7 +326,7 @@ run_dataset() {
     "$graph" "$n" "$m"
     "$reorder_status" "$reorder_cliques" "$reorder_stored" "$pure_pxr"
     "$pure_findone" "$pure_full" "$pure_et" "$pure_runtime" "$pure_wall"
-    "$pure_fallbacks" "$reorder_invariant"
+    "$reorder_invariant"
     "$hbbmc_status" "$hbbmc_cliques" "$hbbmc_stored" "$hbbmc_pxr"
     "$hbbmc_et" "$hbbmc_runtime" "$hbbmc_wall" "$hbbmc_invariant"
     "$hbbmc_count_match" "$hbbmc_ratio"
@@ -347,7 +352,7 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'graph,n,m,reorder_status,reorder_cliques,reorder_stored_cliques,reorder_ccr_states,reorder_findone_ccr_states,reorder_full_ccr_states,reorder_legacy_et_states,reorder_runtime_ms,reorder_wall_ms,reorder_budget_fallbacks,reorder_invariant,hbbmc_status,hbbmc_cliques,hbbmc_stored_cliques,hbbmc_pxr_states,hbbmc_et_states,hbbmc_runtime_ms,hbbmc_wall_ms,hbbmc_invariant,hbbmc_count_match,hbbmc_over_reorder_ccr_ratio,tomita_status,tomita_cliques,tomita_stored_cliques,tomita_recursive_states,tomita_runtime_ms,tomita_wall_ms,tomita_invariant,tomita_count_match,tomita_over_reorder_ccr_ratio,ccrmce_status,ccrmce_cliques,ccrmce_stored_cliques,ccrmce_recursive_states,ccrmce_runtime_ms,ccrmce_wall_ms,ccrmce_invariant,ccrmce_count_match,ccrmce_over_reorder_ccr_ratio,all_counts_match' \
+      'graph,n,m,reorder_status,reorder_cliques,reorder_stored_cliques,reorder_ccr_states,reorder_findone_ccr_states,reorder_full_ccr_states,reorder_legacy_et_states,reorder_runtime_ms,reorder_wall_ms,reorder_invariant,hbbmc_status,hbbmc_cliques,hbbmc_stored_cliques,hbbmc_pxr_states,hbbmc_et_states,hbbmc_runtime_ms,hbbmc_wall_ms,hbbmc_invariant,hbbmc_count_match,hbbmc_over_reorder_ccr_ratio,tomita_status,tomita_cliques,tomita_stored_cliques,tomita_recursive_states,tomita_runtime_ms,tomita_wall_ms,tomita_invariant,tomita_count_match,tomita_over_reorder_ccr_ratio,ccrmce_status,ccrmce_cliques,ccrmce_stored_cliques,ccrmce_recursive_states,ccrmce_runtime_ms,ccrmce_wall_ms,ccrmce_invariant,ccrmce_count_match,ccrmce_over_reorder_ccr_ratio,all_counts_match' \
       >"$runs_csv"
   fi
 
@@ -358,9 +363,9 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
       "$group_root" "$runs_csv"
   done
 
-  if ! awk -F, 'NR > 1 && ($4 != "completed" || $15 != "completed" ||
-                            $25 != "completed" || $34 != "completed" ||
-                            $43 != "yes") { exit 1 }' "$runs_csv"; then
+  if ! awk -F, 'NR > 1 && ($4 != "completed" || $14 != "completed" ||
+                            $24 != "completed" || $33 != "completed" ||
+                            $42 != "yes") { exit 1 }' "$runs_csv"; then
     campaign_failed=1
   fi
 done

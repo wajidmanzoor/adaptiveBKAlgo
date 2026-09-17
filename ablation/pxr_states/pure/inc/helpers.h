@@ -53,10 +53,6 @@ private:
   ull cliqueCount;
   ull solverWorkBudget;
   bool solverWorkBudgetEnabled;
-  ull solverBudgetFallbacks;
-  ull solverCapacityFallbacks;
-  ull seedSolverCalls;
-  ui maximumSeedConstraints;
   ui minCliqueSize;
   // Compact append-only clique arena. Clique i occupies
   // cliqueVertices[cliqueOffsets[i]..cliqueOffsets[i + 1]).

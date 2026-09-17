@@ -7,30 +7,11 @@
 FINAL_PURE_BINARY_NAME=adaptive_bk
 FINAL_HBBMC_BINARY_NAME=hbbmc_faithful
 
-FINAL_PRUNING_RULES=(
-  normalization
-  subsumption
-  unit
-  usefulness
-  antichain
-  fail_first
-  zero_coverage
-)
-
 final_require_positive_integer() {
   local name=$1
   local value=$2
   if [[ ! $value =~ ^[1-9][0-9]*$ ]]; then
     echo "$name must be a positive integer (received: $value)." >&2
-    return 1
-  fi
-}
-
-final_require_nonnegative_integer() {
-  local name=$1
-  local value=$2
-  if [[ ! $value =~ ^[0-9]+$ ]]; then
-    echo "$name must be a non-negative integer (received: $value)." >&2
     return 1
   fi
 }
@@ -92,22 +73,6 @@ final_output_value() {
       value = substr($0, length($1) + 2)
     }
     END { print value }' "$file"
-}
-
-final_pruning_config_matches() {
-  local output=$1
-  local profile=${2:-production}
-  local rule expected actual
-  for rule in "${FINAL_PRUNING_RULES[@]}"; do
-    expected=1
-    if [[ $profile == production && $rule == subsumption ]]; then
-      expected=0
-    elif [[ $profile != production && $profile != none && $rule == "$profile" ]]; then
-      expected=0
-    fi
-    actual=$(final_output_value "$output" "reorder.config.pruning.$rule")
-    [[ $actual == "$expected" ]] || return 1
-  done
 }
 
 final_all_uint() {

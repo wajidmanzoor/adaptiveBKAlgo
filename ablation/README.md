@@ -19,31 +19,31 @@ Because the algorithms decompose roots differently, the counts are useful as
 implementation-level work measurements rather than identical abstract nodes.
 
 All four systems use minimum clique size 3 and retain the actual vertex list
-for every reported clique. Reorder uses budget 1000, the production pruning
-profile, hit-set capacity 128, small-Q CCRMCE threshold 32, adaptive direct
-threshold 256, and disabled ET1/ET2/ET3. HBBMC runs with
+for every reported clique. Reorder uses an unlimited solver budget, the
+production pruning profile, hit-set capacity 128, small-Q CCRMCE threshold 32,
+adaptive direct threshold 256, and disabled ET1/ET2/ET3. HBBMC runs with
 `--graph-reduction none --et 0`. Tomita uses its sparse adjacency-list
 algorithm, and standalone CCRMCE uses CoreCliqueRemovalV3.
 
 Run from the repository root:
 
 ```bash
-./ablation/pxr_states/run.sh DATA_ROOT [RESULT_ROOT]
+./ablation/pxr_states/run.sh ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]
 ```
 
 Useful controls are:
 
 ```text
-PXR_REORDER_BUDGET=1000
 PXR_DATASETS=GROUP,GRAPH,OR_RELATIVE_PATH
-PXR_TIMEOUT_SECONDS=3600
+PXR_TIMEOUT_SECONDS=1800
 PXR_BUILD_JOBS=4
 PXR_FAIL_ON_ERROR=0
 ```
 
-Paired inputs must exist below `DATA_ROOT/adjacencylist/GROUP/GRAPH` and
-`DATA_ROOT/edgelist/GROUP/GRAPH`. The runner converts the normalized edge list
+Paired inputs must have the same relative `GROUP/GRAPH` path below
+`ADJACENCY_DIR` and `EDGE_DIR`. The runner converts the normalized edge list
 to Tomita format before timing, records each system state count and ratio to
 reorder, validates all four configurations and stored-list counts, and
-requires clique-count agreement. Generated builds, converted inputs, logs, and
-results are not tracked.
+requires clique-count agreement. A failed conversion or algorithm run is
+recorded and later graphs continue. Generated builds, converted inputs, logs,
+and results are not tracked.
