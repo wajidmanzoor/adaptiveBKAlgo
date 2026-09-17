@@ -20,14 +20,14 @@ interval_us=${MEMORY_INTERVAL_US:-1000}
 timeout_seconds=${MEMORY_TIMEOUT_SECONDS:-3600}
 build_jobs=${MEMORY_BUILD_JOBS:-4}
 dataset_filter=${MEMORY_DATASETS:-}
-pure_budget=${MEMORY_PURE_BUDGET:-1000}
-system_spec=${MEMORY_SYSTEMS:-comparison}
+reorder_budget=${MEMORY_REORDER_BUDGET:-1000}
+system_spec=${MEMORY_SYSTEMS:-all}
 
 final_require_positive_integer MEMORY_INTERVAL_US "$interval_us" || exit 2
 final_require_positive_integer MEMORY_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer MEMORY_BUILD_JOBS "$build_jobs" || exit 2
-if [[ $pure_budget != unlimited ]]; then
-  final_require_nonnegative_integer MEMORY_PURE_BUDGET "$pure_budget" || exit 2
+if [[ $reorder_budget != unlimited ]]; then
+  final_require_nonnegative_integer MEMORY_REORDER_BUDGET "$reorder_budget" || exit 2
 fi
 final_require_tools cmake awk sha256sum uname find sort || exit 2
 if [[ ! -r /proc/self/status ]]; then
@@ -36,21 +36,18 @@ if [[ ! -r /proc/self/status ]]; then
 fi
 
 case "$system_spec" in
-  comparison|normal)
-    requested_systems=(pure hbbmc_plus_plus)
-    ;;
-  all)
-    requested_systems=(pure hbbmc hbbmc_et1 hbbmc_et2 hbbmc_et3 hbbmc_plus hbbmc_gr_et1 hbbmc_gr_et2 hbbmc_plus_plus)
+  all|comparison|normal)
+    requested_systems=(reorder hbbmc tomita ccrmce)
     ;;
   *)
-    IFS=',' read -r -a requested_systems <<<"$system_spec"
+    IFS="," read -r -a requested_systems <<<"$system_spec"
     ;;
 esac
 
-declare -A selected_systems
+declare -A selected_systems=()
 for system in "${requested_systems[@]}"; do
   case "$system" in
-    pure|hbbmc|hbbmc_et1|hbbmc_et2|hbbmc_et3|hbbmc_plus|hbbmc_gr_et1|hbbmc_gr_et2|hbbmc_plus_plus)
+    reorder|hbbmc|tomita|ccrmce)
       selected_systems[$system]=1
       ;;
     *)
@@ -65,41 +62,38 @@ if [[ ${#selected_systems[@]} -eq 0 ]]; then
 fi
 
 systems=()
-if [[ -n ${selected_systems[pure]:-} ]]; then
-  systems+=(pure)
-fi
-for system in "${requested_systems[@]}"; do
-  [[ $system == pure ]] && continue
-  if [[ -n ${selected_systems[$system]:-} ]]; then
-    systems+=("$system")
-    unset 'selected_systems[$system]'
-  fi
+for system in reorder hbbmc tomita ccrmce; do
+  [[ -n ${selected_systems[$system]:-} ]] && systems+=("$system")
 done
 
 final_collect_grouped_datasets "$data_root" "$dataset_filter" 1 || exit 2
 mkdir -p "$result_root/build_logs"
-sampler_build="$result_root/build/rss_sampler"
-pure_build="$result_root/build/pure"
+tools_build="$result_root/build/memory_tools"
+reorder_build="$result_root/build/reorder"
 hbbmc_build="$result_root/build/hbbmc"
-pure_source="$script_dir/pure"
+reorder_source="$script_dir/pure"
 hbbmc_source="$script_dir/hbbmc"
-final_build rss_sampler "$script_dir" "$sampler_build" \
+final_build memory_tools "$script_dir" "$tools_build" \
   "$result_root/build_logs" "$build_jobs" || exit 2
-final_build pure_memory "$pure_source" "$pure_build" \
+final_build reorder_memory "$reorder_source" "$reorder_build" \
   "$result_root/build_logs" "$build_jobs" || exit 2
 final_build hbbmc_memory "$hbbmc_source" "$hbbmc_build" \
   "$result_root/build_logs" "$build_jobs" -DBUILD_TESTING=OFF || exit 2
 
-sampler="$sampler_build/rss_sampler"
-pure_binary="$pure_build/$FINAL_PURE_BINARY_NAME"
+sampler="$tools_build/rss_sampler"
+tomita_adapter="$tools_build/tomita_stream_adapter"
+tomita_binary="$tools_build/tomita_retained"
+ccrmce_binary="$tools_build/ccrmce_retained"
+reorder_binary="$reorder_build/$FINAL_PURE_BINARY_NAME"
 hbbmc_binary="$hbbmc_build/$FINAL_HBBMC_BINARY_NAME"
-if [[ ! -x $sampler || ! -x $pure_binary || ! -x $hbbmc_binary ]]; then
+if [[ ! -x $sampler || ! -x $tomita_adapter || ! -x $tomita_binary ||
+      ! -x $ccrmce_binary || ! -x $reorder_binary || ! -x $hbbmc_binary ]]; then
   echo "A memory-ablation executable is missing." >&2
   exit 2
 fi
 
 {
-  echo "campaign=Pure versus HBBMC++ memory traces"
+  echo "campaign=retained-clique memory comparison across four exact systems"
   echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "edge_root=$FINAL_EDGE_ROOT"
@@ -110,17 +104,22 @@ fi
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
   echo "systems=${systems[*]}"
-  echo "pure_budget=$pure_budget"
-  echo "pure_small_q_full_pxr_threshold=4"
-  echo "pure_early_termination=all terminals enabled"
-  echo "pure_pruning=all seven rules enabled"
-  echo "hbbmc_plus_plus=RMCE graph reduction and ET level 3"
+  echo "reorder_budget=$reorder_budget"
+  echo "reorder_engine=final CCRMCE reorder"
+  echo "reorder_small_q_ccr_threshold=32"
+  echo "reorder_early_termination=disabled"
+  echo "reorder_pruning=production profile"
+  echo "hbbmc=RMCE graph reduction and ET level 3"
+  echo "tomita=adjacency-list implementation with RETURN_CLIQUES_ONE_BY_ONE"
+  echo "ccrmce=standalone CoreCliqueRemovalV3"
   echo "minimum_clique_size=3"
   echo "sampling_metric=VmRSS and VmHWM from /proc/PID/status"
   echo "sampling_scope=direct algorithm process including input parsing"
   echo "sampling_schedule=best-effort monotonic deadlines; elapsed_us records actual sample time"
-  echo "clique_storage=unconditional in Pure and every HBBMC configuration"
-  sha256sum "$sampler" "$pure_binary" "$hbbmc_binary"
+  echo "tomita_input_conversion=excluded from sampled process"
+  echo "clique_storage=all vertex lists retained in every system"
+  sha256sum "$sampler" "$tomita_adapter" "$tomita_binary" \
+    "$ccrmce_binary" "$reorder_binary" "$hbbmc_binary"
   uname -a
 } >"$result_root/environment.txt"
 
@@ -133,15 +132,48 @@ already_recorded() {
      END { exit !found }' "$runs_csv"
 }
 
-pure_reference_count() {
+reorder_reference_count() {
   local runs_csv=$1
   local graph=$2
   awk -F, -v graph="$graph" \
-    'NR > 1 && $1 == "pure" && $2 == graph && $5 == "completed" {
+    'NR > 1 && $1 == "reorder" && $2 == graph && $5 == "completed" {
        value = $7
      }
      END { print value }' "$runs_csv"
 }
+
+final_colon_value() {
+  local file=$1
+  local key=$2
+  awk -F: -v key="$key" '$1 == key {
+      value = substr($0, length($1) + 2)
+    }
+    END { print value }' "$file"
+}
+
+prepare_tomita_inputs() {
+  [[ -n ${selected_systems[tomita]:-} ]] || return 0
+  local spec spec_group graph n m reorder_input hbbmc_input
+  local group_root safe_graph input_dir input_file base
+  for spec in "${FINAL_SELECTED_DATASETS[@]}"; do
+    IFS="|" read -r spec_group graph n m reorder_input hbbmc_input <<<"$spec"
+    group_root=$(final_group_result_dir "$result_root" "$spec_group")
+    safe_graph=${graph//[^A-Za-z0-9_.-]/_}
+    input_dir="$group_root/tomita_inputs"
+    input_file="$input_dir/$safe_graph.input"
+    base="$input_dir/$safe_graph.adapter"
+    mkdir -p "$input_dir"
+    final_write_command "$base.command" "$tomita_adapter" \
+      "$hbbmc_input" "$n" "$m"
+    if ! "$tomita_adapter" "$hbbmc_input" "$n" "$m" \
+        >"$input_file" 2>"$base.stderr"; then
+      echo "Tomita input conversion failed for $graph; see $base.stderr" >&2
+      return 1
+    fi
+  done
+}
+
+prepare_tomita_inputs || exit 2
 
 run_sampled() {
   local label=$1
@@ -174,7 +206,7 @@ run_one() {
   local graph=$2
   local n=$3
   local m=$4
-  local pure_input=$5
+  local reorder_input=$5
   local hbbmc_input=$6
   local group_root=$7
   local runs_csv=$8
@@ -187,52 +219,32 @@ run_one() {
     return
   fi
 
-  local graph_reduction=none
-  local et=enabled
-  local expected_plus_plus=false
-  local input=$pure_input
-  local -a program=(env OMP_NUM_THREADS=1 "$pure_binary" "$input" --method optimized --budget "$pure_budget" --min-clique-size 3 --small-q-pxr 4)
+  local graph_reduction=NA
+  local et=NA
+  local input=$reorder_input
+  local -a program
   case "$system" in
-    pure)
+    reorder)
+      program=(env OMP_NUM_THREADS=1 "$reorder_binary" "$input" \
+        --budget "$reorder_budget" --min-clique-size 3)
       ;;
     hbbmc)
-      graph_reduction=none
-      et=0
-      ;;
-    hbbmc_et1)
-      graph_reduction=none
-      et=1
-      ;;
-    hbbmc_et2)
-      graph_reduction=none
-      et=2
-      ;;
-    hbbmc_et3)
-      graph_reduction=none
-      et=3
-      ;;
-    hbbmc_plus)
-      graph_reduction=rmce
-      et=0
-      ;;
-    hbbmc_gr_et1)
-      graph_reduction=rmce
-      et=1
-      ;;
-    hbbmc_gr_et2)
-      graph_reduction=rmce
-      et=2
-      ;;
-    hbbmc_plus_plus)
       graph_reduction=rmce
       et=3
-      expected_plus_plus=true
+      input=$hbbmc_input
+      program=(env OMP_NUM_THREADS=1 "$hbbmc_binary" "$input" \
+        --graph-reduction "$graph_reduction" --et "$et" \
+        --num-vertices "$n" --min-clique-size 3)
+      ;;
+    tomita)
+      input="$group_root/tomita_inputs/$safe_graph.input"
+      program=(env OMP_NUM_THREADS=1 "$tomita_binary" "$input")
+      ;;
+    ccrmce)
+      input=$hbbmc_input
+      program=(env OMP_NUM_THREADS=1 "$ccrmce_binary" noUVM -f_txt "$input")
       ;;
   esac
-  if [[ $system != pure ]]; then
-    input=$hbbmc_input
-    program=(env OMP_NUM_THREADS=1 "$hbbmc_binary" "$input" --graph-reduction "$graph_reduction" --et "$et" --num-vertices "$n" --min-clique-size 3)
-  fi
 
   local log_dir="$group_root/logs/$safe_graph"
   local base="$log_dir/$system"
@@ -262,32 +274,56 @@ run_one() {
                       END { print rows + 0 }' "$trace_file")
   fi
 
-  local cliques stored runtime status algorithm_valid=no
-  if [[ $system == pure ]]; then
-    cliques=$(final_output_value "$stdout_file" pure.cliques)
-    stored=$(final_output_value "$stdout_file" pure.stored_cliques)
-    runtime=$(final_output_value "$stdout_file" pure.runtime_ms)
-    if [[ $(final_output_value "$stdout_file" pure.config.budget) == "$pure_budget" &&
-          $(final_output_value "$stdout_file" pure.config.small_q_full_pxr_threshold) == 4 &&
-          $(final_output_value "$stdout_file" pure.config.et) == 1 &&
-          $(final_output_value "$stdout_file" pure.config.et.findone_2plex) == 1 &&
-          $(final_output_value "$stdout_file" pure.config.et.findone_3plex) == 1 &&
-          $(final_output_value "$stdout_file" pure.config.et.full_pxr_2plex) == 1 &&
-          $(final_output_value "$stdout_file" pure.config.et.full_pxr_3plex) == 1 ]] &&
-        final_pruning_config_matches "$stdout_file" none; then
-      algorithm_valid=yes
-    fi
-  else
-    cliques=$(final_output_value "$stdout_file" maximal_cliques)
-    stored=$(final_output_value "$stdout_file" stored_cliques)
-    runtime=$(final_output_value "$stdout_file" algorithm_runtime_ms)
-    if [[ $(final_output_value "$stdout_file" clique_storage) == all &&
-          $(final_output_value "$stdout_file" graph_reduction) == "$graph_reduction" &&
-          $(final_output_value "$stdout_file" early_termination_threshold) == "$et" &&
-          $(final_output_value "$stdout_file" hbbmc_plus_plus) == "$expected_plus_plus" ]]; then
-      algorithm_valid=yes
-    fi
-  fi
+  local cliques="" stored="" runtime="" storage=""
+  local status algorithm_valid=no
+  case "$system" in
+    reorder)
+      cliques=$(final_output_value "$stdout_file" reorder.cliques)
+      stored=$(final_output_value "$stdout_file" reorder.stored_cliques)
+      runtime=$(final_output_value "$stdout_file" reorder.runtime_ms)
+      if [[ $(final_output_value "$stdout_file" reorder.budget) == "$reorder_budget" &&
+            $(final_output_value "$stdout_file" reorder.minimum_clique_size) == 3 &&
+            $(final_output_value "$stdout_file" reorder.config.small_q_ccr_threshold) == 32 &&
+            $(final_output_value "$stdout_file" reorder.config.et1) == 0 &&
+            $(final_output_value "$stdout_file" reorder.config.et2) == 0 &&
+            $(final_output_value "$stdout_file" reorder.config.et3) == 0 ]] &&
+          final_pruning_config_matches "$stdout_file" production; then
+        algorithm_valid=yes
+      fi
+      ;;
+    hbbmc)
+      cliques=$(final_output_value "$stdout_file" maximal_cliques)
+      stored=$(final_output_value "$stdout_file" stored_cliques)
+      runtime=$(final_output_value "$stdout_file" algorithm_runtime_ms)
+      storage=$(final_output_value "$stdout_file" clique_storage)
+      if [[ $storage == all &&
+            $(final_output_value "$stdout_file" minimum_clique_size) == 3 &&
+            $(final_output_value "$stdout_file" graph_reduction) == "$graph_reduction" &&
+            $(final_output_value "$stdout_file" early_termination_threshold) == "$et" &&
+            $(final_output_value "$stdout_file" hbbmc_plus_plus) == true ]]; then
+        algorithm_valid=yes
+      fi
+      ;;
+    tomita)
+      cliques=$(final_output_value "$stdout_file" maximal_cliques)
+      stored=$(final_output_value "$stdout_file" stored_cliques)
+      runtime=$(final_output_value "$stdout_file" algorithm_wall_ms)
+      storage=$(final_output_value "$stdout_file" clique_storage)
+      if [[ $(final_output_value "$stdout_file" algorithm) == tomita-adjacency-list &&
+            $(final_output_value "$stdout_file" minimum_clique_size) == 3 &&
+            $storage == all ]]; then
+        algorithm_valid=yes
+      fi
+      ;;
+    ccrmce)
+      cliques=$(final_colon_value "$stdout_file" Mclique)
+      stored=$(final_colon_value "$stdout_file" stored_cliques)
+      runtime=$(final_colon_value "$stdout_file" time)
+      runtime=${runtime%ms}
+      storage=$(final_colon_value "$stdout_file" clique_storage)
+      [[ $storage == all ]] && algorithm_valid=yes
+      ;;
+  esac
 
   if [[ $exit_code -eq 0 ]] &&
       final_all_uint "$cliques" "$stored" "$samples" "$sampled_peak" \
@@ -304,11 +340,11 @@ run_one() {
   fi
 
   local reference_count count_match=NA
-  if [[ $system == pure && $status == completed ]]; then
+  if [[ $system == reorder && $status == completed ]]; then
     reference_count=$cliques
     count_match=yes
   else
-    reference_count=$(pure_reference_count "$runs_csv" "$graph")
+    reference_count=$(reorder_reference_count "$runs_csv" "$graph")
     if [[ $status == completed && -n $reference_count ]]; then
       [[ $cliques == "$reference_count" ]] && count_match=yes || count_match=no
     fi
@@ -329,15 +365,15 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'system,graph,n,m,status,exit_code,cliques,stored_cliques,count_match_pure,interval_us,samples,peak_sampled_rss_kb,peak_observed_hwm_kb,wait4_peak_rss_kb,elapsed_us,algorithm_runtime_ms,graph_reduction,et,trace_file' \
+      'system,graph,n,m,status,exit_code,cliques,stored_cliques,count_match_reorder,interval_us,samples,peak_sampled_rss_kb,peak_observed_hwm_kb,wait4_peak_rss_kb,elapsed_us,algorithm_runtime_ms,graph_reduction,et,trace_file' \
       >"$runs_csv"
   fi
 
   for system in "${systems[@]}"; do
     for spec in "${FINAL_SELECTED_DATASETS[@]}"; do
-      IFS='|' read -r spec_group graph n m pure_input hbbmc_input <<<"$spec"
+      IFS='|' read -r spec_group graph n m reorder_input hbbmc_input <<<"$spec"
       [[ $spec_group == "$group" ]] || continue
-      run_one "$system" "$graph" "$n" "$m" "$pure_input" \
+      run_one "$system" "$graph" "$n" "$m" "$reorder_input" \
         "$hbbmc_input" "$group_root" "$runs_csv"
     done
   done
