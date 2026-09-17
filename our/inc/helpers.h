@@ -34,6 +34,13 @@ private:
     ui residualCount = 0;
   };
 
+  struct FlatAdjacencyHash {
+    vector<ui> slots;
+    size_t mask = 0;
+
+    bool contains(ui vertex) const;
+  };
+
   ui n;
   // Reordered graph in CSR form: row u is
   // adjVertices[adjOffsets[u]..adjOffsets[u + 1]).
@@ -42,7 +49,7 @@ private:
   vector<ui> firstForwardNeighbor;
   // Low-degree rows use binary search in CSR. Only high-degree rows pay
   // for a hash table, avoiding one heavyweight unordered_set per vertex.
-  vector<unique_ptr<unordered_set<ui>>> adjHash;
+  vector<unique_ptr<FlatAdjacencyHash>> adjHash;
   ull cliqueCount;
   ull solverWorkBudget;
   bool solverWorkBudgetEnabled;
@@ -95,6 +102,7 @@ private:
   vector<ui> ccrCommonScratch;
   vector<ui> ccrBranchX;
   vector<ui> ccrBranchR;
+  vector<ui> ccrCliqueScratch;
   vector<ui> coveringCliqueScratch;
   ull ccrFindOneCalls;
   ull ccrFullCalls;
@@ -152,7 +160,7 @@ private:
   bool adj(ui u, ui v) const {
     const auto &hash = adjHash[u];
     if (hash)
-      return hash->find(v) != hash->end();
+      return hash->contains(v);
     const AdjacencyRow row = adjacentVertices(u);
     return binary_search(row.begin(), row.end(), v);
   }
@@ -179,10 +187,12 @@ private:
   bool ccrCoreUnionIsMaximal(const CcrBitState &state) const;
   size_t selectCcrPivot(const CcrBitState &state) const;
   void buildCcrBranchRoots(CcrBitState &state, size_t pivot) const;
+  void enumeratePreparedOneWordBranch(const vector<ui> &M);
+  void enumeratePreparedTwoWordBranch(const vector<ui> &M);
   void enumerateAllPureBranch(const vector<ui> &M, const vector<ui> &Q);
   void enumerateAllPureBranchRecursive(vector<ui> &R, CcrBitState &state,
                                        bool fromP, size_t depth);
-  bool recordPureClique(vector<ui> C);
+  bool recordPureClique(vector<ui> &C);
 
 public:
   explicit ReorderSib(Graph &g, ui minCliqueSize = 3);

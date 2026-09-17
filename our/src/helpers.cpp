@@ -35,6 +35,18 @@ void addCcrMetric(ull &metric, ull increment) {
 
 } // namespace
 
+bool ReorderSib::FlatAdjacencyHash::contains(ui vertex) const {
+  constexpr ull kMultiplier = 11400714819323198485ULL;
+  size_t slot = static_cast<size_t>(static_cast<ull>(vertex) * kMultiplier) &
+                mask;
+  while (slots[slot] != numeric_limits<ui>::max()) {
+    if (slots[slot] == vertex)
+      return true;
+    slot = (slot + 1) & mask;
+  }
+  return false;
+}
+
 // Returns peelSeq index of verticies by core value
 // peelSeq[0] = highest-core vertex, peelSeq[n-1] = lowest.
 static vector<ui> computePeelSeq(const Graph &g, ui *degeneracy = nullptr) {
@@ -156,9 +168,27 @@ ReorderSib::ReorderSib(Graph &g, ui minCliqueSize)
     const AdjacencyRow row = adjacentVertices(u);
     if (row.size() < kAdjHashThreshold)
       continue;
-    auto hash = make_unique<unordered_set<ui>>();
-    hash->reserve(row.size());
-    hash->insert(row.begin(), row.end());
+    if (row.size() > numeric_limits<size_t>::max() / 2)
+      throw length_error("adjacency hash capacity overflow");
+    const size_t needed = row.size() * 2;
+    size_t capacity = 1;
+    while (capacity < needed) {
+      if (capacity > numeric_limits<size_t>::max() / 2)
+        throw length_error("adjacency hash capacity overflow");
+      capacity *= 2;
+    }
+    auto hash = make_unique<FlatAdjacencyHash>();
+    hash->slots.assign(capacity, numeric_limits<ui>::max());
+    hash->mask = capacity - 1;
+    constexpr ull kMultiplier = 11400714819323198485ULL;
+    for (ui vertex : row) {
+      size_t slot =
+          static_cast<size_t>(static_cast<ull>(vertex) * kMultiplier) &
+          hash->mask;
+      while (hash->slots[slot] != numeric_limits<ui>::max())
+        slot = (slot + 1) & hash->mask;
+      hash->slots[slot] = vertex;
+    }
     adjHash[u] = std::move(hash);
   }
 
@@ -521,10 +551,18 @@ bool ReorderSib::collectAllCoveringCliques(const vector<ui> &M,
   if (M.empty())
     return true;
 
-  ui seed = M[0];
-  for (ui v : M)
-    if (cliqueIdsByVertex[v].size() < cliqueIdsByVertex[seed].size())
+  ui seed = n;
+  for (ui v : M) {
+    const size_t forwardCount =
+        adjacentVertices(v).size() - firstForwardNeighbor[v];
+    if (forwardCount <= kSmallQCcrThreshold)
+      continue;
+    if (seed == n ||
+        cliqueIdsByVertex[v].size() < cliqueIdsByVertex[seed].size())
       seed = v;
+  }
+  if (seed == n)
+    throw logic_error("cover lookup has no indexed branch vertex");
 
   const auto &posting = cliqueIdsByVertex[seed];
   const size_t neededCapacity = min(
@@ -1784,20 +1822,20 @@ bool ReorderSib::runSmallCcrBranch(const vector<ui> &M,
     }
 
     if (maximal) {
-      vector<ui> clique = M;
+      ccrCliqueScratch.assign(M.begin(), M.end());
       ull extension = selected | currentCore;
       while (extension != 0) {
         const ui local =
             static_cast<ui>(__builtin_ctzll(extension));
-        clique.push_back(Q[local]);
+        ccrCliqueScratch.push_back(Q[local]);
         extension &= extension - 1;
       }
       if (stopAfterOne) {
-        *found = std::move(clique);
+        *found = ccrCliqueScratch;
         sort(found->begin(), found->end());
         return true;
       }
-      recordPureClique(std::move(clique));
+      recordPureClique(ccrCliqueScratch);
     }
     if (currentResidual == 0)
       return false;
@@ -1920,14 +1958,10 @@ void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
   }
 
   if (ccrExternalRowsMaterialized) {
-    if (++eIndexToken == 0) {
-      fill(eIndexStamp.begin(), eIndexStamp.end(), 0);
-      eIndexToken = 1;
-    }
     for (size_t local = 0; local < xSize; ++local) {
       const ui vertex = ccrXVertices[local];
-      eIndex[vertex] = static_cast<ui>(local);
-      eIndexStamp[vertex] = eIndexToken;
+      ccrIndex[vertex] = static_cast<ui>(qSize + local);
+      ccrIndexStamp[vertex] = ccrIndexToken;
     }
   }
 
@@ -1938,6 +1972,7 @@ void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
     throw length_error("CCRMCE local adjacency dimensions overflow");
   ccrNeighborBits.assign(rowCount * ccrWordCount, 0);
 
+  constexpr ull kAdjacencyLookupWeight = 8;
   ull scanWork = 0;
   for (ui vertex : ccrQVertices)
     scanWork += static_cast<ull>(adjacentVertices(vertex).size());
@@ -1945,23 +1980,24 @@ void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
                  static_cast<ull>(qSize > 0 ? qSize - 1 : 0) / 2;
   if (ccrExternalRowsMaterialized)
     pairWork += static_cast<ull>(qSize) * xSize;
-  constexpr ull kAdjacencyLookupWeight = 8;
-  const ull lookupEquivalentScanWork =
+  const ull globalLookupEquivalentScanWork =
       scanWork / kAdjacencyLookupWeight +
       static_cast<ull>(scanWork % kAdjacencyLookupWeight != 0);
   const bool scanRows =
-      pairWork == 0 || lookupEquivalentScanWork <= pairWork;
+      pairWork == 0 || globalLookupEquivalentScanWork <= pairWork;
 
   if (scanRows) {
     for (size_t local = 0; local < qSize; ++local) {
       ull *qRow = ccrNeighborBits.data() + local * ccrWordCount;
       for (ui neighbor : adjacentVertices(ccrQVertices[local])) {
         if (ccrIndexStamp[neighbor] == ccrIndexToken) {
-          const ui qNeighbor = ccrIndex[neighbor];
-          qRow[qNeighbor >> 6] |= 1ULL << (qNeighbor & 63);
-        } else if (ccrExternalRowsMaterialized &&
-                   eIndexStamp[neighbor] == eIndexToken) {
-          const size_t xLocal = eIndex[neighbor];
+          const size_t combinedLocal = ccrIndex[neighbor];
+          if (combinedLocal < qSize) {
+            qRow[combinedLocal >> 6] |=
+                1ULL << (combinedLocal & 63);
+            continue;
+          }
+          const size_t xLocal = combinedLocal - qSize;
           ull *xRow = ccrNeighborBits.data() +
                       (qSize + xLocal) * ccrWordCount;
           xRow[local >> 6] |= 1ULL << (local & 63);
@@ -1969,7 +2005,45 @@ void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
       }
     }
   } else {
+    constexpr ull kPerRowAdjacencyLookupWeight = 6;
+    ccrHeapPosition.assign(qSize, 0);
     for (size_t left = 0; left < qSize; ++left) {
+      const AdjacencyRow row = adjacentVertices(ccrQVertices[left]);
+      const ull lookupWork =
+          static_cast<ull>(qSize - left - 1) +
+          (ccrExternalRowsMaterialized ? static_cast<ull>(xSize) : 0ULL);
+      const ull lookupEquivalentScanWork =
+          static_cast<ull>(row.size()) / kPerRowAdjacencyLookupWeight +
+          static_cast<ull>(row.size() % kPerRowAdjacencyLookupWeight != 0);
+      const bool scanRow = lookupWork != 0 &&
+                           lookupEquivalentScanWork <= lookupWork;
+      ccrHeapPosition[left] = scanRow;
+
+      if (scanRow) {
+        for (ui neighbor : row) {
+          if (ccrIndexStamp[neighbor] == ccrIndexToken) {
+            const size_t combinedLocal = ccrIndex[neighbor];
+            if (combinedLocal >= qSize) {
+              const size_t xLocal = combinedLocal - qSize;
+              ull *xRow = ccrNeighborBits.data() +
+                          (qSize + xLocal) * ccrWordCount;
+              xRow[left >> 6] |= 1ULL << (left & 63);
+              continue;
+            }
+            const size_t right = combinedLocal;
+            if (right <= left)
+              continue;
+            ull *leftRow =
+                ccrNeighborBits.data() + left * ccrWordCount;
+            ull *rightRow =
+                ccrNeighborBits.data() + right * ccrWordCount;
+            leftRow[right >> 6] |= 1ULL << (right & 63);
+            rightRow[left >> 6] |= 1ULL << (left & 63);
+          }
+        }
+        continue;
+      }
+
       for (size_t right = left + 1; right < qSize; ++right) {
         if (!adj(ccrQVertices[left], ccrQVertices[right]))
           continue;
@@ -1981,13 +2055,17 @@ void ReorderSib::prepareCcrBranch(const vector<ui> &Q,
         rightRow[left >> 6] |= 1ULL << (left & 63);
       }
     }
+
     if (ccrExternalRowsMaterialized) {
       for (size_t xLocal = 0; xLocal < xSize; ++xLocal) {
         ull *xRow = ccrNeighborBits.data() +
                     (qSize + xLocal) * ccrWordCount;
-        for (size_t qLocal = 0; qLocal < qSize; ++qLocal)
+        for (size_t qLocal = 0; qLocal < qSize; ++qLocal) {
+          if (ccrHeapPosition[qLocal] != 0)
+            continue;
           if (adj(ccrXVertices[xLocal], ccrQVertices[qLocal]))
             xRow[qLocal >> 6] |= 1ULL << (qLocal & 63);
+        }
       }
     }
   }
@@ -2463,6 +2541,444 @@ void ReorderSib::buildCcrBranchRoots(CcrBitState &state,
   }
 }
 
+// Full CCRMCE recursion for a materialized one-word branch. prepareCcrBranch
+// has already built every Q and external-X row, so keeping C/P/X-within-Q in
+// scalar masks removes per-state dynamic bit-vector work without returning to
+// the slower lazy-X scalar path.
+void ReorderSib::enumeratePreparedOneWordBranch(const vector<ui> &M) {
+  if (ccrWordCount != 1 || !ccrExternalRowsMaterialized)
+    throw logic_error("prepared one-word CCRMCE requires materialized rows");
+
+  const size_t qSize = ccrQVertices.size();
+  const ull universe =
+      qSize == 64 ? ~0ULL : ((1ULL << static_cast<unsigned>(qSize)) - 1ULL);
+  auto qRow = [&](ui local) {
+    return ccrNeighborBits[static_cast<size_t>(local)];
+  };
+  auto xRow = [&](ui xLocal) {
+    return ccrNeighborBits[qSize + static_cast<size_t>(xLocal)];
+  };
+
+  auto recurse = [&](auto &&self, ull core, ull residual,
+                     ull excluded, ull selected, bool fromP,
+                     vector<ui> &external, size_t depth) -> void {
+    addCcrMetric(ccrFullStates, 1);
+    if (M.size() + static_cast<size_t>(__builtin_popcountll(
+                       selected | core | residual)) <
+        minCliqueSize)
+      return;
+
+    ull forcedCore = 0;
+    ull candidates = core;
+    while (candidates != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(candidates));
+      const ull bit = 1ULL << local;
+      if ((residual & ~qRow(local) & universe) == 0)
+        forcedCore |= bit;
+      candidates &= candidates - 1;
+    }
+
+    ull forcedResidual = 0;
+    const ull active = core | residual;
+    candidates = residual;
+    while (candidates != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(candidates));
+      const ull bit = 1ULL << local;
+      if (((active & ~qRow(local) & universe) & ~bit) == 0)
+        forcedResidual |= bit;
+      candidates &= candidates - 1;
+    }
+
+    const ull forced = forcedCore | forcedResidual;
+    if (forced != 0) {
+      core &= ~forcedCore;
+      residual &= ~forcedResidual;
+      selected |= forced;
+      if (forcedResidual != 0)
+        fromP = true;
+      ull forcedBits = forced;
+      while (forcedBits != 0) {
+        const ui local = static_cast<ui>(__builtin_ctzll(forcedBits));
+        excluded &= qRow(local);
+        forcedBits &= forcedBits - 1;
+      }
+
+      size_t kept = 0;
+      for (ui xLocal : external)
+        if ((xRow(xLocal) & forced) == forced)
+          external[kept++] = xLocal;
+      external.resize(kept);
+    }
+
+    bool maximal =
+        fromP &&
+        M.size() + static_cast<size_t>(
+                       __builtin_popcountll(selected | core)) >=
+            minCliqueSize;
+    if (maximal) {
+      ull blockers = residual | excluded;
+      while (blockers != 0) {
+        const ui local = static_cast<ui>(__builtin_ctzll(blockers));
+        if ((core & ~qRow(local)) == 0) {
+          maximal = false;
+          break;
+        }
+        blockers &= blockers - 1;
+      }
+    }
+    if (maximal)
+      for (ui xLocal : external)
+        if ((core & ~xRow(xLocal)) == 0) {
+          maximal = false;
+          break;
+        }
+
+    if (maximal) {
+      ccrCliqueScratch.assign(M.begin(), M.end());
+      ull extension = selected | core;
+      while (extension != 0) {
+        const ui local = static_cast<ui>(__builtin_ctzll(extension));
+        ccrCliqueScratch.push_back(ccrQVertices[local]);
+        extension &= extension - 1;
+      }
+      recordPureClique(ccrCliqueScratch);
+    }
+    if (residual == 0)
+      return;
+
+    ull excludedToCheck = excluded;
+    while (excludedToCheck != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(excludedToCheck));
+      const ull bit = 1ULL << local;
+      if ((qRow(local) & residual) == 0)
+        excluded &= ~bit;
+      excludedToCheck &= excludedToCheck - 1;
+    }
+    size_t kept = 0;
+    for (ui xLocal : external)
+      if ((xRow(xLocal) & residual) != 0)
+        external[kept++] = xLocal;
+    external.resize(kept);
+
+    auto descend = [&](ui local, bool selectedFromP) {
+      vector<ui> &childExternal = ccrStates[depth + 1].excludedExternal;
+      childExternal.clear();
+      if (childExternal.capacity() < external.size())
+        childExternal.reserve(external.size());
+      const ull bit = 1ULL << local;
+      for (ui xLocal : external)
+        if ((xRow(xLocal) & bit) != 0)
+          childExternal.push_back(xLocal);
+      const ull row = qRow(local);
+      self(self, core & row, residual & row, excluded & row,
+           selected | bit, selectedFromP, childExternal, depth + 1);
+    };
+
+    if ((residual & (residual - 1)) == 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(residual));
+      descend(local, true);
+      return;
+    }
+
+    const ull pivotActive = core | residual;
+    bool havePivot = false;
+    ull pivotMask = 0;
+    ui pivotLabel = 0;
+    ui bestScore = 0;
+    auto consider = [&](ull row, ui label) {
+      const ui score =
+          static_cast<ui>(__builtin_popcountll(row & pivotActive));
+      if (!havePivot || score > bestScore ||
+          (score == bestScore && label < pivotLabel)) {
+        havePivot = true;
+        pivotMask = row;
+        pivotLabel = label;
+        bestScore = score;
+      }
+    };
+
+    ull localPivots = pivotActive | excluded;
+    while (localPivots != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(localPivots));
+      consider(qRow(local), ccrQVertices[local]);
+      localPivots &= localPivots - 1;
+    }
+    for (ui xLocal : external)
+      consider(xRow(xLocal), ccrXVertices[xLocal]);
+    if (!havePivot)
+      throw logic_error("prepared one-word CCRMCE could not choose a pivot");
+
+    ull roots = residual & ~pivotMask & universe;
+    ull coreNonNeighbors = core & ~pivotMask & universe;
+    while (coreNonNeighbors != 0) {
+      const ui local =
+          static_cast<ui>(__builtin_ctzll(coreNonNeighbors));
+      if ((qRow(local) & residual & pivotMask) != 0)
+        roots |= 1ULL << local;
+      coreNonNeighbors &= coreNonNeighbors - 1;
+    }
+
+    while (roots != 0) {
+      const ui local = static_cast<ui>(__builtin_ctzll(roots));
+      const ull bit = 1ULL << local;
+      const bool selectedFromP = (residual & bit) != 0;
+      descend(local, selectedFromP);
+      if (selectedFromP)
+        residual &= ~bit;
+      else
+        core &= ~bit;
+      excluded |= bit;
+      roots &= roots - 1;
+    }
+  };
+
+  CcrBitState &root = ccrStates[0];
+  recurse(recurse, root.core[0], root.residual[0],
+          root.excludedCandidates[0], 0, true,
+          root.excludedExternal, 0);
+}
+
+// The same materialized scalar-state specialization for 65--128 candidates.
+// Two fixed words avoid allocating and copying three vector objects at each
+// recursive state while retaining the exact CCRMCE reductions and T1/T2 set.
+void ReorderSib::enumeratePreparedTwoWordBranch(const vector<ui> &M) {
+  if (ccrWordCount != 2 || !ccrExternalRowsMaterialized)
+    throw logic_error("prepared two-word CCRMCE requires materialized rows");
+
+  using Mask = array<ull, 2>;
+  const size_t qSize = ccrQVertices.size();
+  const Mask universe{
+      ~0ULL,
+      (qSize & 63) == 0
+          ? ~0ULL
+          : (1ULL << static_cast<unsigned>(qSize & 63)) - 1ULL};
+  auto row = [&](size_t rowIndex) {
+    return ccrNeighborBits.data() + rowIndex * 2;
+  };
+  auto count = [](const Mask &mask) {
+    return static_cast<ui>(__builtin_popcountll(mask[0]) +
+                           __builtin_popcountll(mask[1]));
+  };
+  auto forEach = [](const Mask &mask, auto &&visit) {
+    for (size_t word = 0; word < 2; ++word) {
+      ull bits = mask[word];
+      while (bits != 0) {
+        const ui local = static_cast<ui>(
+            word * 64 + static_cast<size_t>(__builtin_ctzll(bits)));
+        visit(local);
+        bits &= bits - 1;
+      }
+    }
+  };
+
+  auto recurse = [&](auto &&self, Mask core, Mask residual,
+                     Mask excluded, Mask selected, bool fromP,
+                     vector<ui> &external, size_t depth) -> void {
+    addCcrMetric(ccrFullStates, 1);
+    const Mask possible{selected[0] | core[0] | residual[0],
+                        selected[1] | core[1] | residual[1]};
+    if (M.size() + count(possible) < minCliqueSize)
+      return;
+
+    Mask forcedCore{};
+    forEach(core, [&](ui local) {
+      const ull *localRow = row(local);
+      if ((residual[0] & ~localRow[0]) == 0 &&
+          (residual[1] & ~localRow[1]) == 0)
+        forcedCore[local >> 6] |= 1ULL << (local & 63);
+    });
+
+    const Mask active{core[0] | residual[0], core[1] | residual[1]};
+    Mask forcedResidual{};
+    forEach(residual, [&](ui local) {
+      const ull *localRow = row(local);
+      ull nonNeighbors0 = active[0] & ~localRow[0];
+      ull nonNeighbors1 = active[1] & ~localRow[1];
+      if ((local >> 6) == 0)
+        nonNeighbors0 &= ~(1ULL << (local & 63));
+      else
+        nonNeighbors1 &= ~(1ULL << (local & 63));
+      if (nonNeighbors0 == 0 && nonNeighbors1 == 0)
+        forcedResidual[local >> 6] |= 1ULL << (local & 63);
+    });
+
+    const Mask forced{forcedCore[0] | forcedResidual[0],
+                      forcedCore[1] | forcedResidual[1]};
+    if ((forced[0] | forced[1]) != 0) {
+      for (size_t word = 0; word < 2; ++word) {
+        core[word] &= ~forcedCore[word];
+        residual[word] &= ~forcedResidual[word];
+        selected[word] |= forced[word];
+      }
+      if ((forcedResidual[0] | forcedResidual[1]) != 0)
+        fromP = true;
+      forEach(forced, [&](ui local) {
+        const ull *localRow = row(local);
+        excluded[0] &= localRow[0];
+        excluded[1] &= localRow[1];
+      });
+
+      size_t kept = 0;
+      for (ui xLocal : external) {
+        const ull *externalRow = row(qSize + xLocal);
+        if ((forced[0] & ~externalRow[0]) == 0 &&
+            (forced[1] & ~externalRow[1]) == 0)
+          external[kept++] = xLocal;
+      }
+      external.resize(kept);
+    }
+
+    const Mask represented{selected[0] | core[0],
+                           selected[1] | core[1]};
+    bool maximal =
+        fromP && M.size() + count(represented) >= minCliqueSize;
+    if (maximal) {
+      const Mask blockers{residual[0] | excluded[0],
+                          residual[1] | excluded[1]};
+      forEach(blockers, [&](ui local) {
+        if (!maximal)
+          return;
+        const ull *localRow = row(local);
+        if ((core[0] & ~localRow[0]) == 0 &&
+            (core[1] & ~localRow[1]) == 0)
+          maximal = false;
+      });
+    }
+    if (maximal)
+      for (ui xLocal : external) {
+        const ull *externalRow = row(qSize + xLocal);
+        if ((core[0] & ~externalRow[0]) == 0 &&
+            (core[1] & ~externalRow[1]) == 0) {
+          maximal = false;
+          break;
+        }
+      }
+
+    if (maximal) {
+      ccrCliqueScratch.assign(M.begin(), M.end());
+      forEach(represented, [&](ui local) {
+        ccrCliqueScratch.push_back(ccrQVertices[local]);
+      });
+      recordPureClique(ccrCliqueScratch);
+    }
+    if ((residual[0] | residual[1]) == 0)
+      return;
+
+    const Mask excludedToCheck = excluded;
+    forEach(excludedToCheck, [&](ui local) {
+      const ull *localRow = row(local);
+      if (((localRow[0] & residual[0]) |
+           (localRow[1] & residual[1])) == 0)
+        excluded[local >> 6] &= ~(1ULL << (local & 63));
+    });
+    size_t kept = 0;
+    for (ui xLocal : external) {
+      const ull *externalRow = row(qSize + xLocal);
+      if (((externalRow[0] & residual[0]) |
+           (externalRow[1] & residual[1])) != 0)
+        external[kept++] = xLocal;
+    }
+    external.resize(kept);
+
+    auto descend = [&](ui local, bool selectedFromP) {
+      vector<ui> &childExternal = ccrStates[depth + 1].excludedExternal;
+      childExternal.clear();
+      if (childExternal.capacity() < external.size())
+        childExternal.reserve(external.size());
+      const size_t localWord = local >> 6;
+      const ull bit = 1ULL << (local & 63);
+      for (ui xLocal : external)
+        if ((row(qSize + xLocal)[localWord] & bit) != 0)
+          childExternal.push_back(xLocal);
+      const ull *localRow = row(local);
+      const Mask childCore{core[0] & localRow[0],
+                           core[1] & localRow[1]};
+      const Mask childResidual{residual[0] & localRow[0],
+                               residual[1] & localRow[1]};
+      const Mask childExcluded{excluded[0] & localRow[0],
+                               excluded[1] & localRow[1]};
+      Mask childSelected = selected;
+      childSelected[localWord] |= bit;
+      self(self, childCore, childResidual, childExcluded,
+           childSelected, selectedFromP, childExternal, depth + 1);
+    };
+
+    if (count(residual) == 1) {
+      const ui local = residual[0] != 0
+                           ? static_cast<ui>(__builtin_ctzll(residual[0]))
+                           : static_cast<ui>(64 +
+                                             __builtin_ctzll(residual[1]));
+      descend(local, true);
+      return;
+    }
+
+    const Mask pivotActive{core[0] | residual[0],
+                           core[1] | residual[1]};
+    bool havePivot = false;
+    const ull *pivotRow = nullptr;
+    ui pivotLabel = 0;
+    ui bestScore = 0;
+    auto consider = [&](const ull *candidateRow, ui label) {
+      const ui score = static_cast<ui>(
+          __builtin_popcountll(candidateRow[0] & pivotActive[0]) +
+          __builtin_popcountll(candidateRow[1] & pivotActive[1]));
+      if (!havePivot || score > bestScore ||
+          (score == bestScore && label < pivotLabel)) {
+        havePivot = true;
+        pivotRow = candidateRow;
+        pivotLabel = label;
+        bestScore = score;
+      }
+    };
+
+    const Mask localPivots{pivotActive[0] | excluded[0],
+                           pivotActive[1] | excluded[1]};
+    forEach(localPivots, [&](ui local) {
+      consider(row(local), ccrQVertices[local]);
+    });
+    for (ui xLocal : external)
+      consider(row(qSize + xLocal), ccrXVertices[xLocal]);
+    if (!havePivot)
+      throw logic_error("prepared two-word CCRMCE could not choose a pivot");
+
+    Mask roots{residual[0] & ~pivotRow[0] & universe[0],
+               residual[1] & ~pivotRow[1] & universe[1]};
+    const Mask coreNonNeighbors{core[0] & ~pivotRow[0] & universe[0],
+                                core[1] & ~pivotRow[1] & universe[1]};
+    forEach(coreNonNeighbors, [&](ui local) {
+      const ull *localRow = row(local);
+      if (((localRow[0] & residual[0] & pivotRow[0]) |
+           (localRow[1] & residual[1] & pivotRow[1])) != 0)
+        roots[local >> 6] |= 1ULL << (local & 63);
+    });
+
+    for (size_t word = 0; word < 2; ++word) {
+      while (roots[word] != 0) {
+        const ui local = static_cast<ui>(
+            word * 64 + static_cast<size_t>(__builtin_ctzll(roots[word])));
+        const ull bit = 1ULL << (local & 63);
+        const bool selectedFromP = (residual[word] & bit) != 0;
+        descend(local, selectedFromP);
+        if (selectedFromP)
+          residual[word] &= ~bit;
+        else
+          core[word] &= ~bit;
+        excluded[word] |= bit;
+        roots[word] &= roots[word] - 1;
+      }
+    }
+  };
+
+  CcrBitState &root = ccrStates[0];
+  const Mask rootCore{root.core[0], root.core[1]};
+  const Mask rootResidual{root.residual[0], root.residual[1]};
+  const Mask rootExcluded{root.excludedCandidates[0],
+                          root.excludedCandidates[1]};
+  const Mask rootSelected{};
+  recurse(recurse, rootCore, rootResidual, rootExcluded,
+          rootSelected, true, root.excludedExternal, 0);
+}
+
 bool ReorderSib::findOnePure(const vector<ui> &M, const vector<ui> &Q,
                              vector<ui> &found) {
   found.clear();
@@ -2470,15 +2986,27 @@ bool ReorderSib::findOnePure(const vector<ui> &M, const vector<ui> &Q,
     return false;
 
   const AdjacencyRow firstRow = adjacentVertices(M[0]);
-  ccrCommon.assign(firstRow.begin(), firstRow.end());
-  for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
-    intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
-    ccrCommon.swap(ccrCommonScratch);
+  const size_t forwardOffset = firstForwardNeighbor[M[0]];
+  const bool wholeRootBranch =
+      M.size() == 1 && Q.size() == firstRow.size() - forwardOffset;
+  const vector<ui> *external = nullptr;
+  if (wholeRootBranch) {
+    ccrBranchX.assign(firstRow.begin(), firstRow.begin() + forwardOffset);
+    external = &ccrBranchX;
+  } else {
+    ccrCommon.assign(firstRow.begin(), firstRow.end());
+    for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
+      intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
+      ccrCommon.swap(ccrCommonScratch);
+    }
   }
   addCcrMetric(ccrFindOneCalls, 1);
   if (Q.size() <= 4)
-    return runSmallCcrBranch(M, Q, ccrCommon, &found);
-  setDiffInto(ccrBranchX, ccrCommon, Q);
+    return runSmallCcrBranch(M, Q,
+                             wholeRootBranch ? *external : ccrCommon,
+                             &found);
+  if (!wholeRootBranch)
+    setDiffInto(ccrBranchX, ccrCommon, Q);
   prepareCcrBranch(Q, ccrBranchX, false);
   ccrBranchR.assign(M.begin(), M.end());
   return findOnePureRecursive(ccrBranchR, ccrStates[0], true, found, 0);
@@ -2558,18 +3086,38 @@ void ReorderSib::enumerateAllPureBranch(const vector<ui> &M,
     return;
 
   const AdjacencyRow firstRow = adjacentVertices(M[0]);
-  ccrCommon.assign(firstRow.begin(), firstRow.end());
-  for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
-    intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
-    ccrCommon.swap(ccrCommonScratch);
+  const size_t forwardOffset = firstForwardNeighbor[M[0]];
+  const bool wholeRootBranch =
+      M.size() == 1 && Q.size() == firstRow.size() - forwardOffset;
+  const vector<ui> *external = nullptr;
+  if (wholeRootBranch) {
+    ccrBranchX.assign(firstRow.begin(), firstRow.begin() + forwardOffset);
+    external = &ccrBranchX;
+  } else {
+    ccrCommon.assign(firstRow.begin(), firstRow.end());
+    for (size_t i = 1; i < M.size() && !ccrCommon.empty(); ++i) {
+      intersectInto(ccrCommonScratch, ccrCommon, adjacentVertices(M[i]));
+      ccrCommon.swap(ccrCommonScratch);
+    }
   }
   addCcrMetric(ccrFullCalls, 1);
   if (Q.size() <= 4) {
-    runSmallCcrBranch(M, Q, ccrCommon, nullptr);
+    runSmallCcrBranch(M, Q,
+                      wholeRootBranch ? *external : ccrCommon,
+                      nullptr);
     return;
   }
-  setDiffInto(ccrBranchX, ccrCommon, Q);
+  if (!wholeRootBranch)
+    setDiffInto(ccrBranchX, ccrCommon, Q);
   prepareCcrBranch(Q, ccrBranchX, true);
+  if (ccrWordCount == 1) {
+    enumeratePreparedOneWordBranch(M);
+    return;
+  }
+  if (ccrWordCount == 2 && Q.size() >= 68) {
+    enumeratePreparedTwoWordBranch(M);
+    return;
+  }
   ccrBranchR.assign(M.begin(), M.end());
   enumerateAllPureBranchRecursive(ccrBranchR, ccrStates[0], true, 0);
 }
@@ -2585,11 +3133,11 @@ void ReorderSib::enumerateAllPureBranchRecursive(
 
   if (fromP && R.size() + state.coreCount >= minCliqueSize &&
       ccrCoreUnionIsMaximal(state)) {
-    vector<ui> clique = R;
+    ccrCliqueScratch.assign(R.begin(), R.end());
     ccrForEachBit(state.core, [&](ui local) {
-      clique.push_back(ccrQVertices[local]);
+      ccrCliqueScratch.push_back(ccrQVertices[local]);
     });
-    recordPureClique(std::move(clique));
+    recordPureClique(ccrCliqueScratch);
   }
   if (state.residualCount == 0) {
     R.resize(entryRSize);
@@ -2681,7 +3229,7 @@ void ReorderSib::rehashEmittedCliqueIndex(size_t capacity) {
   }
 }
 
-bool ReorderSib::recordPureClique(vector<ui> C) {
+bool ReorderSib::recordPureClique(vector<ui> &C) {
   sort(C.begin(), C.end());
   const ull hash = hashClique(C);
 
@@ -2718,8 +3266,16 @@ bool ReorderSib::recordPureClique(vector<ui> C) {
     ++emittedHashSlotsUsed;
   }
   emittedHashHeads[slot] = cliqueId;
-  for (ui v : C)
-    cliqueIdsByVertex[v].push_back(cliqueId);
+  // A posting is queried only from branches that exceed the conservative
+  // direct-CCRMCE threshold. Every such branch keeps its original root in M,
+  // so indexing vertices whose own forward root is necessarily direct only
+  // wastes insertion time and memory without making a cover discoverable.
+  for (ui v : C) {
+    const size_t forwardCount =
+        adjacentVertices(v).size() - firstForwardNeighbor[v];
+    if (forwardCount > kSmallQCcrThreshold)
+      cliqueIdsByVertex[v].push_back(cliqueId);
+  }
   return true;
 }
 
@@ -2851,7 +3407,7 @@ void ReorderSib::findAllMaximalCliquesPure() {
       if (covers.empty()) {
         vector<ui> found;
         if (findOnePure(branch.mustin, branch.expandTo, found)) {
-          recordPureClique(std::move(found));
+          recordPureClique(found);
           // The unchanged branch retains every unseen target. On its next pop,
           // the clique just recorded necessarily covers its must-in set.
           pushBranch(std::move(branch));

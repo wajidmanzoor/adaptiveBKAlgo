@@ -112,6 +112,111 @@ bool checkConfiguration(
   return false;
 }
 
+// This graph has 32 isolates followed by a root whose 34-neighbor branch is
+// K_34 minus one edge. The isolates put that root beyond the adaptive warmup,
+// so Q > 32 takes the exact sibling-seed route at budget 1000. A separate
+// K_260 joined to the two nonadjacent endpoints makes high-degree rows cross
+// the flat-adjacency-hash threshold. The four size>=3 maximal cliques are
+// known analytically.
+constexpr ui kStructuredIsolates = 32;
+constexpr ui kStructuredRoot = kStructuredIsolates;
+constexpr ui kStructuredNeighborBegin = kStructuredRoot + 1;
+constexpr ui kStructuredNeighborCount = 34;
+constexpr ui kStructuredLeft = kStructuredNeighborBegin;
+constexpr ui kStructuredRight = kStructuredNeighborBegin + 1;
+constexpr ui kStructuredDenseBegin =
+    kStructuredNeighborBegin + kStructuredNeighborCount;
+constexpr ui kStructuredDenseCount = 260;
+constexpr ui kStructuredVertices =
+    kStructuredDenseBegin + kStructuredDenseCount;
+
+bool structuredAdjacent(ui left, ui right) {
+  if (left == right)
+    return false;
+  if (left > right)
+    std::swap(left, right);
+  if (left < kStructuredIsolates)
+    return false;
+  if (left == kStructuredRoot)
+    return right >= kStructuredNeighborBegin &&
+           right < kStructuredDenseBegin;
+
+  const bool leftNeighbor = left >= kStructuredNeighborBegin &&
+                            left < kStructuredDenseBegin;
+  const bool rightNeighbor = right >= kStructuredNeighborBegin &&
+                             right < kStructuredDenseBegin;
+  if (leftNeighbor && rightNeighbor)
+    return left != kStructuredLeft || right != kStructuredRight;
+
+  const bool rightDense = right >= kStructuredDenseBegin;
+  if (leftNeighbor && rightDense)
+    return left == kStructuredLeft || left == kStructuredRight;
+  return left >= kStructuredDenseBegin && rightDense;
+}
+
+bool writeStructuredSiblingGraph(const char *path) {
+  ui edgeCount = 0;
+  for (ui left = 0; left < kStructuredVertices; ++left)
+    for (ui right = left + 1; right < kStructuredVertices; ++right)
+      edgeCount += structuredAdjacent(left, right);
+
+  std::ofstream output(path, std::ios::out | std::ios::trunc);
+  if (!output)
+    return false;
+  output << kStructuredVertices << ' ' << edgeCount << '\n';
+  for (ui vertex = 0; vertex < kStructuredVertices; ++vertex) {
+    output << vertex;
+    for (ui neighbor = 0; neighbor < kStructuredVertices; ++neighbor)
+      if (structuredAdjacent(vertex, neighbor))
+        output << ' ' << neighbor;
+    output << '\n';
+  }
+  return static_cast<bool>(output);
+}
+
+bool checkStructuredSiblingGraph(const char *path) {
+  Graph graph(path);
+  ReorderSib algorithm(graph, 3);
+  algorithm.setSolverWorkBudget(1000);
+  algorithm.findAllMaximalCliquesPure();
+
+  CliqueSet expected;
+  std::vector<ui> clique;
+  clique.push_back(kStructuredRoot);
+  for (ui vertex = kStructuredNeighborBegin;
+       vertex < kStructuredDenseBegin; ++vertex)
+    if (vertex != kStructuredLeft)
+      clique.push_back(vertex);
+  expected.insert(clique);
+
+  clique.clear();
+  clique.push_back(kStructuredRoot);
+  for (ui vertex = kStructuredNeighborBegin;
+       vertex < kStructuredDenseBegin; ++vertex)
+    if (vertex != kStructuredRight)
+      clique.push_back(vertex);
+  expected.insert(clique);
+
+  for (ui endpoint : {kStructuredLeft, kStructuredRight}) {
+    clique.clear();
+    clique.push_back(endpoint);
+    for (ui vertex = kStructuredDenseBegin;
+         vertex < kStructuredVertices; ++vertex)
+      clique.push_back(vertex);
+    expected.insert(clique);
+  }
+
+  const std::vector<std::vector<ui>> emitted = algorithm.getCliques();
+  const CliqueSet actual(emitted.begin(), emitted.end());
+  if (actual == expected && actual.size() == emitted.size())
+    return true;
+
+  std::fprintf(stderr,
+               "FAIL structured_sibling expected=%zu emitted=%zu unique=%zu\n",
+               expected.size(), emitted.size(), actual.size());
+  return false;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -201,14 +306,25 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (!writeStructuredSiblingGraph(argv[1])) {
+    std::cout.rdbuf(savedOutput);
+    std::fprintf(stderr, "cannot write structured graph: %s\n", argv[1]);
+    return 2;
+  }
+  if (!checkStructuredSiblingGraph(argv[1])) {
+    std::cout.rdbuf(savedOutput);
+    return 1;
+  }
+
   std::cout.rdbuf(savedOutput);
   std::remove(argv[1]);
   std::fprintf(stderr,
                "CCR_EXHAUSTIVE_PASS graphs=%llu configurations=%llu "
-               "random_graphs=%llu max_vertices=%u\n",
+               "random_graphs=%llu structured_graphs=1 max_vertices=%u "
+               "structured_vertices=%u\n",
                static_cast<unsigned long long>(graphCount),
                static_cast<unsigned long long>(graphCount * 2),
                static_cast<unsigned long long>(randomGraphCount),
-               kMaximumTestVertices);
+               kMaximumTestVertices, kStructuredVertices);
   return 0;
 }
