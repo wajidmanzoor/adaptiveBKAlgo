@@ -1,16 +1,17 @@
-# Recursive PXR-state ablation branch
+# Recursive-state ablation branch (historical `ablation-pxr-states`)
 
-This branch contains only the recursive PXR-state comparison. It includes
-physical Pure and HBBMC source copies. Pure uses the latest optimized reorder
-core with ET1/ET2/ET3 disabled at compile time; HBBMC runs with
-`--graph-reduction none --et 0`. Both retain all reported cliques.
+This branch compares recursive search states in the final CCRMCE-based reorder
+against HBBMC. The branch name is retained for continuity, but the final
+reorder no longer contains PXR: its measured state is one recursive CCRMCE
+entry in FindOne or exhaustive enumeration. HBBMC continues to use
+`counter.vertex_recursive_calls` for its recursive `(R,P,X)` entries.
 
-Pure counts recursive `(R,P,X)` entries in FindOne and full-PXR fallback.
-HBBMC uses `counter.vertex_recursive_calls`. Ordering, worklist entries,
-seed-solver work, graph reduction, and terminal continuation work are excluded.
-Pure budget 1000, all seven pruning rules, hit-set capacity 128, adjacency hash
-threshold 64, small-Q full-PXR threshold 4, and minimum clique size 3 remain
-fixed.
+Both physical source copies retain every reported clique. Reorder uses budget
+1000, the production pruning profile, hit-set capacity 128, adjacency hash
+threshold 256, small-Q CCRMCE threshold 32, adaptive direct threshold 256,
+and disabled ET1/ET2/ET3. HBBMC runs with
+`--graph-reduction none --et 0`. Ordering, worklist entries, seed-solver work,
+graph reduction, and terminal continuation work are excluded.
 
 Run from the repository root:
 

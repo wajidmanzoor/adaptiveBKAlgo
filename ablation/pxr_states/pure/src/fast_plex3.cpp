@@ -1,6 +1,5 @@
 #include "../inc/fast_plex3.h"
 #include "../inc/checked_count.h"
-#include "../inc/config.h"
 
 #include <array>
 #include <cstddef>
@@ -17,7 +16,6 @@ struct Counts {
 
 struct ComponentStats {
   Counts counts;
-  ui maximumSize = 0;
 };
 
 Counts singletonSequence(ui selected) {
@@ -53,7 +51,6 @@ bool countPath(size_t length, ComponentStats &result) {
     return false;
   if (length == 1) {
     result.counts = singletonSequence(1);
-    result.maximumSize = 1;
     return true;
   }
 
@@ -87,7 +84,6 @@ bool countPath(size_t length, ComponentStats &result) {
   if (!appendCounts(result.counts, states[1], 0) ||
       !appendCounts(result.counts, states[2], 0))
     return false;
-  result.maximumSize = static_cast<ui>((length + 1) / 2);
   return true;
 }
 
@@ -149,7 +145,6 @@ bool countCycle(size_t length, ComponentStats &result) {
       return false;
   }
 
-  result.maximumSize = static_cast<ui>(length / 2);
   return true;
 }
 
@@ -237,8 +232,6 @@ FastPlex3Result solveFastPlex3SubtreeImpl(
   std::vector<unsigned char> complementDegree(pSize, 0);
   for (size_t i = 0; i < pSize; ++i) {
     for (size_t j = i + 1; j < pSize; ++j) {
-      if constexpr (pure_config::kDiagnosticsEnabled)
-        ++result.checksCount;
       if (contains(p[i], p[j]))
         continue;
       if (complementDegree[i] == 2 || complementDegree[j] == 2)
@@ -250,7 +243,6 @@ FastPlex3Result solveFastPlex3SubtreeImpl(
 
   ull totalCount = 1;
   std::array<ull, SMALL_SIZE_LIMIT + 1> smallCounts{{1, 0, 0}};
-  ui maximumCandidateSize = 0;
   std::vector<ui> maximumCandidates;
   maximumCandidates.reserve(pSize);
 
@@ -338,22 +330,12 @@ FastPlex3Result solveFastPlex3SubtreeImpl(
       return result;
     smallCounts = combinedSmall;
 
-    if (stats.maximumSize >
-        std::numeric_limits<ui>::max() - maximumCandidateSize)
-      return result;
-    maximumCandidateSize += stats.maximumSize;
-
     size_t witnessLimit = order.size();
     if (cycle && (order.size() & 1U) != 0)
       --witnessLimit;
     for (size_t at = 0; at < witnessLimit; at += 2)
       maximumCandidates.push_back(p[order[at]]);
   }
-
-  if (maximumCandidateSize >
-      std::numeric_limits<ui>::max() - cliqueSize)
-    return result;
-  const ui maximumCliqueSize = cliqueSize + maximumCandidateSize;
 
   ull excluded = 0;
   if (cliqueSize < minCliqueSize) {
@@ -371,13 +353,11 @@ FastPlex3Result solveFastPlex3SubtreeImpl(
     return result;
 
   result.handled = true;
-  result.enumeratedCliqueCount = totalCount;
   result.cliqueCount = totalCount - excluded;
   result.found = result.cliqueCount != 0;
   if (!result.found)
     return result;
 
-  result.maxCliqueSize = maximumCliqueSize;
   if (cliquePrefix != nullptr)
     result.witness = *cliquePrefix;
   result.witness.insert(result.witness.end(), maximumCandidates.begin(),

@@ -19,12 +19,12 @@ result_root=${2:-"$script_dir/results/$timestamp"}
 timeout_seconds=${PXR_TIMEOUT_SECONDS:-3600}
 build_jobs=${PXR_BUILD_JOBS:-4}
 dataset_filter=${PXR_DATASETS:-}
-pure_budget=${PXR_PURE_BUDGET:-1000}
+reorder_budget=${PXR_REORDER_BUDGET:-1000}
 
 final_require_positive_integer PXR_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer PXR_BUILD_JOBS "$build_jobs" || exit 2
-if [[ $pure_budget != unlimited ]]; then
-  final_require_nonnegative_integer PXR_PURE_BUDGET "$pure_budget" || exit 2
+if [[ $reorder_budget != unlimited ]]; then
+  final_require_nonnegative_integer PXR_REORDER_BUDGET "$reorder_budget" || exit 2
 fi
 final_require_tools cmake timeout /usr/bin/time awk sha256sum uname find sort || exit 2
 final_collect_grouped_datasets "$data_root" "$dataset_filter" 1 || exit 2
@@ -41,12 +41,12 @@ final_build hbbmc_no_reduction_no_et "$hbbmc_source" "$hbbmc_build" \
 pure_binary="$pure_build/$FINAL_PURE_BINARY_NAME"
 hbbmc_binary="$hbbmc_build/$FINAL_HBBMC_BINARY_NAME"
 [[ -x $pure_binary && -x $hbbmc_binary ]] || {
-  echo "A PXR-state binary is missing." >&2
+  echo "A recursive-state binary is missing." >&2
   exit 2
 }
 
 {
-  echo "campaign=Pure versus HBBMC recursive PXR states"
+  echo "campaign=final Reorder CCRMCE versus HBBMC recursive states"
   echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "edge_root=$FINAL_EDGE_ROOT"
@@ -56,17 +56,17 @@ hbbmc_binary="$hbbmc_build/$FINAL_HBBMC_BINARY_NAME"
   echo "timeout_seconds_per_program=$timeout_seconds"
   echo "execution=sequential"
   echo "minimum_clique_size=3"
-  echo "pure_budget=$pure_budget"
-  echo "pure_small_q_full_pxr_threshold=4"
-  echo "pure_hitset_capacity=128"
-  echo "pure_pruning=all seven rules enabled"
-  echo "pure_graph_reduction=none (the Pure source contains no graph-reduction module)"
-  echo "pure_early_termination=disabled at compile time"
+  echo "reorder_budget=$reorder_budget"
+  echo "reorder_small_q_ccr_threshold=32"
+  echo "reorder_hitset_capacity=128"
+  echo "reorder_pruning=production profile"
+  echo "reorder_graph_reduction=none"
+  echo "reorder_legacy_early_termination=disabled"
   echo "hbbmc_graph_reduction=none"
   echo "hbbmc_early_termination=0"
-  echo "state_definition.pure_pxr=one recursive Pure (R,P,X) entry in FindOne or full fallback"
+  echo "state_definition.reorder_ccr=one recursive CCRMCE state in FindOne or exhaustive enumeration"
   echo "state_definition.hbbmc_pxr=counter.vertex_recursive_calls"
-  echo "excluded=ordering, Pure worklist entries, hitting-set work, HBBMC edge-root setup, reductions, and ET continuation expansion"
+  echo "excluded=ordering, reorder worklist entries, hitting-set work, HBBMC edge-root setup, reductions, and ET continuation expansion"
   sha256sum "$pure_binary" "$hbbmc_binary"
   uname -a
 } >"$result_root/environment.txt"
@@ -98,7 +98,7 @@ run_dataset() {
   mkdir -p "$log_dir"
   local -a pure_command=(
     env OMP_NUM_THREADS=1 "$pure_binary" "$pure_input"
-    --method optimized --budget "$pure_budget" --min-clique-size 3 --small-q-pxr 4
+    --budget "$reorder_budget" --min-clique-size 3
   )
   local -a hbbmc_command=(
     env OMP_NUM_THREADS=1 "$hbbmc_binary" "$hbbmc_input"
@@ -107,45 +107,51 @@ run_dataset() {
   )
 
   final_write_command "$pure_base.command" "${pure_command[@]}"
-  final_run_timed "system=pure graph=$graph" "$pure_base.stdout" \
+  final_run_timed "system=reorder graph=$graph" "$pure_base.stdout" \
     "$pure_base.stderr" "$pure_base.resources" "$timeout_seconds" \
     "${pure_command[@]}"
   local pure_exit=$FINAL_RUN_EXIT_CODE
   local pure_wall=$FINAL_RUN_WALL_MS
 
-  local pure_cliques pure_pxr pure_findone pure_full pure_et pure_total
-  local pure_runtime pure_checks pure_fallbacks pure_status pure_invariant=no
-  pure_cliques=$(final_output_value "$pure_base.stdout" pure.cliques)
-  pure_pxr=$(final_output_value "$pure_base.stdout" pure.state.pxr)
-  pure_findone=$(final_output_value "$pure_base.stdout" pure.state.findone_pxr)
-  pure_full=$(final_output_value "$pure_base.stdout" pure.state.full_pxr)
-  pure_et=$(final_output_value "$pure_base.stdout" pure.state.et)
-  pure_total=$(final_output_value "$pure_base.stdout" pure.state.total)
-  pure_runtime=$(final_output_value "$pure_base.stdout" pure.runtime_ms)
-  pure_checks=$(final_output_value "$pure_base.stdout" pure.checks)
-  pure_fallbacks=$(final_output_value "$pure_base.stdout" pure.budget_fallbacks)
+  local reorder_cliques pure_pxr pure_findone pure_full pure_et pure_total
+  local pure_runtime pure_checks pure_fallbacks reorder_status reorder_invariant=no
+  reorder_cliques=$(final_output_value "$pure_base.stdout" reorder.cliques)
+  pure_pxr=
+  pure_findone=$(final_output_value "$pure_base.stdout" reorder.ccr.findone_states)
+  pure_full=$(final_output_value "$pure_base.stdout" reorder.ccr.full_states)
+  pure_et=0
+  pure_total=
+  if final_all_uint "$pure_findone" "$pure_full"; then
+    pure_pxr=$((pure_findone + pure_full))
+    pure_total=$pure_pxr
+  fi
+  pure_runtime=$(final_output_value "$pure_base.stdout" reorder.runtime_ms)
+  pure_checks=$pure_pxr
+  pure_fallbacks=$(final_output_value "$pure_base.stdout" reorder.budget_fallbacks)
 
   if [[ $pure_exit -eq 0 ]] &&
-      final_all_uint "$pure_cliques" "$pure_pxr" "$pure_findone" \
+      final_all_uint "$reorder_cliques" "$pure_pxr" "$pure_findone" \
         "$pure_full" "$pure_et" "$pure_total" "$pure_checks" \
         "$pure_fallbacks" &&
       final_all_number "$pure_runtime" &&
-      [[ $(final_output_value "$pure_base.stdout" pure.config.budget) == "$pure_budget" ]] &&
-      [[ $(final_output_value "$pure_base.stdout" pure.config.small_q_full_pxr_threshold) == 4 ]] &&
-      [[ $(final_output_value "$pure_base.stdout" pure.config.et) == 0 ]] &&
-      final_pruning_config_matches "$pure_base.stdout" none; then
+      [[ $(final_output_value "$pure_base.stdout" reorder.budget) == "$reorder_budget" ]] &&
+      [[ $(final_output_value "$pure_base.stdout" reorder.config.small_q_ccr_threshold) == 32 ]] &&
+      [[ $(final_output_value "$pure_base.stdout" reorder.config.et1) == 0 ]] &&
+      [[ $(final_output_value "$pure_base.stdout" reorder.config.et2) == 0 ]] &&
+      [[ $(final_output_value "$pure_base.stdout" reorder.config.et3) == 0 ]] &&
+      final_pruning_config_matches "$pure_base.stdout" production; then
     if [[ $pure_pxr -eq $((pure_findone + pure_full)) &&
           $pure_checks -eq $pure_pxr && $pure_et -eq 0 &&
           $pure_total -eq $pure_pxr ]]; then
-      pure_invariant=yes
-      pure_status=completed
+      reorder_invariant=yes
+      reorder_status=completed
     else
-      pure_status=failed
+      reorder_status=failed
     fi
   else
-    pure_status=$(final_status_from_exit "$pure_exit")
+    reorder_status=$(final_status_from_exit "$pure_exit")
   fi
-  echo "DONE system=pure graph=$graph status=$pure_status pxr=${pure_pxr:-NA}"
+  echo "DONE system=reorder graph=$graph status=$reorder_status ccr_states=${pure_pxr:-NA}"
 
   final_write_command "$hbbmc_base.command" "${hbbmc_command[@]}"
   final_run_timed "system=hbbmc graph=$graph" "$hbbmc_base.stdout" \
@@ -187,8 +193,8 @@ run_dataset() {
   echo "DONE system=hbbmc graph=$graph status=$hbbmc_status pxr=${hbbmc_pxr:-NA}"
 
   local count_match=NA ratio=NA
-  if [[ $pure_status == completed && $hbbmc_status == completed ]]; then
-    [[ $pure_cliques == "$hbbmc_cliques" ]] && count_match=yes || count_match=no
+  if [[ $reorder_status == completed && $hbbmc_status == completed ]]; then
+    [[ $reorder_cliques == "$hbbmc_cliques" ]] && count_match=yes || count_match=no
     if [[ $pure_pxr -gt 0 ]]; then
       ratio=$(awk -v h="$hbbmc_pxr" -v p="$pure_pxr" \
         'BEGIN { printf "%.6f", h / p }')
@@ -196,12 +202,12 @@ run_dataset() {
   fi
 
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
-    "$graph" "$n" "$m" "$pure_status" "$pure_cliques" "$pure_pxr" \
+    "$graph" "$n" "$m" "$reorder_status" "$reorder_cliques" "$pure_pxr" \
     "$pure_findone" "$pure_full" "$pure_et" "$pure_runtime" "$pure_wall" \
-    "$pure_fallbacks" "$pure_invariant" "$hbbmc_status" "$hbbmc_cliques" \
+    "$pure_fallbacks" "$reorder_invariant" "$hbbmc_status" "$hbbmc_cliques" \
     "$hbbmc_pxr" "$hbbmc_et" "$hbbmc_runtime" "$hbbmc_wall" \
     "$hbbmc_invariant" "$count_match" "$ratio" >>"$runs_csv"
-  echo "COMPARE graph=$graph count_match=$count_match hbbmc_over_pure_pxr=$ratio"
+  echo "COMPARE graph=$graph count_match=$count_match hbbmc_over_reorder_ccr=$ratio"
 }
 
 campaign_failed=0
@@ -211,7 +217,7 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'graph,n,m,pure_status,pure_cliques,pure_pxr_states,pure_findone_pxr_states,pure_full_pxr_states,pure_et_states,pure_runtime_ms,pure_wall_ms,pure_budget_fallbacks,pure_invariant,hbbmc_status,hbbmc_cliques,hbbmc_pxr_states,hbbmc_et_states,hbbmc_runtime_ms,hbbmc_wall_ms,hbbmc_invariant,count_match,hbbmc_over_pure_pxr_ratio' \
+      'graph,n,m,reorder_status,reorder_cliques,reorder_ccr_states,reorder_findone_ccr_states,reorder_full_ccr_states,reorder_legacy_et_states,reorder_runtime_ms,reorder_wall_ms,reorder_budget_fallbacks,reorder_invariant,hbbmc_status,hbbmc_cliques,hbbmc_pxr_states,hbbmc_et_states,hbbmc_runtime_ms,hbbmc_wall_ms,hbbmc_invariant,count_match,hbbmc_over_reorder_ccr_ratio' \
       >"$runs_csv"
   fi
 
