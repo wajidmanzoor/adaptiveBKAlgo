@@ -8,10 +8,7 @@
 struct FastPlex3Result {
   bool handled = false;
   bool found = false;
-  ull enumeratedCliqueCount = 0;
   ull cliqueCount = 0;
-  ui maxCliqueSize = 0;
-  ull checksCount = 0;
   std::vector<ui> witness;
 };
 
@@ -27,7 +24,8 @@ struct FastPlex3Result {
 // caller to retain ordinary recursion. It is returned for non-3-plex states
 // and whenever a result would overflow the public ull/ui counters.
 // ReorderSib supplies its permuted CSR plus optional high-degree hash rows, so
-// Pure PXR can use this exact terminal without retaining a second graph copy.
+// Retained for optional ET experiments. The ET-disabled CCRMCE lanes do not
+// call this terminal.
 FastPlex3Result solveFastPlex3Subtree(
     const std::vector<ui> &adjacencyVertices,
     const std::vector<size_t> &adjacencyOffsets,

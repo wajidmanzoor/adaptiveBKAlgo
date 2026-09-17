@@ -54,12 +54,12 @@ final_build pure_budget "$pure_source" "$build_root" \
   "$result_root/build_logs" "$build_jobs" || exit 2
 binary="$build_root/$FINAL_PURE_BINARY_NAME"
 [[ -x $binary ]] || {
-  echo "Missing Pure binary: $binary" >&2
+  echo "Missing reorder binary: $binary" >&2
   exit 2
 }
 
 {
-  echo "campaign=Pure budget sweep"
+  echo "campaign=final Reorder+CCRMCE budget sweep"
   echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "result_root=$result_root"
@@ -67,10 +67,12 @@ binary="$build_root/$FINAL_PURE_BINARY_NAME"
   echo "graphs=${#FINAL_SELECTED_DATASETS[@]}"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "method=optimized"
   echo "minimum_clique_size=3"
-  echo "small_q_full_pxr_threshold=4"
+  echo "small_q_ccr_threshold=32"
+  echo "adaptive_direct_q_threshold=256"
   echo "hitset_capacity=128"
+  echo "early_termination=ET1 ET2 ET3 disabled"
+  echo "pruning=production profile (subsumption disabled; six other rules enabled)"
   echo "reference_budget=$reference_budget"
   echo "budgets=${budgets[*]}"
   echo "budget_semantics=numeric N permits N compatibility examinations per seed-solver call; 0 forces fallback at the first examination; unlimited imposes no limit"
@@ -115,9 +117,8 @@ run_one() {
   local base="$log_dir/budget_$budget"
   mkdir -p "$log_dir"
   local -a command=(
-    env OMP_NUM_THREADS=1
-    "$binary" "$input" --method optimized --budget "$budget"
-    --min-clique-size 3 --small-q-pxr 4
+    env OMP_NUM_THREADS=1 "$binary" "$input"
+    --budget "$budget" --min-clique-size 3
   )
   final_write_command "$base.command" "${command[@]}"
   final_run_timed "budget=$budget graph=$graph" "$base.stdout" \
@@ -125,21 +126,30 @@ run_one() {
 
   local exit_code=$FINAL_RUN_EXIT_CODE
   local wall_ms=$FINAL_RUN_WALL_MS
-  local cliques runtime_ms checks fallbacks configured status
+  local cliques runtime_ms findone_states full_states ccr_states
+  local fallbacks capacity_fallbacks configured status
   local reference_count reference_wall count_match=NA slowdown=NA
-  cliques=$(final_output_value "$base.stdout" pure.cliques)
-  runtime_ms=$(final_output_value "$base.stdout" pure.runtime_ms)
-  checks=$(final_output_value "$base.stdout" pure.checks)
-  fallbacks=$(final_output_value "$base.stdout" pure.budget_fallbacks)
-  configured=$(final_output_value "$base.stdout" pure.config.budget)
+  cliques=$(final_output_value "$base.stdout" reorder.cliques)
+  runtime_ms=$(final_output_value "$base.stdout" reorder.runtime_ms)
+  findone_states=$(final_output_value "$base.stdout" reorder.ccr.findone_states)
+  full_states=$(final_output_value "$base.stdout" reorder.ccr.full_states)
+  fallbacks=$(final_output_value "$base.stdout" reorder.budget_fallbacks)
+  capacity_fallbacks=$(final_output_value "$base.stdout" reorder.capacity_fallbacks)
+  configured=$(final_output_value "$base.stdout" reorder.budget)
+  ccr_states=
+  if final_all_uint "$findone_states" "$full_states"; then
+    ccr_states=$((findone_states + full_states))
+  fi
 
   if [[ $exit_code -eq 0 ]] &&
-      final_all_uint "$cliques" "$checks" "$fallbacks" &&
+      final_all_uint "$cliques" "$ccr_states" "$fallbacks" "$capacity_fallbacks" &&
       final_all_number "$runtime_ms" &&
-      [[ $configured == "$budget" ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.small_q_full_pxr_threshold) == 4 ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.et) == 1 ]] &&
-      final_pruning_config_matches "$base.stdout" none; then
+      [[ $configured == "$budget" && $capacity_fallbacks == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.small_q_ccr_threshold) == 32 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et1) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et2) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et3) == 0 ]] &&
+      final_pruning_config_matches "$base.stdout" production; then
     status=completed
   else
     status=$(final_status_from_exit "$exit_code")
@@ -163,7 +173,7 @@ run_one() {
 
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$budget" "$graph" "$n" "$m" "$status" "$exit_code" "$cliques" \
-    "$wall_ms" "$runtime_ms" "$checks" "$fallbacks" "$configured" \
+    "$wall_ms" "$runtime_ms" "$ccr_states" "$fallbacks" "$configured" \
     "$reference_count" "$count_match" "$slowdown" >>"$runs_csv"
   echo "DONE budget=$budget graph=$graph status=$status cliques=${cliques:-NA} match=$count_match fallbacks=${fallbacks:-NA}"
 }
@@ -175,7 +185,7 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'budget,graph,n,m,status,exit_code,cliques,wall_ms,runtime_ms,checks,budget_fallbacks,configured_budget,reference_count,count_match,slowdown_vs_reference' \
+      'budget,graph,n,m,status,exit_code,cliques,wall_ms,runtime_ms,ccr_states,budget_fallbacks,configured_budget,reference_count,count_match,slowdown_vs_reference' \
       >"$runs_csv"
   fi
 

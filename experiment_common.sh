@@ -4,7 +4,7 @@
 # own physical source directory and build directory so CMake options cannot
 # leak between ablation variants.
 
-FINAL_PURE_BINARY_NAME=pure_mce
+FINAL_PURE_BINARY_NAME=adaptive_bk
 FINAL_HBBMC_BINARY_NAME=hbbmc_faithful
 
 FINAL_PRUNING_RULES=(
@@ -96,12 +96,16 @@ final_output_value() {
 
 final_pruning_config_matches() {
   local output=$1
-  local disabled=${2:-none}
+  local profile=${2:-production}
   local rule expected actual
   for rule in "${FINAL_PRUNING_RULES[@]}"; do
     expected=1
-    [[ $rule == "$disabled" ]] && expected=0
-    actual=$(final_output_value "$output" "pure.config.pruning.$rule")
+    if [[ $profile == production && $rule == subsumption ]]; then
+      expected=0
+    elif [[ $profile != production && $profile != none && $rule == "$profile" ]]; then
+      expected=0
+    fi
+    actual=$(final_output_value "$output" "reorder.config.pruning.$rule")
     [[ $actual == "$expected" ]] || return 1
   done
 }

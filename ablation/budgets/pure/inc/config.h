@@ -3,70 +3,51 @@
 namespace pure_config {
 
 inline constexpr unsigned long long kDefaultBudget = 1000;
-inline constexpr unsigned kHitsetCapacity = 128;
-
-#if defined(PURE_LEAN_BENCHMARK)
-inline constexpr bool kDiagnosticsEnabled = false;
-#else
-inline constexpr bool kDiagnosticsEnabled = true;
+#if !defined(PURE_HITSET_CAPACITY)
+#define PURE_HITSET_CAPACITY 128
 #endif
-
-#if defined(PURE_DISABLE_ET1)
+inline constexpr unsigned kHitsetCapacity = PURE_HITSET_CAPACITY;
+static_assert(kHitsetCapacity >= 64 && kHitsetCapacity % 64 == 0,
+              "hit-set capacity must be a positive multiple of 64");
+inline constexpr unsigned kCoverCollectionCutoff = 128;
+// Keep the legacy PXR early-termination terminals disabled while evaluating
+// the independent effect of Core Clique Removal.
 inline constexpr bool kEt1Enabled = false;
-#else
-inline constexpr bool kEt1Enabled = true;
-#endif
-#if defined(PURE_DISABLE_ET2)
 inline constexpr bool kEt2Enabled = false;
-#else
-inline constexpr bool kEt2Enabled = true;
-#endif
-#if defined(PURE_DISABLE_ET3)
 inline constexpr bool kEt3Enabled = false;
-#else
-inline constexpr bool kEt3Enabled = true;
+inline constexpr unsigned kAdjHashThreshold = 256;
+inline constexpr unsigned kSmallQCcrThreshold = 32;
+inline constexpr unsigned kAdaptiveDirectQThreshold = 256;
+inline constexpr unsigned kAdaptiveDirectWarmupRoots = 32;
+inline constexpr unsigned kAdaptiveDirectMinCliquesPerRootDenominator = 2;
+#if !defined(PURE_PRUNING_NORMALIZATION)
+#define PURE_PRUNING_NORMALIZATION 1
+#endif
+#if !defined(PURE_PRUNING_SUBSUMPTION)
+#define PURE_PRUNING_SUBSUMPTION 0
+#endif
+#if !defined(PURE_PRUNING_UNIT)
+#define PURE_PRUNING_UNIT 1
+#endif
+#if !defined(PURE_PRUNING_USEFULNESS)
+#define PURE_PRUNING_USEFULNESS 1
+#endif
+#if !defined(PURE_PRUNING_ANTICHAIN)
+#define PURE_PRUNING_ANTICHAIN 1
+#endif
+#if !defined(PURE_PRUNING_FAIL_FIRST)
+#define PURE_PRUNING_FAIL_FIRST 1
+#endif
+#if !defined(PURE_PRUNING_ZERO_COVERAGE)
+#define PURE_PRUNING_ZERO_COVERAGE 1
 #endif
 
-#if defined(PURE_ADJ_HASH_THRESHOLD)
-inline constexpr unsigned kAdjHashThreshold = PURE_ADJ_HASH_THRESHOLD;
-#else
-inline constexpr unsigned kAdjHashThreshold = 64;
-#endif
-
-#if defined(PURE_DISABLE_PRUNING_NORMALIZATION)
-inline constexpr bool kPruneNormalization = false;
-#else
-inline constexpr bool kPruneNormalization = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_SUBSUMPTION)
-inline constexpr bool kPruneSubsumption = false;
-#else
-inline constexpr bool kPruneSubsumption = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_UNIT)
-inline constexpr bool kPruneUnit = false;
-#else
-inline constexpr bool kPruneUnit = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_USEFULNESS)
-inline constexpr bool kPruneUsefulness = false;
-#else
-inline constexpr bool kPruneUsefulness = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_ANTICHAIN)
-inline constexpr bool kPruneAntichain = false;
-#else
-inline constexpr bool kPruneAntichain = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_FAIL_FIRST)
-inline constexpr bool kPruneFailFirst = false;
-#else
-inline constexpr bool kPruneFailFirst = true;
-#endif
-#if defined(PURE_DISABLE_PRUNING_ZERO_COVERAGE)
-inline constexpr bool kPruneZeroCoverage = false;
-#else
-inline constexpr bool kPruneZeroCoverage = true;
-#endif
+inline constexpr bool kPruneNormalization = PURE_PRUNING_NORMALIZATION != 0;
+inline constexpr bool kPruneSubsumption = PURE_PRUNING_SUBSUMPTION != 0;
+inline constexpr bool kPruneUnit = PURE_PRUNING_UNIT != 0;
+inline constexpr bool kPruneUsefulness = PURE_PRUNING_USEFULNESS != 0;
+inline constexpr bool kPruneAntichain = PURE_PRUNING_ANTICHAIN != 0;
+inline constexpr bool kPruneFailFirst = PURE_PRUNING_FAIL_FIRST != 0;
+inline constexpr bool kPruneZeroCoverage = PURE_PRUNING_ZERO_COVERAGE != 0;
 
 } // namespace pure_config
