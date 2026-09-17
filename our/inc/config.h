@@ -4,11 +4,17 @@ namespace pure_config {
 
 inline constexpr unsigned long long kDefaultBudget = 1000;
 inline constexpr unsigned kHitsetCapacity = 128;
-inline constexpr bool kEt1Enabled = true;
-inline constexpr bool kEt2Enabled = true;
-inline constexpr bool kEt3Enabled = true;
-inline constexpr unsigned kAdjHashThreshold = 64;
-inline constexpr unsigned kSmallQFullPxrThreshold = 4;
+inline constexpr unsigned kCoverCollectionCutoff = 128;
+// Keep the legacy PXR early-termination terminals disabled while evaluating
+// the independent effect of Core Clique Removal.
+inline constexpr bool kEt1Enabled = false;
+inline constexpr bool kEt2Enabled = false;
+inline constexpr bool kEt3Enabled = false;
+inline constexpr unsigned kAdjHashThreshold = 256;
+inline constexpr unsigned kSmallQCcrThreshold = 32;
+inline constexpr unsigned kAdaptiveDirectQThreshold = 256;
+inline constexpr unsigned kAdaptiveDirectWarmupRoots = 32;
+inline constexpr unsigned kAdaptiveDirectMinCliquesPerRootDenominator = 2;
 inline constexpr bool kPruneNormalization = true;
 inline constexpr bool kPruneSubsumption = false;
 inline constexpr bool kPruneUnit = true;
