@@ -9,28 +9,28 @@ source "$script_dir/../../experiment_common.sh"
 source "$script_dir/../../grouped_experiment_common.sh"
 
 if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 DATA_ROOT [RESULT_ROOT]" >&2
+  echo "Usage: $0 ADJACENCY_DIR [RESULT_ROOT]" >&2
   exit 2
 fi
 
-data_root=$1
+adjacency_root=$1
 timestamp=$(date +%Y%m%d_%H%M%S)
 result_root=${2:-"$script_dir/results/$timestamp"}
-timeout_seconds=${CAPACITY_TIMEOUT_SECONDS:-3600}
+timeout_seconds=${CAPACITY_TIMEOUT_SECONDS:-1800}
 build_jobs=${CAPACITY_BUILD_JOBS:-4}
 dataset_filter=${CAPACITY_DATASETS:-}
 repetitions=${CAPACITY_REPETITIONS:-3}
 budget=1000
 
-capacities=(64 128 512 1024 dynamic)
+capacities=(64 128 256 526 unlimited)
 # Run the reference first so every subsequent row can be checked immediately.
-run_capacities=(128 64 512 1024 dynamic)
+run_capacities=(128 64 256 526 unlimited)
 
 final_require_positive_integer CAPACITY_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer CAPACITY_BUILD_JOBS "$build_jobs" || exit 2
 final_require_positive_integer CAPACITY_REPETITIONS "$repetitions" || exit 2
 final_require_tools cmake timeout /usr/bin/time awk sha256sum uname find sort || exit 2
-final_collect_grouped_datasets "$data_root" "$dataset_filter" 0 || exit 2
+final_collect_grouped_datasets "$adjacency_root" "$dataset_filter" || exit 2
 
 mkdir -p "$result_root/build_logs"
 pure_source="$script_dir/pure"
@@ -49,11 +49,11 @@ done
 
 {
   echo "campaign=final Reorder+CCRMCE seed-mask capacity ablation"
-  echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "result_root=$result_root"
   echo "groups=${FINAL_SELECTED_GROUPS[*]}"
   echo "graphs=${#FINAL_SELECTED_DATASETS[@]}"
+  echo "skipped_graphs=$FINAL_SKIPPED_DATASETS"
   echo "capacities=${capacities[*]}"
   echo "reference_capacity=128"
   echo "budget=$budget (fixed)"
@@ -64,7 +64,7 @@ done
   echo "repetitions=$repetitions"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "dynamic_semantics=ceil(reduced_constraints/64) words per nontrivial seed-solver call"
+  echo "unlimited_semantics=ceil(reduced_constraints/64) words per nontrivial seed-solver call"
   for capacity in "${capacities[@]}"; do
     sha256sum "${binaries[$capacity]}"
   done
@@ -152,7 +152,7 @@ run_one() {
   dynamic=$(final_output_value "$base.stdout" reorder.config.hitset_dynamic)
 
   expected_dynamic=0
-  [[ $capacity == dynamic ]] && expected_dynamic=1
+  [[ $capacity == unlimited ]] && expected_dynamic=1
 
   if [[ $exit_code -eq 0 ]] &&
       final_all_uint "$cliques" "$stored" "$max_rss" "$ccr_states" \

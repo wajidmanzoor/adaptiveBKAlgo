@@ -4,9 +4,9 @@ project(adaptive_bk_algorithm LANGUAGES CXX)
 
 include(CheckIPOSupported)
 set(PURE_HITSET_VARIANT "128" CACHE STRING
-    "Seed-mask capacity: 64, 128, 512, 1024, or dynamic")
+    "Seed-mask capacity: 64, 128, 256, 526, or unlimited")
 set_property(CACHE PURE_HITSET_VARIANT PROPERTY STRINGS
-    64 128 512 1024 dynamic)
+    64 128 256 526 unlimited)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,14 +22,14 @@ add_library(reorder_core STATIC
     src/helpers.cpp
 )
 target_include_directories(reorder_core PUBLIC inc)
-if(PURE_HITSET_VARIANT STREQUAL "dynamic")
+if(PURE_HITSET_VARIANT STREQUAL "unlimited")
     target_compile_definitions(reorder_core PUBLIC PURE_HITSET_DYNAMIC=1)
-elseif(PURE_HITSET_VARIANT MATCHES "^(64|128|512|1024)$")
+elseif(PURE_HITSET_VARIANT MATCHES "^(64|128|256|526)$")
     target_compile_definitions(reorder_core PUBLIC
         PURE_HITSET_CAPACITY=${PURE_HITSET_VARIANT})
 else()
     message(FATAL_ERROR
-        "PURE_HITSET_VARIANT must be 64, 128, 512, 1024, or dynamic")
+        "PURE_HITSET_VARIANT must be 64, 128, 256, 526, or unlimited")
 endif()
 
 add_executable(adaptive_bk main.cpp)

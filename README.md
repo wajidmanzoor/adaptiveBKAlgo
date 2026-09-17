@@ -95,11 +95,11 @@ the selected result directory.
 ## Seed-mask capacity ablation
 
 See the [capacity ablation guide](ablation/README.md). The runner compares
-fixed capacities 64, 128, 512, and 1024 with a dynamic mask while fixing the
+fixed capacities 64, 128, 256, and 526 with an unlimited mask while fixing the
 latest optimized reorder core and all other controls.
 
 ```bash
-./ablation/capacity/run.sh DATA_ROOT [RESULT_ROOT]
+./ablation/capacity/run.sh ADJACENCY_DIR [RESULT_ROOT]
 ```
 
 ## Source layout

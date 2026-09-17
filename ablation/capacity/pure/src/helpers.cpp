@@ -1092,7 +1092,7 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
     *usePivotFallback = false;
 
   // Preprocess on vertex sets before selecting a fixed-mask fallback.  This is
-  // deliberately representation-independent so all three experiment variants
+  // deliberately representation-independent so all experiment variants
   // make their capacity decision from the same exact reduced problem.
   if (++eIndexToken == 0) {
     fill(eIndexStamp.begin(), eIndexStamp.end(), 0);
@@ -1256,7 +1256,9 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
   }
 #endif
 #if !defined(PURE_HITSET_DYNAMIC)
-  static constexpr ui fixedMaskWords = kHitsetCapacity / 64;
+  // Capacities need not be multiples of 64 (the requested 526-bit variant
+  // uses nine words). Unused high bits in the final word remain clear.
+  static constexpr ui fixedMaskWords = (kHitsetCapacity + 63) / 64;
   using Mask = array<ull, fixedMaskWords>;
   const ui maskWords = fixedMaskWords;
   auto zeroMask = []() -> Mask { return Mask{}; };
@@ -3490,7 +3492,7 @@ void ReorderSib::findAllMaximalCliquesPure() {
        << "reorder.config.et3=" << kEt3Enabled << '\n'
        << "reorder.config.hitset_capacity=";
   if (kHitsetDynamic)
-    cout << "dynamic";
+    cout << "unlimited";
   else
     cout << kHitsetCapacity;
   cout << '\n'

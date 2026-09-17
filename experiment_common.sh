@@ -5,7 +5,6 @@
 # leak between ablation variants.
 
 FINAL_PURE_BINARY_NAME=adaptive_bk
-FINAL_HBBMC_BINARY_NAME=hbbmc_faithful
 
 FINAL_PRUNING_RULES=(
   normalization
