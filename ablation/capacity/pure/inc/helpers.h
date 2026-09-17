@@ -6,11 +6,6 @@
 
 #include <memory>
 
-enum class SibMethod {
-  BACKTRACKING,
-  OPTIMIZED
-};
-
 class ReorderSib {
 private:
   struct AdjacencyRow {
@@ -29,6 +24,23 @@ private:
     vector<ui> expandTo;
   };
 
+  struct CcrBitState {
+    vector<ull> core;
+    vector<ull> residual;
+    vector<ull> excludedCandidates;
+    vector<ui> excludedExternal;
+    vector<ui> branchRoots;
+    ui coreCount = 0;
+    ui residualCount = 0;
+  };
+
+  struct FlatAdjacencyHash {
+    vector<ui> slots;
+    size_t mask = 0;
+
+    bool contains(ui vertex) const;
+  };
+
   ui n;
   // Reordered graph in CSR form: row u is
   // adjVertices[adjOffsets[u]..adjOffsets[u + 1]).
@@ -37,44 +49,15 @@ private:
   vector<ui> firstForwardNeighbor;
   // Low-degree rows use binary search in CSR. Only high-degree rows pay
   // for a hash table, avoiding one heavyweight unordered_set per vertex.
-  vector<unique_ptr<unordered_set<ui>>> adjHash;
+  vector<unique_ptr<FlatAdjacencyHash>> adjHash;
   ull cliqueCount;
-  ull dupBlocked;
-  size_t maxCliqueSize;
-  ull checksCount;
-  ull findOnePxrStates;
-  ull fullPxrStates;
-  ull et1EnumeratedStates;
-  ull et2EnumeratedStates;
-  ull et3EnumeratedStates;
   ull solverWorkBudget;
   bool solverWorkBudgetEnabled;
   ull solverBudgetFallbacks;
-  ull solverCertifiedBudgetFallbacks;
   ull solverCapacityFallbacks;
-  ull nontrivialSeedSolverCalls;
-  ui maximumSeedConstraints;
-  ull findOne2PlexTerminals;
-  ull findOne3PlexTerminals;
-  ull fullPxr2PlexTerminals;
-  ull fullPxr3PlexTerminals;
-  ull worklistPushes;
-  ull worklistPops;
-  size_t maximumWorklistSize;
-  ull minSizePrunedBranches;
-  ull coverLookupCalls;
-  ull findOneCalls;
-  ull findOneSuccesses;
-  ull findOneCliqueSizeTotal;
-  size_t maximumFindOneCliqueSize;
   ull seedSolverCalls;
-  ull generatedBranches;
-  ull fullPxrFallbackBranches;
-  ull smallQFullPxrBranches;
-  array<ull, 8> poppedQSizeBuckets;
-  SibMethod method;
+  ui maximumSeedConstraints;
   ui minCliqueSize;
-  ui smallQFullPxrThreshold;
   // Compact append-only clique arena. Clique i occupies
   // cliqueVertices[cliqueOffsets[i]..cliqueOffsets[i + 1]).
   vector<ui> cliqueVertices;
@@ -97,10 +80,41 @@ private:
   vector<ui> eIndex;             // reusable vertex -> local E index map
   vector<ui> eIndexStamp;        // stamp for entries valid in current solver call
   ui eIndexToken;
-  // P/X child buffers are indexed by recursion depth and reused across
-  // sibling calls and top-level branches.
-  vector<vector<ui>> pxrPBuffers;
-  vector<vector<ui>> pxrXBuffers;
+  // Reusable local CCRMCE representation. Every row in ccrNeighborBits is a
+  // bitset over the current Q. Rows [0,Q.size()) belong to Q and the
+  // remaining rows belong to the initial external X when materialized.
+  // Keeping X sparse while C/P/X-within-Q are bitsets avoids repeated
+  // allocation/copy costs without materializing a full (Q union X)^2 graph.
+  vector<CcrBitState> ccrStates;
+  vector<ui> ccrQVertices;
+  vector<ui> ccrXVertices;
+  vector<ull> ccrNeighborBits;
+  size_t ccrWordCount = 0;
+  bool ccrExternalRowsMaterialized = false;
+  vector<ui> ccrHeap;
+  vector<ui> ccrHeapPosition;
+  vector<ui> ccrDegree;
+  // Reusable vertex-to-local-Q map for local induced-graph construction. It
+  // is separate from the seed solver's E-index map; E's map is reused for X.
+  vector<ui> ccrIndex;
+  vector<ui> ccrIndexStamp;
+  ui ccrIndexToken;
+  // Reused across top-level CCRMCE invocations. Calls are sequential (the
+  // recursive search only mutates ccrStates), so retaining these capacities
+  // removes repeated branch-local allocation without changing search state.
+  vector<ui> ccrCommon;
+  vector<ui> ccrCommonScratch;
+  vector<ui> ccrBranchX;
+  vector<ui> ccrBranchR;
+  vector<ui> ccrCliqueScratch;
+  vector<ui> coveringCliqueScratch;
+  ull ccrFindOneCalls;
+  ull ccrFullCalls;
+  ull ccrFindOneStates;
+  ull ccrFullStates;
+  ull ccrCoreExtractions;
+  ull ccrCoreVertices;
+  ull ccrResidualVertices;
   // Reused by commonExpandInto so sibling generation does not allocate an
   // ordering and intersection scratch vector for every branch.
   vector<ui> commonExpandOrder;
@@ -134,7 +148,6 @@ private:
   void rehashEmittedCliqueIndex(size_t capacity);
   size_t emittedCliqueHashSlot(ull hash) const;
 
-  bool hitsAll(const vector<ui> &S, const vector<vector<ui>> &hitSets);
   void commonExpandInto(vector<ui> &out, const vector<ui> &E,
                         const vector<ui> &S);
   vector<vector<ui>> buildHitSets(const vector<ui> &E,
@@ -142,8 +155,6 @@ private:
                                   ui maxHitSets = UINT_MAX);
   vector<vector<ui>> singletonBranches(const vector<ui> &E);
 
-  vector<vector<ui>> backtrackingBranchBound(const vector<ui> &E,
-                                             const vector<vector<ui>> &hitSets);
   vector<vector<ui>> efficientHittingSet(const vector<ui> &E,
                                          vector<vector<ui>> hitSets,
                                          bool *usePivotFallback = nullptr);
@@ -153,36 +164,42 @@ private:
   bool adj(ui u, ui v) const {
     const auto &hash = adjHash[u];
     if (hash)
-      return hash->find(v) != hash->end();
+      return hash->contains(v);
     const AdjacencyRow row = adjacentVertices(u);
     return binary_search(row.begin(), row.end(), v);
   }
 
-  vector<ui> collectAllCoveringCliques(const vector<ui> &M);
+  bool collectAllCoveringCliques(const vector<ui> &M,
+                                 vector<ui> &result);
   vector<vector<ui>>
   generateExactSiblingSets(const vector<ui> &E,
                            const vector<ui> &coveringCliqueIds,
                            bool *usePivotFallback = nullptr);
   bool findOnePure(const vector<ui> &M, const vector<ui> &Q,
                    vector<ui> &found);
-  bool findOnePureRecursive(vector<ui> &R, vector<ui> &P, vector<ui> &X,
-                            vector<ui> &found, size_t depth);
-  ui pureNeighborsInP(ui u, const vector<ui> &P) const;
-  void scanPurePXRState(const vector<ui> &P, const vector<ui> &X,
-                        ui &pivot, ui &minPScore, ui &universalP,
-                        bool &xUniversal);
-  void pureMatchingParts(const vector<ui> &P, vector<ui> &forced,
-                         vector<pair<ui, ui>> &missingEdges) const;
-  void enumerateSmallPureBranch(const vector<ui> &M,
-                                const vector<ui> &Q);
+  bool findOnePureRecursive(vector<ui> &R, CcrBitState &state,
+                            bool fromP, vector<ui> &found, size_t depth);
+  bool runSmallCcrBranch(const vector<ui> &M, const vector<ui> &Q,
+                         const vector<ui> &common, vector<ui> *found);
+  void prepareCcrBranch(const vector<ui> &Q, const vector<ui> &X,
+                        bool materializeExternalRows);
+  void normalizeCcrState(vector<ui> &R, CcrBitState &state,
+                         bool &fromP);
+  void pruneCcrExcludedWithoutResidualNeighbors(CcrBitState &state);
+  void buildCcrChildState(CcrBitState &child,
+                          const CcrBitState &parent, ui local) const;
+  bool ccrCoreUnionIsMaximal(const CcrBitState &state) const;
+  size_t selectCcrPivot(const CcrBitState &state) const;
+  void buildCcrBranchRoots(CcrBitState &state, size_t pivot) const;
+  void enumeratePreparedOneWordBranch(const vector<ui> &M);
+  void enumeratePreparedTwoWordBranch(const vector<ui> &M);
   void enumerateAllPureBranch(const vector<ui> &M, const vector<ui> &Q);
-  void enumerateAllPureBranchRecursive(vector<ui> &R, vector<ui> &P,
-                                       vector<ui> &X, size_t depth);
-  bool recordPureClique(vector<ui> C);
+  void enumerateAllPureBranchRecursive(vector<ui> &R, CcrBitState &state,
+                                       bool fromP, size_t depth);
+  bool recordPureClique(vector<ui> &C);
 
 public:
-  ReorderSib(Graph &g, SibMethod method = SibMethod::OPTIMIZED,
-             ui minCliqueSize = 3);
+  explicit ReorderSib(Graph &g, ui minCliqueSize = 3);
   void findAllMaximalCliquesPure();
   void setSolverWorkBudget(ull budget) {
     solverWorkBudget = budget;
@@ -191,9 +208,6 @@ public:
   void clearSolverWorkBudget() {
     solverWorkBudget = 0;
     solverWorkBudgetEnabled = false;
-  }
-  void setSmallQFullPxrThreshold(ui threshold) {
-    smallQFullPxrThreshold = threshold;
   }
   vector<vector<ui>> getCliques() const;
 };

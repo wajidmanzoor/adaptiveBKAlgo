@@ -29,21 +29,3 @@ inline void addCliqueCountOrThrow(ull &count, ull increment) {
         "maximal-clique count exceeds the uint64_t output range");
   count = sum;
 }
-
-#if defined(PURE_LEAN_BENCHMARK)
-inline void addSearchStatesOrThrow(ull &, ull) noexcept {}
-
-inline void incrementSearchStateOrThrow(ull &) noexcept {}
-#else
-inline void addSearchStatesOrThrow(ull &count, ull increment) {
-  ull sum = 0;
-  if (!tryAddUll(count, increment, sum))
-    throw std::overflow_error(
-        "search-state count exceeds the uint64_t range");
-  count = sum;
-}
-
-inline void incrementSearchStateOrThrow(ull &count) {
-  addSearchStatesOrThrow(count, 1);
-}
-#endif

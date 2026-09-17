@@ -42,13 +42,13 @@ for capacity in "${capacities[@]}"; do
     -DPURE_HITSET_VARIANT="$capacity" || exit 2
   binaries[$capacity]="$build_root/$FINAL_PURE_BINARY_NAME"
   [[ -x ${binaries[$capacity]} ]] || {
-    echo "Missing Pure binary for capacity $capacity." >&2
+    echo "Missing reorder binary for capacity $capacity." >&2
     exit 2
   }
 done
 
 {
-  echo "campaign=Pure seed-mask capacity ablation"
+  echo "campaign=final Reorder+CCRMCE seed-mask capacity ablation"
   echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "result_root=$result_root"
@@ -57,11 +57,10 @@ done
   echo "capacities=${capacities[*]}"
   echo "reference_capacity=128"
   echo "budget=$budget (fixed)"
-  echo "method=optimized"
   echo "minimum_clique_size=3"
-  echo "small_q_full_pxr_threshold=4"
-  echo "early_termination=ET1 ET2 ET3 enabled"
-  echo "pruning=all seven rules enabled"
+  echo "small_q_ccr_threshold=32"
+  echo "early_termination=ET1 ET2 ET3 disabled"
+  echo "pruning=production profile (subsumption disabled; six other rules enabled)"
   echo "repetitions=$repetitions"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
@@ -119,7 +118,7 @@ run_one() {
   mkdir -p "$log_dir"
   local -a command=(
     env OMP_NUM_THREADS=1 "$binary" "$input"
-    --method optimized --budget "$budget" --min-clique-size 3 --small-q-pxr 4
+    --budget "$budget" --min-clique-size 3
   )
 
   final_write_command "$base.command" "${command[@]}"
@@ -130,39 +129,44 @@ run_one() {
 
   local exit_code=$FINAL_RUN_EXIT_CODE
   local wall_ms=$FINAL_RUN_WALL_MS
-  local cliques stored runtime_ms max_rss checks budget_fallbacks
+  local cliques stored runtime_ms max_rss findone_states full_states ccr_states budget_fallbacks
   local capacity_fallbacks solver_calls maximum_constraints configured dynamic
   local expected_dynamic status reference_status reference_count reference_wall
   local count_match=NA wall_ratio=NA
 
-  cliques=$(final_output_value "$base.stdout" pure.cliques)
-  stored=$(final_output_value "$base.stdout" pure.stored_cliques)
-  runtime_ms=$(final_output_value "$base.stdout" pure.runtime_ms)
+  cliques=$(final_output_value "$base.stdout" reorder.cliques)
+  stored=$(final_output_value "$base.stdout" reorder.stored_cliques)
+  runtime_ms=$(final_output_value "$base.stdout" reorder.runtime_ms)
   max_rss=$(final_output_value "$base.resources" max_rss_kb)
-  checks=$(final_output_value "$base.stdout" pure.checks)
-  budget_fallbacks=$(final_output_value "$base.stdout" pure.budget_fallbacks)
-  capacity_fallbacks=$(final_output_value "$base.stdout" pure.capacity_fallbacks)
-  solver_calls=$(final_output_value "$base.stdout" pure.seed_solver_calls)
-  maximum_constraints=$(final_output_value "$base.stdout" pure.maximum_seed_constraints)
-  configured=$(final_output_value "$base.stdout" pure.config.hitset_capacity)
-  dynamic=$(final_output_value "$base.stdout" pure.config.hitset_dynamic)
+  findone_states=$(final_output_value "$base.stdout" reorder.ccr.findone_states)
+  full_states=$(final_output_value "$base.stdout" reorder.ccr.full_states)
+  ccr_states=
+  if final_all_uint "$findone_states" "$full_states"; then
+    ccr_states=$((findone_states + full_states))
+  fi
+  budget_fallbacks=$(final_output_value "$base.stdout" reorder.budget_fallbacks)
+  capacity_fallbacks=$(final_output_value "$base.stdout" reorder.capacity_fallbacks)
+  solver_calls=$(final_output_value "$base.stdout" reorder.seed_solver_calls)
+  maximum_constraints=$(final_output_value "$base.stdout" reorder.maximum_seed_constraints)
+  configured=$(final_output_value "$base.stdout" reorder.config.hitset_capacity)
+  dynamic=$(final_output_value "$base.stdout" reorder.config.hitset_dynamic)
 
   expected_dynamic=0
   [[ $capacity == dynamic ]] && expected_dynamic=1
 
   if [[ $exit_code -eq 0 ]] &&
-      final_all_uint "$cliques" "$stored" "$max_rss" "$checks" \
+      final_all_uint "$cliques" "$stored" "$max_rss" "$ccr_states" \
         "$budget_fallbacks" "$capacity_fallbacks" "$solver_calls" \
         "$maximum_constraints" &&
       final_all_number "$runtime_ms" &&
       [[ $stored == "$cliques" && $configured == "$capacity" &&
          $dynamic == "$expected_dynamic" ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.budget) == "$budget" ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.small_q_full_pxr_threshold) == 4 ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.et1) == 1 ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.et2) == 1 ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.et3) == 1 ]] &&
-      final_pruning_config_matches "$base.stdout" none; then
+      [[ $(final_output_value "$base.stdout" reorder.budget) == "$budget" ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.small_q_ccr_threshold) == 32 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et1) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et2) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et3) == 0 ]] &&
+      final_pruning_config_matches "$base.stdout" production; then
     status=completed
   else
     status=$(final_status_from_exit "$exit_code")
@@ -189,7 +193,7 @@ run_one() {
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$capacity" "$graph" "$repetition" "$n" "$m" "$status" \
     "$exit_code" "$cliques" "$stored" "$count_match" "$wall_ms" \
-    "$wall_ratio" "$runtime_ms" "$max_rss" "$checks" \
+    "$wall_ratio" "$runtime_ms" "$max_rss" "$ccr_states" \
     "$budget_fallbacks" "$capacity_fallbacks" "$solver_calls" \
     "$maximum_constraints" "$configured" "$dynamic" "$budget" \
     >>"$runs_csv"
@@ -260,7 +264,7 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'capacity,graph,repetition,n,m,status,exit_code,cliques,stored_cliques,count_match_128,wall_ms,wall_ratio_vs_128,runtime_ms,max_rss_kb,checks,budget_fallbacks,capacity_fallbacks,seed_solver_calls,maximum_seed_constraints,configured_capacity,dynamic,budget' \
+      'capacity,graph,repetition,n,m,status,exit_code,cliques,stored_cliques,count_match_128,wall_ms,wall_ratio_vs_128,runtime_ms,max_rss_kb,ccr_states,budget_fallbacks,capacity_fallbacks,seed_solver_calls,maximum_seed_constraints,configured_capacity,dynamic,budget' \
       >"$runs_csv"
   fi
 
