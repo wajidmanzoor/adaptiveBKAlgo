@@ -50,13 +50,13 @@ for variant in "${variants[@]}"; do
   fi
   binaries[$variant]="$build_root/$FINAL_PURE_BINARY_NAME"
   [[ -x ${binaries[$variant]} ]] || {
-    echo "Missing Pure binary for $variant." >&2
+    echo "Missing reorder binary for $variant." >&2
     exit 2
   }
 done
 
 {
-  echo "campaign=Pure seven-rule leave-one-out pruning ablation"
+  echo "campaign=final Reorder+CCRMCE seven-rule leave-one-out pruning ablation"
   echo "data_root=$data_root"
   echo "adjacency_root=$FINAL_ADJACENCY_ROOT"
   echo "result_root=$result_root"
@@ -64,11 +64,11 @@ done
   echo "graphs=${#FINAL_SELECTED_DATASETS[@]}"
   echo "timeout_seconds_per_run=$timeout_seconds"
   echo "execution=sequential"
-  echo "method=optimized"
   echo "minimum_clique_size=3"
-  echo "small_q_full_pxr_threshold=4"
+  echo "small_q_ccr_threshold=32"
   echo "budget=$budget"
   echo "hitset_capacity=128"
+  echo "early_termination=ET1 ET2 ET3 disabled"
   echo "rules=${FINAL_PRUNING_RULES[*]}"
   echo "baseline=all rules enabled"
   for variant in "${variants[@]}"; do
@@ -116,7 +116,7 @@ run_one() {
   mkdir -p "$log_dir"
   local -a command=(
     env OMP_NUM_THREADS=1 "$binary" "$input"
-    --method optimized --budget "$budget" --min-clique-size 3 --small-q-pxr 4
+    --budget "$budget" --min-clique-size 3
   )
   final_write_command "$base.command" "${command[@]}"
   final_run_timed "variant=$variant graph=$graph" "$base.stdout" \
@@ -124,20 +124,27 @@ run_one() {
 
   local exit_code=$FINAL_RUN_EXIT_CODE
   local wall_ms=$FINAL_RUN_WALL_MS
-  local cliques runtime_ms checks fallbacks configured status
+  local cliques runtime_ms findone_states full_states ccr_states fallbacks configured status
   local reference_count reference_wall count_match=NA slowdown=NA
-  cliques=$(final_output_value "$base.stdout" pure.cliques)
-  runtime_ms=$(final_output_value "$base.stdout" pure.runtime_ms)
-  checks=$(final_output_value "$base.stdout" pure.checks)
-  fallbacks=$(final_output_value "$base.stdout" pure.budget_fallbacks)
-  configured=$(final_output_value "$base.stdout" pure.config.budget)
+  cliques=$(final_output_value "$base.stdout" reorder.cliques)
+  runtime_ms=$(final_output_value "$base.stdout" reorder.runtime_ms)
+  findone_states=$(final_output_value "$base.stdout" reorder.ccr.findone_states)
+  full_states=$(final_output_value "$base.stdout" reorder.ccr.full_states)
+  ccr_states=
+  if final_all_uint "$findone_states" "$full_states"; then
+    ccr_states=$((findone_states + full_states))
+  fi
+  fallbacks=$(final_output_value "$base.stdout" reorder.budget_fallbacks)
+  configured=$(final_output_value "$base.stdout" reorder.budget)
 
   if [[ $exit_code -eq 0 ]] &&
-      final_all_uint "$cliques" "$checks" "$fallbacks" &&
+      final_all_uint "$cliques" "$ccr_states" "$fallbacks" &&
       final_all_number "$runtime_ms" &&
       [[ $configured == "$budget" ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.small_q_full_pxr_threshold) == 4 ]] &&
-      [[ $(final_output_value "$base.stdout" pure.config.et) == 1 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.small_q_ccr_threshold) == 32 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et1) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et2) == 0 ]] &&
+      [[ $(final_output_value "$base.stdout" reorder.config.et3) == 0 ]] &&
       final_pruning_config_matches "$base.stdout" "$disabled"; then
     status=completed
   else
@@ -162,7 +169,7 @@ run_one() {
 
   printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
     "$variant" "$disabled" "$graph" "$n" "$m" "$status" \
-    "$exit_code" "$cliques" "$wall_ms" "$runtime_ms" "$checks" \
+    "$exit_code" "$cliques" "$wall_ms" "$runtime_ms" "$ccr_states" \
     "$fallbacks" "$reference_count" "$count_match" "$slowdown" \
     >>"$runs_csv"
   echo "DONE variant=$variant graph=$graph status=$status cliques=${cliques:-NA} match=$count_match"
@@ -175,7 +182,7 @@ for group in "${FINAL_SELECTED_GROUPS[@]}"; do
   runs_csv="$group_root/results.csv"
   if [[ ! -f $runs_csv ]]; then
     printf '%s\n' \
-      'variant,disabled_rule,graph,n,m,status,exit_code,cliques,wall_ms,runtime_ms,checks,budget_fallbacks,reference_count,count_match,slowdown_vs_all_rules' \
+      'variant,disabled_rule,graph,n,m,status,exit_code,cliques,wall_ms,runtime_ms,ccr_states,budget_fallbacks,reference_count,count_match,slowdown_vs_all_rules' \
       >"$runs_csv"
   fi
 

@@ -1,13 +1,17 @@
 # Leave-one-out pruning ablation branch
 
 This branch contains only the seven-rule leave-one-out pruning study. Its
-physical Pure source copy uses the latest optimized reorder implementation.
-The runner builds an all-rules reference plus variants disabling exactly one
-of normalization, subsumption, unit propagation, usefulness, antichain,
+physical source copy is the final CCRMCE-based reorder from `latestUpdate`,
+augmented with compile-time rule switches and measurement counters. The runner
+builds an all-rules reference plus variants disabling exactly one of
+normalization, subsumption, unit propagation, usefulness, antichain,
 fail-first, or zero-coverage pruning.
 
-Budget 1000, ET1/ET2/ET3, hit-set capacity 128, adjacency hash threshold 64,
-small-Q full-PXR threshold 4, and minimum clique size 3 remain fixed.
+The all-rules reference deliberately enables subsumption so every rule can be
+removed symmetrically; production `latestUpdate` otherwise leaves subsumption
+disabled. Budget 1000, disabled ET1/ET2/ET3, hit-set capacity 128, adjacency
+hash threshold 256, small-Q CCRMCE threshold 32, adaptive direct threshold
+256, and minimum clique size 3 remain fixed.
 
 Run from the repository root:
 
