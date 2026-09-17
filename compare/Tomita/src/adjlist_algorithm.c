@@ -15,6 +15,7 @@
 
 #include<limits.h>
 #include<assert.h>
+#include<inttypes.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<time.h>
@@ -23,6 +24,7 @@
 #include"LinkedList.h"
 #include"MemoryManager.h"
 #include"adjlist_algorithm.h"
+static uint64_t recursiveStateCount = 0;
 
 /*! \file adjlist_algorithm.c
 
@@ -117,6 +119,7 @@ long listAllMaximalCliquesAdjacencyList( LinkedList** adjList,
     int beginR = size;
 
     long cliqueCount = 0;
+    recursiveStateCount = 0;
 
     listAllMaximalCliquesAdjacencyListRecursive( &cliqueCount,
                                                  #ifdef RETURN_CLIQUES_ONE_BY_ONE
@@ -133,6 +136,11 @@ long listAllMaximalCliquesAdjacencyList( LinkedList** adjList,
     destroyLinkedList(partialClique);
 
     return cliqueCount;
+}
+
+uint64_t adjacencyListRecursiveStates(void)
+{
+    return recursiveStateCount;
 }
 
 /*! \brief Computes the vertex v in P union X that has the most neighbors in P,
@@ -305,6 +313,13 @@ void listAllMaximalCliquesAdjacencyListRecursive( long* cliqueCount,
                                                   int* vertexSets, int* vertexLookup, int size,
                                                   int beginX, int beginP, int beginR )
 {
+
+    if(recursiveStateCount == UINT64_MAX)
+    {
+        fprintf(stderr, "Tomita recursive-state counter overflow\n");
+        exit(EXIT_FAILURE);
+    }
+    recursiveStateCount++;
 
     // if X is empty and P is empty, return partial clique as maximal
     if(beginX >= beginP && beginP >= beginR)

@@ -14,6 +14,7 @@
 */
 
 #include<assert.h>
+#include<inttypes.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<time.h>
@@ -94,6 +95,10 @@ int main(int argc, char** argv)
                               cliques,
                               #endif
                               degree, n);
+
+    printf("recursive_states=%" PRIu64 "\n",
+           adjacencyListRecursiveStates());
+    fflush(stdout);
 
     // Free up memory from adjacency list.
 

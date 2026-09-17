@@ -16,6 +16,7 @@
 */
 
 #include<assert.h>
+#include<stdint.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>
@@ -48,6 +49,8 @@ long listAllMaximalCliquesAdjacencyList( LinkedList** adjList,
                                          #endif
                                          int* degree, 
                                          int size);
+
+uint64_t adjacencyListRecursiveStates(void);
 
 int findBestPivotNonNeighborsAdjacencyList( int** pivotNonNeighbors, int* numNonNeighbors,
                                             int** adjacencyList, int* degree,

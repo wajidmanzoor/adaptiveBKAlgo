@@ -102,6 +102,7 @@ g.print();
 #endif
 
     cnt = 0;
+    numOfDFSSearchNodes = 0;
     allCliques.clear();
 
     edAdj.resize(g.coreNumber+1);
