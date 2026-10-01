@@ -114,7 +114,7 @@ bool checkConfiguration(
 
 // This graph has 32 isolates followed by a root whose 34-neighbor branch is
 // K_34 minus one edge. The isolates put that root beyond the adaptive warmup,
-// so Q > 32 takes the exact sibling-seed route at budget 1000. A separate
+// so Q > 32 takes the exact sibling-seed route at budget 10000. A separate
 // K_260 joined to the two nonadjacent endpoints makes high-degree rows cross
 // the flat-adjacency-hash threshold. The four size>=3 maximal cliques are
 // known analytically.
@@ -177,7 +177,7 @@ bool writeStructuredSiblingGraph(const char *path) {
 bool checkStructuredSiblingGraph(const char *path) {
   Graph graph(path);
   ReorderSib algorithm(graph, 3);
-  algorithm.setSolverWorkBudget(1000);
+  algorithm.setSolverWorkBudget(10000);
   algorithm.findAllMaximalCliquesPure();
 
   CliqueSet expected;
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
       // performs compatibility work. The second configuration exercises the
       // normal budget and minimum-size pruning.
       if (!checkConfiguration(argv[1], n, edges, 1, 0, graphMask) ||
-          !checkConfiguration(argv[1], n, edges, 3, 1000, graphMask)) {
+          !checkConfiguration(argv[1], n, edges, 3, 10000, graphMask)) {
         std::cout.rdbuf(savedOutput);
         return 1;
       }
@@ -296,7 +296,7 @@ int main(int argc, char **argv) {
         const std::uint64_t graphId =
             (std::uint64_t{1} << 63) | randomGraphCount;
         if (!checkConfiguration(argv[1], n, edges, 1, 0, graphId) ||
-            !checkConfiguration(argv[1], n, edges, 3, 1000, graphId)) {
+            !checkConfiguration(argv[1], n, edges, 3, 10000, graphId)) {
           std::cout.rdbuf(savedOutput);
           return 1;
         }

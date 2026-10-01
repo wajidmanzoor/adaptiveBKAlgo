@@ -11,7 +11,7 @@ DATASETS is "all" or a comma-separated list of basenames, with or without
 ".txt". Existing OUTPUT_CSV files are never overwritten.
 
 Example:
-  ./scripts/run_external_comparison.sh /graphs results/runs.csv 30 1 1000 3 \
+  ./scripts/run_external_comparison.sh /graphs results/runs.csv 30 1 10000 3 \
       all ccrmce=./build/adaptive_bk pxr_no_et=/tmp/pxr/adaptive_bk
 USAGE
 }

@@ -7,7 +7,7 @@ usage() {
 Usage: scripts/run_benchmark.sh ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]
 
 Build and compare complete process wall time for:
-  - Reorder/AdaptiveBK (budget 1000);
+  - Reorder/AdaptiveBK (budget 10000);
   - the independent paper-faithful HBBMC++ implementation (RMCE + ET3);
   - sparse adjacency-list Tomita; and
   - standalone CCRMCE.
@@ -211,7 +211,7 @@ initialize_csv "$comparison_csv" "$comparison_header"
   echo "graphs=${#dataset_specs[@]}"
   echo "skipped_graphs=$skipped_graphs"
   echo "minimum_clique_size=3"
-  echo "reorder_budget=1000"
+  echo "reorder_budget=10000"
   echo "hbbmc_configuration=RMCE graph reduction plus ET3"
   echo "timeout_seconds_per_program=$timeout_seconds"
   echo "wall_time_unit=microseconds"
@@ -307,7 +307,7 @@ run_one() {
       algorithm_time_ms=$(output_value "$stdout_file" reorder.runtime_ms)
       if [[ $stored == "$cliques" &&
             $(output_value "$stdout_file" reorder.minimum_clique_size) == 3 &&
-            $(output_value "$stdout_file" reorder.budget) == 1000 ]]; then
+            $(output_value "$stdout_file" reorder.budget) == 10000 ]]; then
         contract_ok=1
       fi
       ;;
@@ -435,7 +435,7 @@ for spec in "${dataset_specs[@]}"; do
     fi
   fi
 
-  run_one reorder "$relative" "$graph" "$n" "$m" env OMP_NUM_THREADS=1 "$reorder_binary" "$adjacency_input" --budget 1000 --min-clique-size 3
+  run_one reorder "$relative" "$graph" "$n" "$m" env OMP_NUM_THREADS=1 "$reorder_binary" "$adjacency_input" --budget 10000 --min-clique-size 3
   run_one hbbmc "$relative" "$graph" "$n" "$m" env OMP_NUM_THREADS=1 "$hbbmc_binary" "$edge_input" --graph-reduction rmce --et 3 --num-vertices "$n" --min-clique-size 3
   run_one tomita "$relative" "$graph" "$n" "$m" env OMP_NUM_THREADS=1 "$tomita_binary" "$tomita_input"
   run_one ccrmce "$relative" "$graph" "$n" "$m" env OMP_NUM_THREADS=1 "$ccrmce_binary" noUVM -f_txt "$edge_input"

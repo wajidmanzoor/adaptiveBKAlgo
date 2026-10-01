@@ -23,7 +23,7 @@ set. In resume mode, completed graph names already present in the CSV are
 skipped and new results are appended.
 
 Optional environment variables:
-  REORDER_BUDGET       Seed-solver work budget (default: 1000)
+  REORDER_BUDGET       Seed-solver work budget (default: 10000)
   MIN_CLIQUE_SIZE      Minimum reported clique size (default: 3)
   RESUME               Append to OUTPUT_CSV and skip completed rows (0 or 1;
                        default: 0)
@@ -52,7 +52,7 @@ default_binary="$reorder_project_dir/build/adaptive_bk"
 data_dir=${1:-$default_data_dir}
 output_csv=${2:-$default_output_csv}
 reorder_binary=${3:-$default_binary}
-reorder_budget=${REORDER_BUDGET:-1000}
+reorder_budget=${REORDER_BUDGET:-10000}
 minimum_clique_size=${MIN_CLIQUE_SIZE:-3}
 resume=${RESUME:-0}
 skip_graphs=${SKIP_GRAPHS:-}

@@ -23,7 +23,7 @@ void printUsage(const char *program) {
        << "Exact AdaptiveBK/ReorderSib maximal-clique enumeration.\n\n"
        << "Options:\n"
        << "  --budget N|unlimited  Compatibility-work budget per seed solver\n"
-       << "                        call (default: 1000)\n"
+       << "                        call (default: 10000)\n"
        << "  --min-clique-size N   Output threshold (default: 3)\n"
        << "  --print-cliques       Print canonical original vertex IDs\n"
        << "  -h, --help            Show this help\n";

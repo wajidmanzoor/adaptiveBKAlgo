@@ -84,7 +84,7 @@ A successful run prints key/value records including:
 reorder.cliques=...
 reorder.stored_cliques=...
 reorder.minimum_clique_size=3
-reorder.budget=1000
+reorder.budget=10000
 reorder.runtime_ms=...
 ```
 
@@ -264,7 +264,7 @@ GTgraph seed and configuration.
 
 The primary experiment compares:
 
-1. final Reorder/AdaptiveBK with budget 1,000;
+1. final Reorder/AdaptiveBK with budget 10,000;
 2. the independent paper-faithful HBBMC++ implementation with RMCE reduction
    and ET level 3;
 3. the sparse adjacency-list Tomita implementation; and
@@ -410,8 +410,8 @@ CAPACITY_FAIL_ON_ERROR=1 \
     /absolute/path/to/results/capacity
 ```
 
-This builds capacities 64, 128, 256, 526, and an unlimited dynamic mask while
-holding budget 1,000 and the remaining algorithm configuration fixed. Capacity
+This builds capacities 64, 128, 256, 512, and an unlimited dynamic mask while
+holding budget 10,000 and the remaining algorithm configuration fixed. Capacity
 128 is run first as the reference. Each group receives raw `results.csv` and a
 derived `summary.csv` with the geometric-mean wall-time ratio and speedup versus
 128, mean resource use, fallback totals, maximum observed constraint count, and

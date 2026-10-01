@@ -37,14 +37,14 @@ ctest --test-dir build --output-on-failure
 
 The correctness test checks every undirected graph through six vertices plus
 600 fixed-seed random graphs on 7--12 vertices against a brute-force oracle.
-It runs minimum clique sizes 1 and 3 at budgets 0 and 1000. A separate
+It runs minimum clique sizes 1 and 3 at budgets 0 and 10000. A separate
 327-vertex graph with four analytically known maximal cliques forces the
 positive-budget exact sibling-seed route and crosses the flat-hash threshold.
 
 ## Run
 
 ```bash
-./build/adaptive_bk PATH/TO/GRAPH --budget 1000 --min-clique-size 3
+./build/adaptive_bk PATH/TO/GRAPH --budget 10000 --min-clique-size 3
 ```
 
 The output includes `reorder.ccr.*` counters for core extraction and both

@@ -2,7 +2,7 @@
 
 namespace pure_config {
 
-inline constexpr unsigned long long kDefaultBudget = 1000;
+inline constexpr unsigned long long kDefaultBudget = 10000;
 inline constexpr unsigned kHitsetCapacity = 128;
 inline constexpr unsigned kCoverCollectionCutoff = 128;
 // Keep the legacy PXR early-termination terminals disabled while evaluating
