@@ -56,4 +56,27 @@ if(BUILD_TESTING)
         COMMAND ccr_exhaustive
             "${CMAKE_CURRENT_BINARY_DIR}/ccr_exhaustive.graph")
     set_tests_properties(ccr_exhaustive PROPERTIES TIMEOUT 180)
+
+    add_test(
+        NAME default_unlimited_budget
+        COMMAND adaptive_bk
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/triangle.graph")
+    set_tests_properties(default_unlimited_budget PROPERTIES
+        PASS_REGULAR_EXPRESSION "reorder.budget=unlimited")
+
+    add_test(
+        NAME explicit_unlimited_budget
+        COMMAND adaptive_bk
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/triangle.graph"
+            --budget unlimited)
+    set_tests_properties(explicit_unlimited_budget PROPERTIES
+        PASS_REGULAR_EXPRESSION "reorder.budget=unlimited")
+
+    add_test(
+        NAME numeric_budget_override
+        COMMAND adaptive_bk
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/triangle.graph"
+            --budget 10000)
+    set_tests_properties(numeric_budget_override PROPERTIES
+        PASS_REGULAR_EXPRESSION "reorder.budget=10000")
 endif()

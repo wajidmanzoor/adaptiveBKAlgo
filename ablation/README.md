@@ -25,6 +25,11 @@ adaptive direct threshold 256, and disabled ET1/ET2/ET3. HBBMC runs with
 `--graph-reduction none --et 0`. Tomita uses its sparse adjacency-list
 algorithm, and standalone CCRMCE uses CoreCliqueRemovalV3.
 
+The branch-local binary in `ablation/pxr_states/pure/` also defaults to
+`unlimited` when `--budget` is omitted. The artifact runner passes
+`--budget unlimited` explicitly, records it in `environment.txt`, and rejects
+a run whose output reports any other value.
+
 Run from the repository root:
 
 ```bash

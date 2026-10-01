@@ -91,10 +91,13 @@ bool writeGraph(
 bool checkConfiguration(
     const char *path, ui n,
     const bool edges[kMaximumTestVertices][kMaximumTestVertices],
-    ui minimumSize, ull budget, std::uint64_t graphId) {
+    ui minimumSize, bool budgetEnabled, ull budget, std::uint64_t graphId) {
   Graph graph(path);
   ReorderSib algorithm(graph, minimumSize);
-  algorithm.setSolverWorkBudget(budget);
+  if (budgetEnabled)
+    algorithm.setSolverWorkBudget(budget);
+  else
+    algorithm.clearSolverWorkBudget();
   algorithm.findAllMaximalCliquesPure();
 
   const std::vector<std::vector<ui>> emitted = algorithm.getCliques();
@@ -104,9 +107,11 @@ bool checkConfiguration(
     return true;
 
   std::fprintf(stderr,
-               "FAIL n=%u graph_id=%llu min_size=%u budget=%llu "
+               "FAIL n=%u graph_id=%llu min_size=%u budget_enabled=%d "
+               "budget=%llu "
                "expected=%zu emitted=%zu unique=%zu\n",
                n, static_cast<unsigned long long>(graphId), minimumSize,
+               budgetEnabled ? 1 : 0,
                static_cast<unsigned long long>(budget), expected.size(),
                emitted.size(), actual.size());
   return false;
@@ -114,10 +119,10 @@ bool checkConfiguration(
 
 // This graph has 32 isolates followed by a root whose 34-neighbor branch is
 // K_34 minus one edge. The isolates put that root beyond the adaptive warmup,
-// so Q > 32 takes the exact sibling-seed route at budget 1000. A separate
-// K_260 joined to the two nonadjacent endpoints makes high-degree rows cross
-// the flat-adjacency-hash threshold. The four size>=3 maximal cliques are
-// known analytically.
+// so Q > 32 takes the exact sibling-seed route with an unlimited budget. A
+// separate K_260 joined to the two nonadjacent endpoints makes high-degree
+// rows cross the flat-adjacency-hash threshold. The four size>=3 maximal
+// cliques are known analytically.
 constexpr ui kStructuredIsolates = 32;
 constexpr ui kStructuredRoot = kStructuredIsolates;
 constexpr ui kStructuredNeighborBegin = kStructuredRoot + 1;
@@ -177,7 +182,7 @@ bool writeStructuredSiblingGraph(const char *path) {
 bool checkStructuredSiblingGraph(const char *path) {
   Graph graph(path);
   ReorderSib algorithm(graph, 3);
-  algorithm.setSolverWorkBudget(1000);
+  algorithm.clearSolverWorkBudget();
   algorithm.findAllMaximalCliquesPure();
 
   CliqueSet expected;
@@ -257,9 +262,9 @@ int main(int argc, char **argv) {
 
       // Budget zero forces the full-CCRMCE fallback whenever a seed-solver call
       // performs compatibility work. The second configuration exercises the
-      // normal budget and minimum-size pruning.
-      if (!checkConfiguration(argv[1], n, edges, 1, 0, graphMask) ||
-          !checkConfiguration(argv[1], n, edges, 3, 1000, graphMask)) {
+      // unlimited experiment configuration and minimum-size pruning.
+      if (!checkConfiguration(argv[1], n, edges, 1, true, 0, graphMask) ||
+          !checkConfiguration(argv[1], n, edges, 3, false, 0, graphMask)) {
         std::cout.rdbuf(savedOutput);
         return 1;
       }
@@ -295,8 +300,8 @@ int main(int argc, char **argv) {
 
         const std::uint64_t graphId =
             (std::uint64_t{1} << 63) | randomGraphCount;
-        if (!checkConfiguration(argv[1], n, edges, 1, 0, graphId) ||
-            !checkConfiguration(argv[1], n, edges, 3, 1000, graphId)) {
+        if (!checkConfiguration(argv[1], n, edges, 1, true, 0, graphId) ||
+            !checkConfiguration(argv[1], n, edges, 3, false, 0, graphId)) {
           std::cout.rdbuf(savedOutput);
           return 1;
         }

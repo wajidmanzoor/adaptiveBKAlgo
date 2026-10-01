@@ -96,7 +96,8 @@ the selected result directory.
 
 See the [PXR-state ablation guide](ablation/README.md). The runner compares
 recursive `(R,P,X)` entries with graph reduction and early termination disabled
-in both implementations.
+in both implementations. Its isolated Reorder binary defaults to an unlimited
+solver work budget, and the runner explicitly enforces and validates that value.
 
 ```bash
 ./ablation/pxr_states/run.sh ADJACENCY_DIR EDGE_DIR [RESULT_ROOT]

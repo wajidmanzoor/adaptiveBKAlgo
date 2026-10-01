@@ -2,7 +2,9 @@
 
 namespace pure_config {
 
-inline constexpr unsigned long long kDefaultBudget = 1000;
+// The recursive-state experiment must not fall back because of a work limit.
+inline constexpr bool kDefaultBudgetEnabled = false;
+inline constexpr unsigned long long kDefaultBudget = 0;
 inline constexpr unsigned kHitsetCapacity = 128;
 inline constexpr unsigned kCoverCollectionCutoff = 128;
 // Keep the legacy PXR early-termination terminals disabled while evaluating

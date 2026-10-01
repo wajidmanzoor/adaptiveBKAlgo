@@ -20,7 +20,7 @@ result_root=${3:-"$script_dir/results/$timestamp"}
 timeout_seconds=${PXR_TIMEOUT_SECONDS:-1800}
 build_jobs=${PXR_BUILD_JOBS:-4}
 dataset_filter=${PXR_DATASETS:-}
-reorder_budget=unlimited
+readonly reorder_budget=unlimited
 
 final_require_positive_integer PXR_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer PXR_BUILD_JOBS "$build_jobs" || exit 2

@@ -12,7 +12,7 @@ namespace {
 
 struct CliOptions {
   string graphPath;
-  bool budgetEnabled = true;
+  bool budgetEnabled = pure_config::kDefaultBudgetEnabled;
   ull budget = pure_config::kDefaultBudget;
   ui minCliqueSize = 3;
   bool printCliques = false;
@@ -23,7 +23,7 @@ void printUsage(const char *program) {
        << "Exact AdaptiveBK/ReorderSib maximal-clique enumeration.\n\n"
        << "Options:\n"
        << "  --budget N|unlimited  Compatibility-work budget per seed solver\n"
-       << "                        call (default: 1000)\n"
+       << "                        call (default: unlimited)\n"
        << "  --min-clique-size N   Output threshold (default: 3)\n"
        << "  --print-cliques       Print canonical original vertex IDs\n"
        << "  -h, --help            Show this help\n";
@@ -87,6 +87,7 @@ bool parseCli(int argc, const char *argv[], CliOptions &options) {
                << ". Use a non-negative integer or unlimited.\n";
           return false;
         }
+        options.budgetEnabled = true;
         options.budget = parsed;
       }
       continue;
