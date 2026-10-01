@@ -1,4 +1,5 @@
-# VLDB Artifact: AdaptiveBK / ReorderSib
+# Artifact: Output-Aware Search Reordering for Maximal Clique
+Enumeration
 
 This repository is the artifact for an exact maximal-clique enumeration system
 based on the optimized ReorderSib worklist algorithm. The `main` branch contains
