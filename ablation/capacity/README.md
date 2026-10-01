@@ -1,13 +1,13 @@
 # Reorder+CCRMCE seed-mask capacity ablation
 
 This self-contained experiment compares fixed capacities `64`, `128`, `256`,
-and `526` with an unlimited dynamic mask. Its physical source copy is the final
+and `512` with an unlimited dynamic mask. Its physical source copy is the final
 CCRMCE-based reorder from `latestUpdate`, augmented only to select the mask
 representation and report capacity-specific counters.
 
 All variants keep the production configuration fixed:
 
-- budget 1000;
+- budget 10000;
 - ET1, ET2, and ET3 disabled;
 - subsumption disabled and the other six pruning rules enabled;
 - minimum clique size 3;
@@ -25,7 +25,7 @@ and unit-propagation pass before the chosen fixed or unlimited representation is
 applied, so mask capacity is the only varying control.
 
 Budget fallbacks and capacity fallbacks are reported separately. The fixed
-budget of 1000 is intentional: this experiment selects the best capacity for
+budget of 10000 is intentional: this experiment selects the best capacity for
 the final reorder configuration rather than measuring capacity under an
 unlimited planning budget.
 

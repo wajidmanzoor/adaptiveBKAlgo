@@ -2,7 +2,7 @@
 
 namespace pure_config {
 
-inline constexpr unsigned long long kDefaultBudget = 1000;
+inline constexpr unsigned long long kDefaultBudget = 10000;
 #if defined(PURE_HITSET_DYNAMIC)
 inline constexpr bool kHitsetDynamic = true;
 inline constexpr unsigned kHitsetCapacity = 0;
@@ -13,7 +13,7 @@ inline constexpr unsigned kHitsetCapacity = 0;
 inline constexpr bool kHitsetDynamic = false;
 inline constexpr unsigned kHitsetCapacity = PURE_HITSET_CAPACITY;
 static_assert(kHitsetCapacity == 64 || kHitsetCapacity == 128 ||
-                  kHitsetCapacity == 256 || kHitsetCapacity == 526,
+                  kHitsetCapacity == 256 || kHitsetCapacity == 512,
               "unsupported fixed seed-mask capacity");
 #endif
 // Capacity, rather than an upstream cover cap, is the varying control.

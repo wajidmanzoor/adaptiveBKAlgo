@@ -20,11 +20,11 @@ timeout_seconds=${CAPACITY_TIMEOUT_SECONDS:-1800}
 build_jobs=${CAPACITY_BUILD_JOBS:-4}
 dataset_filter=${CAPACITY_DATASETS:-}
 repetitions=${CAPACITY_REPETITIONS:-3}
-budget=1000
+budget=10000
 
-capacities=(64 128 256 526 unlimited)
+capacities=(64 128 256 512 unlimited)
 # Run the reference first so every subsequent row can be checked immediately.
-run_capacities=(128 64 256 526 unlimited)
+run_capacities=(128 64 256 512 unlimited)
 
 final_require_positive_integer CAPACITY_TIMEOUT_SECONDS "$timeout_seconds" || exit 2
 final_require_positive_integer CAPACITY_BUILD_JOBS "$build_jobs" || exit 2

@@ -2,7 +2,7 @@
 
 This branch contains only the seed-mask capacity study. Its physical source
 copy is the final CCRMCE-based reorder and compares fixed capacities `64`,
-`128`, `256`, and `526` with an unlimited mask. Budget 1000, disabled legacy ET
+`128`, `256`, and `512` with an unlimited mask. Budget 10000, disabled legacy ET
 terminals, the production pruning profile, adjacency hash threshold 256,
 small-Q CCRMCE threshold 32, adaptive direct threshold 256, and minimum clique
 size 3 remain fixed.

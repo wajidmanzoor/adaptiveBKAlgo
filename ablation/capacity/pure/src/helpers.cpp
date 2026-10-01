@@ -1256,8 +1256,8 @@ ReorderSib::efficientHittingSet(const vector<ui> &inputE,
   }
 #endif
 #if !defined(PURE_HITSET_DYNAMIC)
-  // Capacities need not be multiples of 64 (the requested 526-bit variant
-  // uses nine words). Unused high bits in the final word remain clear.
+  // Every requested fixed capacity is a multiple of 64. Keep the general
+  // ceiling formula so the representation remains correct for future values.
   static constexpr ui fixedMaskWords = (kHitsetCapacity + 63) / 64;
   using Mask = array<ull, fixedMaskWords>;
   const ui maskWords = fixedMaskWords;
