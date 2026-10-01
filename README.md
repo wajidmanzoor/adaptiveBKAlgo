@@ -74,7 +74,7 @@ Run one bundled graph directly:
 
 ```bash
 ./our/build/adaptive_bk data/real/as-733.txt \
-  --budget 1000 \
+  --budget 10000 \
   --min-clique-size 3
 ```
 
